@@ -152,7 +152,7 @@ class ApplicationLogRepository:
             action=action,
             success=success,
             error=error,
-            metadata=metadata or {},
+            log_metadata=metadata or {},
             screenshot_path=screenshot_path,
             dom_snapshot=dom_snapshot,
         )

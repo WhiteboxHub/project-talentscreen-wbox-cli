@@ -51,7 +51,7 @@ class ApplicationLogModel(Base):
     action = Column(String(100))
     success = Column(Boolean)
     error = Column(Text)
-    metadata = Column(JSON)
+    log_metadata = Column(JSON)
     screenshot_path = Column(String(1000))
     dom_snapshot = Column(JSON)
     timestamp = Column(DateTime, default=datetime.now)

@@ -13,7 +13,13 @@ Production-grade CLI for automated job applications across multiple ATS systems.
 
 ## Installation
 
+Requires **Python 3.10+**.
+
 ```bash
+# Recommend using a virtual environment
+python -m venv venv
+.\venv\Scripts\Activate.ps1  # Windows
+
 pip install -e .
 playwright install chromium
 ```
@@ -28,7 +34,7 @@ jobcli setup
 jobcli login
 
 # Upload resume
-jobcli resume upload --pdf resume.pdf --json resume.json
+jobcli resume-upload --pdf resume.pdf --json resume.json
 
 # Answer common questions
 jobcli questions
@@ -48,7 +54,7 @@ Store credentials for job boards and LLM API keys.
 ### `jobcli config`
 View or modify configuration.
 
-### `jobcli resume upload`
+### `jobcli resume-upload`
 Upload resume in PDF and JSON formats.
 
 ### `jobcli questions`
