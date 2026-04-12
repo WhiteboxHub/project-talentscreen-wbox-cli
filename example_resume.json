@@ -1,0 +1,70 @@
+{
+  "personal": {
+    "first_name": "John",
+    "last_name": "Doe",
+    "email": "john.doe@example.com",
+    "phone": "+1-555-0123",
+    "address": "123 Main Street",
+    "city": "San Francisco",
+    "state": "CA",
+    "country": "United States",
+    "zip_code": "94102",
+    "linkedin": "https://linkedin.com/in/johndoe",
+    "github": "https://github.com/johndoe",
+    "portfolio": "https://johndoe.dev",
+    "website": "https://johndoe.com"
+  },
+  "experience": [
+    {
+      "company": "Tech Corp",
+      "title": "Senior Software Engineer",
+      "start_date": "2021-01",
+      "end_date": null,
+      "current": true,
+      "description": "Leading development of cloud-native applications using Python and Go. Mentoring junior engineers and conducting code reviews."
+    },
+    {
+      "company": "StartUp Inc",
+      "title": "Software Engineer",
+      "start_date": "2018-06",
+      "end_date": "2020-12",
+      "current": false,
+      "description": "Built RESTful APIs and microservices. Implemented CI/CD pipelines and automated testing."
+    }
+  ],
+  "education": [
+    {
+      "school": "University of California, Berkeley",
+      "degree": "Bachelor of Science",
+      "field_of_study": "Computer Science",
+      "graduation_year": 2018,
+      "gpa": 3.8
+    }
+  ],
+  "work_authorization": {
+    "authorized_to_work": true,
+    "require_sponsorship": false,
+    "visa_status": "US Citizen"
+  },
+  "demographics": {
+    "gender": "Prefer not to say",
+    "race": "Prefer not to say",
+    "veteran_status": "I am not a veteran",
+    "disability_status": "I do not have a disability"
+  },
+  "skills": [
+    "Python",
+    "Go",
+    "JavaScript",
+    "React",
+    "Docker",
+    "Kubernetes",
+    "AWS",
+    "PostgreSQL",
+    "Redis"
+  ],
+  "certifications": [
+    "AWS Certified Solutions Architect",
+    "Certified Kubernetes Administrator"
+  ]
+}

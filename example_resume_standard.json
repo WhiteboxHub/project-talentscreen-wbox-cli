@@ -1,0 +1,310 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jsonresume/resume-schema/v1.0.0/schema.json",
+  "basics": {
+    "name": "John Doe",
+    "label": "Senior Software Engineer",
+    "image": "",
+    "email": "john.doe@example.com",
+    "phone": "+1-555-0123",
+    "url": "https://johndoe.com",
+    "summary": "Experienced software engineer specializing in cloud-native applications and distributed systems. Passionate about building scalable solutions and mentoring teams.",
+    "location": {
+      "address": "123 Main Street",
+      "postalCode": "94102",
+      "city": "San Francisco",
+      "countryCode": "US",
+      "region": "California"
+    },
+    "profiles": [
+      {
+        "network": "LinkedIn",
+        "username": "johndoe",
+        "url": "https://linkedin.com/in/johndoe"
+      },
+      {
+        "network": "GitHub",
+        "username": "johndoe",
+        "url": "https://github.com/johndoe"
+      },
+      {
+        "network": "Twitter",
+        "username": "johndoe",
+        "url": "https://twitter.com/johndoe"
+      }
+    ]
+  },
+  "work": [
+    {
+      "name": "Tech Corp",
+      "position": "Senior Software Engineer",
+      "url": "https://techcorp.com",
+      "startDate": "2021-01-15",
+      "endDate": "",
+      "summary": "Leading development of cloud-native microservices architecture serving 10M+ users.",
+      "highlights": [
+        "Architected and built scalable microservices platform using Kubernetes and Go",
+        "Reduced infrastructure costs by 40% through optimization and containerization",
+        "Mentored team of 5 junior engineers",
+        "Implemented CI/CD pipelines reducing deployment time from hours to minutes",
+        "Led migration from monolith to microservices architecture"
+      ]
+    },
+    {
+      "name": "StartUp Inc",
+      "position": "Software Engineer",
+      "url": "https://startup.com",
+      "startDate": "2018-06-01",
+      "endDate": "2020-12-31",
+      "summary": "Full-stack development for SaaS platform serving B2B customers.",
+      "highlights": [
+        "Built RESTful APIs serving 1M+ requests per day",
+        "Developed React-based admin dashboard",
+        "Implemented automated testing achieving 90% code coverage",
+        "Optimized database queries reducing response times by 60%",
+        "Participated in on-call rotation for production support"
+      ]
+    },
+    {
+      "name": "Digital Agency",
+      "position": "Junior Developer",
+      "url": "https://digitalagency.com",
+      "startDate": "2017-01-10",
+      "endDate": "2018-05-31",
+      "summary": "Web development for client projects.",
+      "highlights": [
+        "Developed responsive websites using HTML, CSS, and JavaScript",
+        "Integrated third-party APIs and payment gateways",
+        "Collaborated with designers and project managers",
+        "Maintained and updated existing client websites"
+      ]
+    }
+  ],
+  "volunteer": [
+    {
+      "organization": "Code for Good",
+      "position": "Volunteer Developer",
+      "url": "https://codeforgood.org",
+      "startDate": "2020-03-01",
+      "endDate": "",
+      "summary": "Building technology solutions for non-profit organizations.",
+      "highlights": [
+        "Developed donation platform for local food bank",
+        "Mentored students learning to code"
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of California, Berkeley",
+      "url": "https://berkeley.edu",
+      "area": "Computer Science",
+      "studyType": "Bachelor of Science",
+      "startDate": "2013-09-01",
+      "endDate": "2017-05-15",
+      "score": "3.8",
+      "courses": [
+        "Data Structures and Algorithms",
+        "Operating Systems",
+        "Distributed Systems",
+        "Machine Learning",
+        "Computer Networks"
+      ]
+    }
+  ],
+  "awards": [
+    {
+      "title": "Employee of the Year",
+      "date": "2022-12-15",
+      "awarder": "Tech Corp",
+      "summary": "Recognized for exceptional performance and leadership"
+    },
+    {
+      "title": "Hackathon Winner",
+      "date": "2019-06-20",
+      "awarder": "TechConf 2019",
+      "summary": "First place in 24-hour hackathon for building real-time collaboration tool"
+    }
+  ],
+  "certificates": [
+    {
+      "name": "AWS Certified Solutions Architect - Associate",
+      "date": "2022-03-15",
+      "issuer": "Amazon Web Services",
+      "url": "https://aws.amazon.com/certification/"
+    },
+    {
+      "name": "Certified Kubernetes Administrator (CKA)",
+      "date": "2021-11-20",
+      "issuer": "Cloud Native Computing Foundation",
+      "url": "https://www.cncf.io/certification/cka/"
+    },
+    {
+      "name": "Google Cloud Professional Cloud Architect",
+      "date": "2023-01-10",
+      "issuer": "Google Cloud",
+      "url": "https://cloud.google.com/certification"
+    }
+  ],
+  "publications": [
+    {
+      "name": "Building Scalable Microservices with Kubernetes",
+      "publisher": "Tech Blog",
+      "releaseDate": "2022-08-15",
+      "url": "https://techblog.com/scalable-microservices",
+      "summary": "Deep dive into microservices architecture patterns and Kubernetes deployment strategies"
+    }
+  ],
+  "skills": [
+    {
+      "name": "Languages",
+      "level": "Advanced",
+      "keywords": [
+        "Python",
+        "Go",
+        "JavaScript",
+        "TypeScript",
+        "SQL",
+        "Bash"
+      ]
+    },
+    {
+      "name": "Frameworks",
+      "level": "Advanced",
+      "keywords": [
+        "React",
+        "Node.js",
+        "FastAPI",
+        "Django",
+        "Express"
+      ]
+    },
+    {
+      "name": "Cloud & Infrastructure",
+      "level": "Advanced",
+      "keywords": [
+        "AWS",
+        "Google Cloud",
+        "Kubernetes",
+        "Docker",
+        "Terraform",
+        "Helm"
+      ]
+    },
+    {
+      "name": "Databases",
+      "level": "Intermediate",
+      "keywords": [
+        "PostgreSQL",
+        "MongoDB",
+        "Redis",
+        "Elasticsearch",
+        "DynamoDB"
+      ]
+    },
+    {
+      "name": "DevOps",
+      "level": "Advanced",
+      "keywords": [
+        "CI/CD",
+        "GitHub Actions",
+        "GitLab CI",
+        "Jenkins",
+        "Prometheus",
+        "Grafana"
+      ]
+    }
+  ],
+  "languages": [
+    {
+      "language": "English",
+      "fluency": "Native speaker"
+    },
+    {
+      "language": "Spanish",
+      "fluency": "Professional working proficiency"
+    }
+  ],
+  "interests": [
+    {
+      "name": "Open Source",
+      "keywords": [
+        "Contributing to OSS projects",
+        "Maintaining libraries"
+      ]
+    },
+    {
+      "name": "Technology",
+      "keywords": [
+        "Cloud computing",
+        "Distributed systems",
+        "DevOps"
+      ]
+    },
+    {
+      "name": "Teaching",
+      "keywords": [
+        "Mentoring",
+        "Technical writing",
+        "Conference speaking"
+      ]
+    }
+  ],
+  "references": [
+    {
+      "name": "Jane Smith",
+      "reference": "John is an exceptional engineer who consistently delivers high-quality work. His technical expertise and leadership skills make him a valuable asset to any team."
+    }
+  ],
+  "projects": [
+    {
+      "name": "CloudSync",
+      "description": "Open-source file synchronization tool",
+      "highlights": [
+        "Built with Go and gRPC",
+        "Supports multiple cloud providers",
+        "1000+ GitHub stars"
+      ],
+      "keywords": [
+        "Go",
+        "Cloud Storage",
+        "CLI"
+      ],
+      "startDate": "2020-06-01",
+      "endDate": "",
+      "url": "https://github.com/johndoe/cloudsync",
+      "roles": [
+        "Creator",
+        "Maintainer"
+      ],
+      "entity": "Personal Project",
+      "type": "application"
+    },
+    {
+      "name": "API Gateway",
+      "description": "High-performance API gateway for microservices",
+      "highlights": [
+        "Handles 10K+ req/sec",
+        "Built-in rate limiting and caching",
+        "Used in production at Tech Corp"
+      ],
+      "keywords": [
+        "Go",
+        "Microservices",
+        "Gateway"
+      ],
+      "startDate": "2021-03-01",
+      "endDate": "2021-09-30",
+      "url": "https://github.com/techcorp/api-gateway",
+      "roles": [
+        "Lead Developer"
+      ],
+      "entity": "Tech Corp",
+      "type": "application"
+    }
+  ],
+  "meta": {
+    "canonical": "https://raw.githubusercontent.com/jsonresume/resume-schema/master/resume.json",
+    "version": "v1.0.0",
+    "lastModified": "2024-01-15T00:00:00.000Z"
+  }
+}
