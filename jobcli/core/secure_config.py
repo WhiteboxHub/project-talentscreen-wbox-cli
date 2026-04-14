@@ -5,7 +5,11 @@ from pathlib import Path
 from typing import Optional
 
 from cryptography.fernet import Fernet
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class SecureConfig(BaseModel):

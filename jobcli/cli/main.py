@@ -13,6 +13,7 @@ from rich.table import Table
 from jobcli.core.engine import ApplicationEngine
 from jobcli.core.schemas import CommonQuestions, Config, Job, ResumeData
 from jobcli.storage.models import Database
+from jobcli.core.wbox_discoverer import WboxDiscoverer
 from jobcli.storage.repositories import (
     ConfigRepository,
     JobRepository,
@@ -376,6 +377,60 @@ def apply(
 
     session.close()
     console.print("[bold green]Application process completed[/bold green]")
+
+
+@app.command()
+def discover(
+    headless: bool = typer.Option(True, help="Run browser in headless mode"),
+) -> None:
+    """Discover jobs from Whitebox Learning dashboard."""
+    console.print("[bold cyan]Job Discovery[/bold cyan]\n")
+
+    db = get_database()
+    session = db.get_session()
+
+    try:
+        discoverer = WboxDiscoverer(session)
+        with console.status("[bold green]Discovering jobs from Wbox dashboard..."):
+            new_jobs = discoverer.discover(headless=headless)
+
+        if new_jobs:
+            console.print(f"\n[bold green]✓ Discovered {len(new_jobs)} new jobs![/bold green]")
+            table = Table(title="New Jobs")
+            table.add_column("Title", style="cyan")
+            table.add_column("Company", style="green")
+            table.add_column("URL", style="blue")
+
+            for job in new_jobs:
+                table.add_row(job.title, job.company or "Unknown", job.url)
+            console.print(table)
+            console.print("\nRun [cyan]jobcli apply --batch[/cyan] to start applying.")
+        else:
+            console.print("\n[yellow]No new jobs found.[/yellow]")
+
+    except Exception as e:
+        console.print(f"\n[red]Discovery failed: {e}[/red]")
+    finally:
+        session.close()
+
+
+@app.command()
+def open_dashboard() -> None:
+    """Open Whitebox Learning dashboard in an interactive browser window."""
+    console.print("[bold cyan]Opening Dashboard[/bold cyan]\n")
+    
+    db = get_database()
+    session = db.get_session()
+    
+    try:
+        discoverer = WboxDiscoverer(session)
+        discoverer.open_interactive()
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Browser closed.[/yellow]")
+    except Exception as e:
+        console.print(f"\n[red]Failed to open dashboard: {e}[/red]")
+    finally:
+        session.close()
 
 
 if __name__ == "__main__":

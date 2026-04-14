@@ -1,0 +1,14 @@
+{"job_id": 2, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-14T00:06:39.290850Z"}
+{"job_id": 2, "phase": "rules", "screenshot_path": "logs\\job_2\\screenshots\\001_20260413_170642_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T00:06:43.032812Z"}
+{"job_id": 2, "phase": "rules", "url": "https://boards.greenhouse.io/greenhouse/jobs/4329243007", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-14T00:06:43.032812Z"}
+{"job_id": 2, "phase": "rules", "url": "https://boards.greenhouse.io/greenhouse/jobs/4329243007", "pattern": "greenhouse\\.io", "event": "Detected greenhouse from URL", "level": "info", "timestamp": "2026-04-14T00:06:43.032812Z"}
+{"job_id": 2, "phase": "rules", "event": "Detected ATS: greenhouse", "level": "info", "timestamp": "2026-04-14T00:06:43.046918Z"}
+{"job_id": 2, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-14T00:06:43.046918Z"}
+{"job_id": 2, "phase": "rules", "event": "Using greenhouse handler", "level": "info", "timestamp": "2026-04-14T00:06:43.046918Z"}
+{"job_id": 2, "phase": "rules", "event": "Looking for Greenhouse apply button", "level": "info", "timestamp": "2026-04-14T00:06:43.046918Z"}
+{"job_id": 2, "phase": null, "event": "ATS handler failed to find apply button", "level": "warning", "timestamp": "2026-04-14T00:06:43.069460Z"}
+{"job_id": 2, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-14T00:06:43.069460Z"}
+{"job_id": 2, "phase": null, "event": "No API key configured for openai", "level": "warning", "timestamp": "2026-04-14T00:06:43.069460Z"}
+{"job_id": 2, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-14T00:06:43.069460Z"}
+{"job_id": 2, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-14T00:06:43.069460Z"}
+{"job_id": 2, "phase": "human", "task": "find_apply_button", "event": "Requesting human assistance", "level": "info", "timestamp": "2026-04-14T00:06:43.070468Z"}

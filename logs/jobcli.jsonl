@@ -1,0 +1,13 @@
+{"job_url": "https://boards.greenhouse.io/vanta/jobs/4513686004", "event": "Starting application for job 1", "level": "info", "timestamp": "2026-04-14T00:06:04.816593Z"}
+{"job_url": "https://boards.greenhouse.io/greenhouse/jobs/4329243007", "event": "Starting application for job 2", "level": "info", "timestamp": "2026-04-14T00:06:38.697797Z"}
+{"event": "Missing credentials for Wbox login", "level": "error", "timestamp": "2026-04-14T00:15:16.173622Z"}
+{"event": "Logging into https://whitebox-learning.com/login", "level": "info", "timestamp": "2026-04-14T00:15:40.073462Z"}
+{"event": "Successfully logged in, navigating to dashboard", "level": "info", "timestamp": "2026-04-14T00:15:45.771480Z"}
+{"event": "Extracting job links from grid", "level": "info", "timestamp": "2026-04-14T00:15:50.077425Z"}
+{"event": "Found 17 links using selector: a.font-semibold.text-blue-600", "level": "info", "timestamp": "2026-04-14T00:15:55.188463Z"}
+{"event": "Discovered 17 new jobs", "level": "info", "timestamp": "2026-04-14T00:15:55.645642Z"}
+{"event": "Logging into https://whitebox-learning.com/login", "level": "info", "timestamp": "2026-04-14T00:17:49.577388Z"}
+{"event": "Successfully logged in, navigating to dashboard", "level": "info", "timestamp": "2026-04-14T00:17:54.720497Z"}
+{"event": "Extracting job links from grid", "level": "info", "timestamp": "2026-04-14T00:17:58.899193Z"}
+{"event": "Discovered 0 new jobs", "level": "info", "timestamp": "2026-04-14T00:18:04.067467Z"}
+{"job_url": "https://boards.greenhouse.io/vanta/jobs/4513686004", "event": "Starting application for job 1", "level": "info", "timestamp": "2026-04-14T00:18:47.705076Z"}

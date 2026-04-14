@@ -4,12 +4,12 @@ Production-grade CLI for automated job applications across multiple ATS systems.
 
 ## Features
 
+- **Wbox Dashboard Integration**: Automated job discovery from Whitebox Learning
+- **Interactive Dashboard**: Single-command login to your Wbox dashboard
 - **Three-Phase Execution Strategy**: Rule-based locators → LLM reasoning → Human-in-the-loop
 - **Multi-ATS Support**: Greenhouse, Lever, Workday, and 17 other ATS systems
 - **Structured Logging**: JSON logs with screenshots and DOM snapshots
-- **Extensible Architecture**: Modular design for easy extension
 - **LLM Providers**: OpenAI, Anthropic, and Google Gemini support
-- **Safe Execution**: Validated tool execution prevents direct LLM browser control
 
 ## Installation
 
@@ -39,7 +39,16 @@ jobcli resume-upload --pdf resume.pdf --json resume.json
 # Answer common questions
 jobcli questions
 
-# Apply to jobs
+# Open Wbox Dashboard
+jobcli open-dashboard
+
+# Gather latest jobs
+jobcli discover
+
+# Apply to all pending jobs
+jobcli apply --batch
+
+# Apply to a single URL
 jobcli apply --url https://example.com/jobs/123
 ```
 
@@ -60,8 +69,14 @@ Upload resume in PDF and JSON formats.
 ### `jobcli questions`
 Pre-fill answers to common application questions.
 
+### `jobcli discover`
+Automatically fetch job links from your Whitebox Learning dashboard.
+
+### `jobcli open-dashboard`
+Launch an interactive browser window logged into your Wbox dashboard.
+
 ### `jobcli apply`
-Apply to jobs from URLs or a job board.
+Apply to jobs from URLs or in batch mode (--batch).
 
 ## Architecture
 

@@ -29,9 +29,6 @@ structlog>=23.2.0
 langgraph>=0.0.40
 langchain-core>=0.1.0
 
-# Resume schema
-resume-json-schema>=1.0.0
-
 # Security
 cryptography>=41.0.0
 python-dotenv>=1.0.0

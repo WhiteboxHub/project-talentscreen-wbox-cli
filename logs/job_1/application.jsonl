@@ -1,0 +1,28 @@
+{"job_id": 1, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-14T00:06:06.086335Z"}
+{"job_id": 1, "phase": "rules", "screenshot_path": "logs\\job_1\\screenshots\\001_20260413_170609_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T00:06:09.299405Z"}
+{"job_id": 1, "phase": "rules", "url": "https://boards.greenhouse.io/vanta/jobs/4513686004", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-14T00:06:09.299405Z"}
+{"job_id": 1, "phase": "rules", "url": "https://boards.greenhouse.io/vanta/jobs/4513686004", "pattern": "greenhouse\\.io", "event": "Detected greenhouse from URL", "level": "info", "timestamp": "2026-04-14T00:06:09.300924Z"}
+{"job_id": 1, "phase": "rules", "event": "Detected ATS: greenhouse", "level": "info", "timestamp": "2026-04-14T00:06:09.308281Z"}
+{"job_id": 1, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-14T00:06:09.308281Z"}
+{"job_id": 1, "phase": "rules", "event": "Using greenhouse handler", "level": "info", "timestamp": "2026-04-14T00:06:09.308790Z"}
+{"job_id": 1, "phase": "rules", "event": "Looking for Greenhouse apply button", "level": "info", "timestamp": "2026-04-14T00:06:09.308790Z"}
+{"job_id": 1, "phase": null, "event": "ATS handler failed to find apply button", "level": "warning", "timestamp": "2026-04-14T00:06:09.330625Z"}
+{"job_id": 1, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-14T00:06:09.330625Z"}
+{"job_id": 1, "phase": null, "event": "No API key configured for openai", "level": "warning", "timestamp": "2026-04-14T00:06:09.330625Z"}
+{"job_id": 1, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-14T00:06:09.330625Z"}
+{"job_id": 1, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-14T00:06:09.330625Z"}
+{"job_id": 1, "phase": "human", "task": "find_apply_button", "event": "Requesting human assistance", "level": "info", "timestamp": "2026-04-14T00:06:09.330625Z"}
+{"job_id": 1, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-14T00:18:48.313311Z"}
+{"job_id": 1, "phase": "rules", "screenshot_path": "logs\\job_1\\screenshots\\001_20260413_171850_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T00:18:50.662758Z"}
+{"job_id": 1, "phase": "rules", "url": "https://boards.greenhouse.io/vanta/jobs/4513686004", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-14T00:18:50.662758Z"}
+{"job_id": 1, "phase": "rules", "url": "https://boards.greenhouse.io/vanta/jobs/4513686004", "pattern": "greenhouse\\.io", "event": "Detected greenhouse from URL", "level": "info", "timestamp": "2026-04-14T00:18:50.664740Z"}
+{"job_id": 1, "phase": "rules", "event": "Detected ATS: greenhouse", "level": "info", "timestamp": "2026-04-14T00:18:50.673464Z"}
+{"job_id": 1, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-14T00:18:50.673464Z"}
+{"job_id": 1, "phase": "rules", "event": "Using greenhouse handler", "level": "info", "timestamp": "2026-04-14T00:18:50.673464Z"}
+{"job_id": 1, "phase": "rules", "event": "Looking for Greenhouse apply button", "level": "info", "timestamp": "2026-04-14T00:18:50.673464Z"}
+{"job_id": 1, "phase": null, "event": "ATS handler failed to find apply button", "level": "warning", "timestamp": "2026-04-14T00:18:50.692233Z"}
+{"job_id": 1, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-14T00:18:50.692233Z"}
+{"job_id": 1, "phase": null, "event": "No API key configured for openai", "level": "warning", "timestamp": "2026-04-14T00:18:50.692233Z"}
+{"job_id": 1, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-14T00:18:50.692233Z"}
+{"job_id": 1, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-14T00:18:50.692233Z"}
+{"job_id": 1, "phase": "human", "task": "find_apply_button", "event": "Requesting human assistance", "level": "info", "timestamp": "2026-04-14T00:18:50.692233Z"}
