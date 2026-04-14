@@ -46,3 +46,72 @@
 {"job_id": 1, "phase": "human", "task": "find_apply_button", "event": "Requesting human assistance", "level": "info", "timestamp": "2026-04-14T02:37:15.030804Z"}
 {"job_id": 1, "phase": null, "event": "Application failed", "level": "error", "timestamp": "2026-04-14T02:38:23.934025Z"}
 {"job_id": 1, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-14T02:38:24.082390Z"}
+{"job_id": 1, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-14T20:00:50.666084Z"}
+{"job_id": 1, "phase": "rules", "screenshot_path": "logs\\job_1\\screenshots\\001_20260414_130053_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T20:00:53.389186Z"}
+{"job_id": 1, "phase": "rules", "url": "https://job-boards.greenhouse.io/mrbeastyoutube/jobs/5969940004?gh_src=g0f9bnwv4us", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-14T20:00:53.389186Z"}
+{"job_id": 1, "phase": "rules", "url": "https://job-boards.greenhouse.io/mrbeastyoutube/jobs/5969940004?gh_src=g0f9bnwv4us", "pattern": "greenhouse\\.io", "event": "Detected greenhouse from URL", "level": "info", "timestamp": "2026-04-14T20:00:53.390303Z"}
+{"job_id": 1, "phase": "rules", "event": "Detected ATS: greenhouse", "level": "info", "timestamp": "2026-04-14T20:00:53.395048Z"}
+{"job_id": 1, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-14T20:00:53.396368Z"}
+{"job_id": 1, "phase": "rules", "event": "Using greenhouse handler", "level": "info", "timestamp": "2026-04-14T20:00:53.396368Z"}
+{"job_id": 1, "phase": "rules", "event": "Looking for Greenhouse apply button", "level": "info", "timestamp": "2026-04-14T20:00:53.396368Z"}
+{"job_id": 1, "phase": "rules", "selector": "button:has-text('Submit Application')", "event": "Clicked Greenhouse apply button", "level": "info", "timestamp": "2026-04-14T20:00:53.488677Z"}
+{"job_id": 1, "phase": "rules", "screenshot_path": "logs\\job_1\\screenshots\\002_20260414_130055_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T20:00:55.932087Z"}
+{"job_id": 1, "phase": "rules", "event": "Filling Greenhouse form", "level": "info", "timestamp": "2026-04-14T20:00:55.932087Z"}
+{"job_id": 1, "phase": "rules", "results": {"first_name": false, "last_name": false, "email": false, "phone": false, "linkedin": false, "resume": false}, "event": "Greenhouse form filled", "level": "info", "timestamp": "2026-04-14T20:04:56.027410Z"}
+{"job_id": 1, "phase": "rules", "screenshot_path": "logs\\job_1\\screenshots\\003_20260414_130457_form_filled.png", "name": "form_filled", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T20:04:57.892234Z"}
+{"job_id": 1, "phase": "rules", "event": "Handling Greenhouse step 1", "level": "info", "timestamp": "2026-04-14T20:04:57.892234Z"}
+{"job_id": 1, "phase": "rules", "event": "Submitting Greenhouse application", "level": "info", "timestamp": "2026-04-14T20:04:57.908920Z"}
+{"job_id": 1, "phase": "rules", "selector": "button[type='submit']", "event": "Clicked submit button", "level": "info", "timestamp": "2026-04-14T20:04:57.978812Z"}
+{"job_id": 1, "phase": "rules", "success": true, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-14T20:04:57.981350Z"}
+{"job_id": 1, "phase": "rules", "screenshot_path": "logs\\job_1\\screenshots\\004_20260414_130457_submitted.png", "name": "submitted", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T20:04:58.354907Z"}
+{"job_id": 1, "phase": null, "event": "Application completed successfully", "level": "info", "timestamp": "2026-04-14T20:04:58.354907Z"}
+{"job_id": 1, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-14T20:04:58.404442Z"}
+{"job_id": 1, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-14T20:13:40.113486Z"}
+{"job_id": 1, "phase": "rules", "screenshot_path": "logs\\job_1\\screenshots\\001_20260414_131359_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T20:14:00.086011Z"}
+{"job_id": 1, "phase": "rules", "url": "https://job-boards.greenhouse.io/mrbeastyoutube/jobs/5969940004?gh_src=g0f9bnwv4us", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-14T20:14:00.086011Z"}
+{"job_id": 1, "phase": "rules", "url": "https://job-boards.greenhouse.io/mrbeastyoutube/jobs/5969940004?gh_src=g0f9bnwv4us", "pattern": "greenhouse\\.io", "event": "Detected greenhouse from URL", "level": "info", "timestamp": "2026-04-14T20:14:00.087011Z"}
+{"job_id": 1, "phase": "rules", "event": "Detected ATS: greenhouse", "level": "info", "timestamp": "2026-04-14T20:14:00.092650Z"}
+{"job_id": 1, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-14T20:14:00.092650Z"}
+{"job_id": 1, "phase": "rules", "event": "Using greenhouse handler", "level": "info", "timestamp": "2026-04-14T20:14:00.092650Z"}
+{"job_id": 1, "phase": "rules", "event": "Looking for Greenhouse apply button", "level": "info", "timestamp": "2026-04-14T20:14:00.092650Z"}
+{"job_id": 1, "phase": "rules", "selector": "button:has-text('Submit Application')", "event": "Clicked Greenhouse apply button", "level": "info", "timestamp": "2026-04-14T20:14:00.187569Z"}
+{"job_id": 1, "phase": "rules", "screenshot_path": "logs\\job_1\\screenshots\\002_20260414_131401_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T20:14:02.095363Z"}
+{"job_id": 1, "phase": "rules", "event": "Filling Greenhouse form", "level": "info", "timestamp": "2026-04-14T20:14:02.095363Z"}
+{"job_id": 1, "phase": "rules", "results": {"first_name": false, "last_name": false, "email": false, "phone": false, "linkedin": false, "resume": false}, "event": "Greenhouse form filled", "level": "info", "timestamp": "2026-04-14T20:18:02.183775Z"}
+{"job_id": 1, "phase": "rules", "screenshot_path": "logs\\job_1\\screenshots\\003_20260414_131804_form_filled.png", "name": "form_filled", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T20:18:04.483277Z"}
+{"job_id": 1, "phase": "rules", "event": "Handling Greenhouse step 1", "level": "info", "timestamp": "2026-04-14T20:18:04.483277Z"}
+{"job_id": 1, "phase": "rules", "event": "Submitting Greenhouse application", "level": "info", "timestamp": "2026-04-14T20:18:04.497598Z"}
+{"job_id": 1, "phase": "rules", "selector": "button[type='submit']", "event": "Clicked submit button", "level": "info", "timestamp": "2026-04-14T20:18:04.560424Z"}
+{"job_id": 1, "phase": "rules", "success": true, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-14T20:18:04.563509Z"}
+{"job_id": 1, "phase": "rules", "screenshot_path": "logs\\job_1\\screenshots\\004_20260414_131804_submitted.png", "name": "submitted", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T20:18:04.961359Z"}
+{"job_id": 1, "phase": null, "event": "Application completed successfully", "level": "info", "timestamp": "2026-04-14T20:18:04.961359Z"}
+{"job_id": 1, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-14T20:18:05.160191Z"}
+{"job_id": 1, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-14T20:29:04.497382Z"}
+{"job_id": 1, "phase": "rules", "screenshot_path": "logs\\job_1\\screenshots\\001_20260414_132910_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T20:29:11.332079Z"}
+{"job_id": 1, "phase": "rules", "url": "https://job-boards.greenhouse.io/mrbeastyoutube/jobs/5969940004?gh_src=g0f9bnwv4us", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-14T20:29:11.332079Z"}
+{"job_id": 1, "phase": "rules", "url": "https://job-boards.greenhouse.io/mrbeastyoutube/jobs/5969940004?gh_src=g0f9bnwv4us", "pattern": "greenhouse\\.io", "event": "Detected greenhouse from URL", "level": "info", "timestamp": "2026-04-14T20:29:11.332079Z"}
+{"job_id": 1, "phase": "rules", "event": "Detected ATS: greenhouse", "level": "info", "timestamp": "2026-04-14T20:29:11.339235Z"}
+{"job_id": 1, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-14T20:29:11.339235Z"}
+{"job_id": 1, "phase": "rules", "event": "Using greenhouse handler", "level": "info", "timestamp": "2026-04-14T20:29:11.339235Z"}
+{"job_id": 1, "phase": "rules", "event": "Looking for Greenhouse apply button", "level": "info", "timestamp": "2026-04-14T20:29:11.339235Z"}
+{"job_id": 1, "phase": "rules", "selector": "button:has-text('Submit Application')", "event": "Clicked Greenhouse apply button", "level": "info", "timestamp": "2026-04-14T20:29:11.425483Z"}
+{"job_id": 1, "phase": "rules", "screenshot_path": "logs\\job_1\\screenshots\\002_20260414_132913_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T20:29:13.759759Z"}
+{"job_id": 1, "phase": "rules", "event": "Delegating to robust generic form filler", "level": "info", "timestamp": "2026-04-14T20:29:13.759759Z"}
+{"job_id": 1, "phase": "rules", "event": "Starting rule-based generic form filler sweep", "level": "info", "timestamp": "2026-04-14T20:29:13.759759Z"}
+{"job_id": 1, "phase": "rules", "value": "Sai Madhavi", "event": "Filled text field successfully: 'Full Name'", "level": "info", "timestamp": "2026-04-14T20:29:14.666347Z"}
+{"job_id": 1, "phase": "rules", "value": "test@example.com", "event": "Filled text field successfully: 'Email'", "level": "info", "timestamp": "2026-04-14T20:29:15.848015Z"}
+{"job_id": 1, "phase": "rules", "value": "555-555-5555", "event": "Filled text field successfully: 'Phone'", "level": "info", "timestamp": "2026-04-14T20:29:16.750007Z"}
+{"job_id": 1, "phase": "rules", "event": "Field completely missing from DOM: 'Address'", "level": "warning", "timestamp": "2026-04-14T20:29:23.437386Z"}
+{"job_id": 1, "phase": "rules", "value": "Austin", "event": "Filled text field successfully: 'City'", "level": "info", "timestamp": "2026-04-14T20:29:23.950044Z"}
+{"job_id": 1, "phase": "rules", "value": "TX", "event": "Filled text field successfully: 'State'", "level": "info", "timestamp": "2026-04-14T20:29:24.202643Z"}
+{"job_id": 1, "phase": "rules", "value": "USA", "event": "Filled text field successfully: 'Country'", "level": "info", "timestamp": "2026-04-14T20:29:24.520452Z"}
+{"job_id": 1, "phase": "rules", "event": "Phase 1 failed: Locator.count: Target page, context or browser has been closed", "level": "error", "timestamp": "2026-04-14T20:29:30.253940Z"}
+{"job_id": 1, "phase": "rules", "success": false, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-14T20:29:30.253940Z"}
+{"job_id": 1, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-14T20:29:30.253940Z"}
+{"job_id": 1, "phase": "llm", "dom_path": "logs\\job_1\\dom_snapshots\\001_20260414_132930_for_llm.json", "name": "for_llm", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-14T20:29:30.457813Z"}
+{"job_id": 1, "phase": "llm", "task": "find_apply_button_and_fill_form", "event": "Requesting LLM analysis from openai", "level": "info", "timestamp": "2026-04-14T20:29:30.642891Z"}
+{"job_id": 1, "phase": "llm", "provider": "openai", "event": "LLM request failed: Error code: 404 - {'error': {'message': 'The model `gpt-4-turbo-preview` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}", "level": "error", "timestamp": "2026-04-14T20:29:36.353862Z"}
+{"job_id": 1, "phase": null, "event": "LLM returned no response", "level": "error", "timestamp": "2026-04-14T20:29:36.353862Z"}
+{"job_id": 1, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-14T20:29:36.353862Z"}
+{"job_id": 1, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-14T20:29:36.353862Z"}
+{"job_id": 1, "phase": "human", "task": "find_apply_button", "event": "Requesting human assistance", "level": "info", "timestamp": "2026-04-14T20:29:36.353862Z"}

@@ -20,10 +20,8 @@ from jobcli.core.tool_executor import ToolExecutor
 from jobcli.human.interface import HumanInterface
 from jobcli.llm.client import LLMClient
 from jobcli.llm.dom_extractor import DOMExtractor
-from jobcli.locators.apply_button import ApplyButtonLocator
 from jobcli.locators.ats.handler_factory import ATSHandlerFactory
 from jobcli.locators.ats_detector import ATSDetector
-from jobcli.locators.form_fields import FormFiller
 from jobcli.storage.models import Database
 from jobcli.storage.repositories import (
     ApplicationLogRepository,
@@ -143,69 +141,54 @@ class ApplicationEngine:
         state.current_phase = ExecutionPhase.RULES
 
         try:
-            # Try ATS-specific handler first
+            # ATSHandlerFactory always returns a handler (GenericATSHandler as fallback)
             handler = ATSHandlerFactory.create_handler(ats_type, page, self.resume, logger)
+            logger.info(
+                f"Using {handler.__class__.__name__} for {ats_type.value}",
+                phase=ExecutionPhase.RULES,
+            )
 
-            if handler:
-                logger.info(f"Using {ats_type.value} handler", phase=ExecutionPhase.RULES)
+            # Find and click apply button
+            if not handler.find_apply_button():
+                logger.warning(
+                    "Handler failed to find apply button — escalating to LLM",
+                    phase=ExecutionPhase.RULES,
+                )
+                logger.log_phase_end(ExecutionPhase.RULES, False)
+                return False
 
-                # Find and click apply button
-                if not handler.find_apply_button():
-                    logger.warning("ATS handler failed to find apply button")
-                    return False
+            self._random_delay()
+            logger.capture_screenshot(page, "after_apply_click", ExecutionPhase.RULES)
 
+            # Fill form
+            resume_path = self.config.resume_pdf_path
+            fill_results = handler.fill_form(resume_path)
+            logger.info(
+                "form fill results",
+                phase=ExecutionPhase.RULES,
+                results=fill_results,
+            )
+
+            self._random_delay()
+            logger.capture_screenshot(page, "form_filled", ExecutionPhase.RULES)
+
+            # Handle multi-step flow
+            max_steps = 5
+            for step in range(max_steps):
+                state.step_count = step + 1
+                should_continue = handler.handle_multi_step(state)
+                if not should_continue:
+                    break
                 self._random_delay()
-                logger.capture_screenshot(page, "after_apply_click", ExecutionPhase.RULES)
 
-                # Fill form
-                resume_path = self.config.resume_pdf_path
-                handler.fill_form(resume_path)
+            # Submit
+            success = handler.submit_application()
+            logger.log_phase_end(ExecutionPhase.RULES, success)
 
-                self._random_delay()
-                logger.capture_screenshot(page, "form_filled", ExecutionPhase.RULES)
+            if success:
+                logger.capture_screenshot(page, "submitted", ExecutionPhase.RULES)
 
-                # Handle multi-step if needed
-                max_steps = 5
-                for step in range(max_steps):
-                    state.step_count = step + 1
-                    should_continue = handler.handle_multi_step(state)
-
-                    if not should_continue:
-                        break
-
-                    self._random_delay()
-
-                # Submit
-                success = handler.submit_application()
-                logger.log_phase_end(ExecutionPhase.RULES, success)
-
-                if success:
-                    logger.capture_screenshot(page, "submitted", ExecutionPhase.RULES)
-
-                return success
-
-            else:
-                # Fallback to generic locators
-                logger.info("Using generic locators", phase=ExecutionPhase.RULES)
-
-                # Find apply button
-                apply_locator = ApplyButtonLocator(page, logger)
-                if not apply_locator.click_apply_button():
-                    logger.warning("Generic apply button locator failed")
-                    return False
-
-                self._random_delay()
-                logger.capture_screenshot(page, "after_apply_click", ExecutionPhase.RULES)
-
-                # Fill form
-                form_filler = FormFiller(page, self.resume, logger)
-                form_filler.fill_all(self.config.resume_pdf_path)
-
-                self._random_delay()
-                logger.capture_screenshot(page, "form_filled", ExecutionPhase.RULES)
-
-                logger.log_phase_end(ExecutionPhase.RULES, True)
-                return True
+            return success
 
         except Exception as e:
             logger.error(f"Phase 1 failed: {e}", phase=ExecutionPhase.RULES)

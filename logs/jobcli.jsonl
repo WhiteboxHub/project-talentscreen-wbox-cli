@@ -20,3 +20,8 @@
 {"job_url": "https://www.linkedin.com/jobs/view/4399524348", "event": "Starting application for job 2", "level": "info", "timestamp": "2026-04-14T02:52:00.229937Z"}
 {"job_url": "https://www.linkedin.com/jobs/view/4399524348", "event": "Starting application for job 2", "level": "info", "timestamp": "2026-04-14T02:55:25.052100Z"}
 {"job_url": "https://www.linkedin.com/jobs/view/4399524348", "event": "Starting application for job 2", "level": "info", "timestamp": "2026-04-14T02:58:15.717146Z"}
+{"job_url": "https://job-boards.greenhouse.io/mrbeastyoutube/jobs/5969940004?gh_src=g0f9bnwv4us", "event": "Starting application for job 1", "level": "info", "timestamp": "2026-04-14T20:00:49.017981Z"}
+{"status": "in_progress", "event": "Completed job 1", "level": "info", "timestamp": "2026-04-14T20:04:58.404442Z"}
+{"job_url": "https://job-boards.greenhouse.io/mrbeastyoutube/jobs/5969940004?gh_src=g0f9bnwv4us", "event": "Starting application for job 1", "level": "info", "timestamp": "2026-04-14T20:13:38.111381Z"}
+{"status": "in_progress", "event": "Completed job 1", "level": "info", "timestamp": "2026-04-14T20:18:05.160191Z"}
+{"job_url": "https://job-boards.greenhouse.io/mrbeastyoutube/jobs/5969940004?gh_src=g0f9bnwv4us", "event": "Starting application for job 1", "level": "info", "timestamp": "2026-04-14T20:29:03.171111Z"}

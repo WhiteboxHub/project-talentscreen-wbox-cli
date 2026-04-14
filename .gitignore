@@ -205,3 +205,20 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ── JobCLI runtime artifacts ──────────────────────────────────────────────────
+# Screenshots captured during automation runs
+logs/**/screenshots/
+logs/**/dom_snapshots/
+
+# One-off debug images
+*.png
+!docs/**/*.png
+
+# Playwright trace/video artifacts
+logs/**/*.zip
+logs/**/*.webm
+
+# Per-run job logs (these are ephemeral; keep jobcli.jsonl which is the global log)
+# Uncomment the next line to also exclude per-job application logs:
+# logs/job_*/application.jsonl

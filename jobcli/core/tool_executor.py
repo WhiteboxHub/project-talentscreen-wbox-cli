@@ -120,38 +120,41 @@ class ToolExecutor:
             return action.selector
 
     def _execute_click(self, action: BrowserAction) -> bool:
-        """Execute click action."""
+        """Execute click action with safety fallback and context intercepts."""
         selector = self._get_selector(action)
 
-        # Verify element exists and is visible
+        # Verify element exists
         element = self.page.query_selector(selector)
         if not element:
             if self.logger:
-                self.logger.error(
-                    "Element not found for click",
-                    phase=ExecutionPhase.LLM,
-                    selector=selector,
-                )
+                self.logger.error("Element not found for click", phase=ExecutionPhase.LLM, selector=selector)
             return False
 
         if not element.is_visible():
             if self.logger:
-                self.logger.warning(
-                    "Element not visible, attempting to scroll",
-                    phase=ExecutionPhase.LLM,
-                    selector=selector,
-                )
+                self.logger.warning("Element not visible, attempting to scroll", phase=ExecutionPhase.LLM, selector=selector)
             element.scroll_into_view_if_needed()
 
-        # Click with timeout
-        self.page.click(selector, timeout=action.timeout)
+        context = self.page.context
+        try:
+            with context.expect_page(timeout=5000) as new_page_info:
+                # Click with standard timeout
+                self.page.click(selector, timeout=action.timeout or 3000)
+            new_page = new_page_info.value
+            new_page.wait_for_load_state("domcontentloaded")
+            if self.logger:
+                self.logger.info("Click resolved to new page context", phase=ExecutionPhase.LLM)
+        except TimeoutError:
+            # Did not trigger a new page. Check if standard click failed entirely
+            try:
+                self.page.click(selector, force=True, timeout=action.timeout or 3000)
+            except Exception as e:
+                if self.logger:
+                    self.logger.error("Click intercepted, resolving via force=True fallback", phase=ExecutionPhase.LLM, error=str(e))
+                self.page.evaluate(f'document.querySelector("{selector}").click()')
 
         if self.logger:
-            self.logger.info(
-                "Click executed successfully",
-                phase=ExecutionPhase.LLM,
-                selector=selector,
-            )
+            self.logger.info("Click executed successfully", phase=ExecutionPhase.LLM, selector=selector)
 
         return True
 

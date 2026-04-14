@@ -3,17 +3,80 @@
 import time
 from typing import Any, Optional
 
-from jobcli.core.schemas import ApplicationState, ExecutionPhase
-from jobcli.locators.ats.base_handler import BaseATSHandler
+from jobcli.core.schemas import ApplicationState, ExecutionPhase, ResumeData
+from jobcli.locators.ats.generic_handler import GenericATSHandler
 
 
-class GreenhouseHandler(BaseATSHandler):
-    """Handler for Greenhouse ATS."""
+class GreenhouseHandler(GenericATSHandler):
+    """Handler for Greenhouse ATS.
 
+    Uses hardcoded Greenhouse-specific selectors first (high precision),
+    then falls back to the generic heuristic engine for any field that fails.
+    """
+
+    # ------------------------------------------------------------------
+    # Platform-specific field match (by element id — Greenhouse pattern)
+    # Ported from findPlatformSpecificMatch() in greenhouseStrategy.js
+    # ------------------------------------------------------------------
+    def find_platform_specific_match(
+        self, input_selector: str, resume: ResumeData
+    ) -> Optional[dict]:
+        """Match Greenhouse fields by id attribute."""
+        try:
+            el = self.page.query_selector(input_selector)
+            if not el:
+                return None
+            id_ = (el.get_attribute("id") or "").lower()
+            label_text = ""
+            try:
+                label_text = el.evaluate(
+                    """el => {
+                        const lbl = el.closest('div.field, div.input-wrapper, div.select__container');
+                        return lbl ? (lbl.querySelector('label')?.innerText || '') : '';
+                    }"""
+                ).lower()
+            except Exception:
+                pass
+
+            personal = resume.personal
+            if "first_name" in id_:
+                return {"value": personal.first_name, "confidence": 95}
+            if "last_name" in id_:
+                return {"value": personal.last_name, "confidence": 95}
+            if "email" in id_:
+                return {"value": personal.email, "confidence": 95}
+            if "phone" in id_:
+                return {"value": personal.phone, "confidence": 95}
+            if "linkedin" in id_ or "linkedin" in label_text:
+                return {"value": personal.linkedin, "confidence": 90}
+            if "github" in id_ or "github" in label_text:
+                return {"value": personal.github, "confidence": 90}
+            if (
+                "portfolio" in id_
+                or "website" in label_text
+                or "portfolio" in label_text
+            ):
+                return {
+                    "value": personal.portfolio or personal.website,
+                    "confidence": 85,
+                }
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(
+                    f"find_platform_specific_match error: {e}",
+                    phase=ExecutionPhase.RULES,
+                )
+        return None
+
+    # ------------------------------------------------------------------
+    # Apply button
+    # ------------------------------------------------------------------
     def find_apply_button(self) -> bool:
         """Find and click Greenhouse apply button."""
         if self.logger:
-            self.logger.info("Looking for Greenhouse apply button", phase=ExecutionPhase.RULES)
+            self.logger.info(
+                "Looking for Greenhouse apply button", phase=ExecutionPhase.RULES
+            )
 
         selectors = [
             "#submit_app_button",
@@ -36,128 +99,155 @@ class GreenhouseHandler(BaseATSHandler):
                         )
                     self.wait_for_page_load()
                     return True
-            except Exception:
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(
+                        f"Greenhouse apply selector failed '{selector}': {e}",
+                        phase=ExecutionPhase.RULES,
+                    )
                 continue
 
-        return False
+        # Fallback to generic apply button detection
+        if self.logger:
+            self.logger.info(
+                "Trying generic apply button fallback", phase=ExecutionPhase.RULES
+            )
+        return super().find_apply_button()
 
+    # ------------------------------------------------------------------
+    # Field detection
+    # ------------------------------------------------------------------
     def detect_form_fields(self) -> list[str]:
         """Detect Greenhouse form fields."""
-        fields = []
-
         field_selectors = {
-            "first_name": "input[name='job_application[first_name]']",
-            "last_name": "input[name='job_application[last_name]']",
-            "email": "input[name='job_application[email]']",
-            "phone": "input[name='job_application[phone]']",
-            "resume": "input[name='job_application[resume]']",
-            "cover_letter": "input[name='job_application[cover_letter]']",
-            "linkedin": "input[name='job_application[linkedin_profile_url]']",
+            "first_name":  "input[name='job_application[first_name]']",
+            "last_name":   "input[name='job_application[last_name]']",
+            "email":       "input[name='job_application[email]']",
+            "phone":       "input[name='job_application[phone]']",
+            "resume":      "input[name='job_application[resume]']",
+            "cover_letter":"input[name='job_application[cover_letter]']",
+            "linkedin":    "input[name='job_application[linkedin_profile_url]']",
         }
-
+        detected = []
         for field_name, selector in field_selectors.items():
-            if self.page.query_selector(selector):
-                fields.append(field_name)
+            try:
+                if self.page.query_selector(selector):
+                    detected.append(field_name)
+            except Exception:
+                continue
+        return detected
 
-        return fields
-
+    # ------------------------------------------------------------------
+    # Form fill — platform-specific selectors + generic fallback
+    # ------------------------------------------------------------------
     def fill_form(self, resume_path: Optional[str] = None) -> dict[str, Any]:
         """Fill Greenhouse application form."""
         if self.logger:
             self.logger.info("Filling Greenhouse form", phase=ExecutionPhase.RULES)
 
-        results: dict[str, Any] = {}
+        results: dict[str, bool] = {}
         personal = self.resume.personal
 
-        # First name
-        try:
-            self.page.fill("input[name='job_application[first_name]']", personal.first_name)
-            results["first_name"] = True
-        except Exception:
-            results["first_name"] = False
+        platform_fields: list[tuple[str, str, Optional[str]]] = [
+            ("first_name",  "input[name='job_application[first_name]']", personal.first_name),
+            ("last_name",   "input[name='job_application[last_name]']",  personal.last_name),
+            ("email",       "input[name='job_application[email]']",       personal.email),
+            ("phone",       "input[name='job_application[phone]']",       personal.phone),
+            ("linkedin",    "input[name='job_application[linkedin_profile_url]']", personal.linkedin),
+        ]
 
-        # Last name
-        try:
-            self.page.fill("input[name='job_application[last_name]']", personal.last_name)
-            results["last_name"] = True
-        except Exception:
-            results["last_name"] = False
-
-        # Email
-        try:
-            self.page.fill("input[name='job_application[email]']", personal.email)
-            results["email"] = True
-        except Exception:
-            results["email"] = False
-
-        # Phone
-        try:
-            self.page.fill("input[name='job_application[phone]']", personal.phone)
-            results["phone"] = True
-        except Exception:
-            results["phone"] = False
-
-        # LinkedIn
-        if personal.linkedin:
+        for field_name, selector, value in platform_fields:
+            if not value:
+                continue
             try:
-                self.page.fill(
-                    "input[name='job_application[linkedin_profile_url]']",
-                    personal.linkedin,
-                )
-                results["linkedin"] = True
-            except Exception:
-                results["linkedin"] = False
+                self.page.fill(selector, value, timeout=3000)
+                results[field_name] = True
+                if self.logger:
+                    self.logger.info(
+                        f"Filled Greenhouse '{field_name}'",
+                        phase=ExecutionPhase.RULES,
+                        selector=selector,
+                    )
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(
+                        f"Greenhouse fill failed for '{field_name}': {e}",
+                        phase=ExecutionPhase.RULES,
+                        selector=selector,
+                    )
+                results[field_name] = False
 
         # Resume upload
         if resume_path:
             try:
                 self.page.set_input_files(
-                    "input[name='job_application[resume]']",
-                    resume_path,
+                    "input[name='job_application[resume]']", resume_path
                 )
                 results["resume"] = True
-                time.sleep(1)  # Wait for upload
-            except Exception:
+                self.page.wait_for_load_state("domcontentloaded", timeout=5000)
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(
+                        f"Greenhouse resume upload failed: {e}",
+                        phase=ExecutionPhase.RULES,
+                    )
                 results["resume"] = False
 
-        # Handle custom fields
-        self._fill_custom_fields()
+        # Custom fields (work auth, sponsorship)
+        self._fill_custom_fields(results)
+
+        # Generic fallback for any field that failed
+        results = self.generic_fill_failed_fields(results, resume_path=None)
 
         if self.logger:
             self.logger.info(
-                "Greenhouse form filled",
+                "Greenhouse form fill complete",
                 phase=ExecutionPhase.RULES,
                 results=results,
             )
-
         return results
 
-    def _fill_custom_fields(self) -> None:
-        """Fill Greenhouse custom fields."""
-        # Work authorization
-        try:
-            authorized = "Yes" if self.resume.work_authorization.authorized_to_work else "No"
-            self.page.select_option(
-                "select[name*='authorized_to_work']",
-                authorized,
-            )
-        except Exception:
-            pass
+    def _fill_custom_fields(self, results: dict[str, bool]) -> None:
+        """Fill Greenhouse custom fields (work authorization, sponsorship)."""
+        auth = self.resume.work_authorization
 
-        # Sponsorship
         try:
-            sponsorship = "Yes" if self.resume.work_authorization.require_sponsorship else "No"
+            authorized = "Yes" if auth.authorized_to_work else "No"
             self.page.select_option(
-                "select[name*='require_sponsorship']",
-                sponsorship,
+                "select[name*='authorized_to_work']", authorized, timeout=3000
             )
-        except Exception:
-            pass
+            results["authorized_to_work"] = True
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(
+                    f"Greenhouse work-auth field not found or failed: {e}",
+                    phase=ExecutionPhase.RULES,
+                )
+            results["authorized_to_work"] = False
 
+        try:
+            sponsorship = "Yes" if auth.require_sponsorship else "No"
+            self.page.select_option(
+                "select[name*='require_sponsorship']", sponsorship, timeout=3000
+            )
+            results["require_sponsorship"] = True
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(
+                    f"Greenhouse sponsorship field not found or failed: {e}",
+                    phase=ExecutionPhase.RULES,
+                )
+            results["require_sponsorship"] = False
+
+    # ------------------------------------------------------------------
+    # Submit
+    # ------------------------------------------------------------------
     def submit_application(self) -> bool:
         """Submit Greenhouse application."""
         if self.logger:
-            self.logger.info("Submitting Greenhouse application", phase=ExecutionPhase.RULES)
+            self.logger.info(
+                "Submitting Greenhouse application", phase=ExecutionPhase.RULES
+            )
 
         submit_selectors = [
             "input[type='submit'][value='Submit Application']",
@@ -172,17 +262,25 @@ class GreenhouseHandler(BaseATSHandler):
                     element.click(timeout=3000)
                     if self.logger:
                         self.logger.info(
-                            "Clicked submit button",
+                            "Clicked Greenhouse submit button",
                             phase=ExecutionPhase.RULES,
                             selector=selector,
                         )
                     self.wait_for_page_load()
                     return True
-            except Exception:
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(
+                        f"Greenhouse submit selector failed '{selector}': {e}",
+                        phase=ExecutionPhase.RULES,
+                    )
                 continue
 
-        return False
+        return super().submit_application()
 
+    # ------------------------------------------------------------------
+    # Multi-step
+    # ------------------------------------------------------------------
     def handle_multi_step(self, state: ApplicationState) -> bool:
         """Handle Greenhouse multi-step flow."""
         if self.logger:
@@ -191,7 +289,6 @@ class GreenhouseHandler(BaseATSHandler):
                 phase=ExecutionPhase.RULES,
             )
 
-        # Check for "Next" button
         next_selectors = [
             "button:has-text('Next')",
             "input[type='submit'][value='Next']",
@@ -205,14 +302,18 @@ class GreenhouseHandler(BaseATSHandler):
                     element.click(timeout=3000)
                     self.wait_for_page_load()
                     return True
-            except Exception:
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(
+                        f"Greenhouse next selector failed '{selector}': {e}",
+                        phase=ExecutionPhase.RULES,
+                    )
                 continue
 
-        # Check for confirmation page
         if "confirmation" in self.page.url or "thank" in self.page.url:
             if self.logger:
                 self.logger.info(
-                    "Reached confirmation page",
+                    "Reached Greenhouse confirmation page",
                     phase=ExecutionPhase.RULES,
                 )
             return False

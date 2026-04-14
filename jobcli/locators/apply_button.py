@@ -60,164 +60,108 @@ class ApplyButtonLocator:
 
         return None
 
-    def find(self) -> Optional[LocatorResult]:
-        """Find apply button using all strategies."""
+    def find(self, retry_count: int = 0) -> Optional[LocatorResult]:
+        """Find apply button using robust filtering and retries."""
+        import re
+        import time
         if self.logger:
-            self.logger.info("Starting apply button search", phase=ExecutionPhase.RULES)
+            self.logger.info(f"Starting apply button search (Retry {retry_count})", phase=ExecutionPhase.RULES)
 
-        # Strategy 1-10: Text-based button selectors (case insensitive)
-        text_patterns = [
-            "Apply",
-            "Apply Now",
-            "Apply for this job",
-            "Apply for this position",
-            "Submit Application",
-            "Easy Apply",
-            "Quick Apply",
-            "Apply Online",
-            "Submit Resume",
-            "Join Our Team",
-        ]
+        if retry_count == 1:
+            if self.logger: self.logger.warning("Retry 1 triggered: Immediate re-poll", phase=ExecutionPhase.RULES)
+        elif retry_count == 2:
+            if self.logger: self.logger.warning("Retry 2 triggered: Scrolling to view", phase=ExecutionPhase.RULES)
+            try: self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            except: pass
+            time.sleep(1.0)
+        elif retry_count == 3:
+            if self.logger: self.logger.warning("Retry 3 triggered: Post-wait polling", phase=ExecutionPhase.RULES)
+            time.sleep(2.5)
+        elif retry_count > 3:
+            if self.logger: self.logger.error("3 retries exhausted handling Apply Button. Passing control to LLM.", phase=ExecutionPhase.RULES)
+            return LocatorResult(success=False, error="Exhausted retries", phase=ExecutionPhase.RULES)
 
-        for i, text in enumerate(text_patterns, 1):
-            result = self._try_selector(
-                f"button:has-text('{text}')", SelectorType.CSS, f"text_button_{i}"
-            )
-            if result:
-                return result
+        try:
+            # Dismiss cookie banners if present
+            cookie_btn = self.page.locator("#onetrust-accept-btn-handler")
+            if cookie_btn.is_visible():
+                cookie_btn.click(force=True, timeout=1000)
+        except Exception:
+            pass
 
-            # Also try with i flag for case-insensitive
-            result = self._try_selector(
-                f"button:text-is('{text}')", SelectorType.CSS, f"text_button_exact_{i}"
-            )
-            if result:
-                return result
+        # Use Playwright python to find valid elements
+        text_pattern = re.compile(r"(?i)^(Apply|Apply[ -]Now|Submit Application)$")
+        exclude_pattern = re.compile(r"(?i)(similar|other|save|share|refer)")
+        
+        try:
+            elements = self.page.locator("button, a, [role='button'], [role='link']").all()
+            for i, element in enumerate(elements):
+                try:
+                    if not element.is_visible() or not element.is_enabled():
+                        continue
+                    
+                    text = (element.inner_text() or element.text_content() or "").strip()
+                    if text_pattern.match(text) and not exclude_pattern.search(text):
+                        if self.logger:
+                            self.logger.info(
+                                "Found apply button via regex",
+                                strategy="regex",
+                                phase=ExecutionPhase.RULES,
+                            )
+                        # We use text pattern as locator for click
+                        return LocatorResult(
+                            success=True,
+                            selector=text,
+                            selector_type=SelectorType.TEXT,
+                            locator_name="regex_exact",
+                            phase=ExecutionPhase.RULES,
+                        )
+                except Exception:
+                    continue
+        except Exception as e:
+            if self.logger: self.logger.debug(f"Locator scan failed: {e}")
 
-        # Strategy 11-15: Link-based selectors with "apply" in text
-        link_patterns = [
-            "a:has-text('Apply')",
-            "a:has-text('Apply Now')",
-            "a:has-text('Submit Application')",
-            "a[href*='apply']",
-            "a[href*='application']",
-        ]
-
-        for i, selector in enumerate(link_patterns, 11):
-            result = self._try_selector(selector, SelectorType.CSS, f"link_{i}")
-            if result:
-                return result
-
-        # Strategy 16-20: Input submit buttons
-        submit_selectors = [
-            "input[type='submit'][value*='Apply' i]",
-            "input[type='submit'][value*='Submit' i]",
-            "input[type='button'][value*='Apply' i]",
-            "button[type='submit']:has-text('Apply')",
-            "button[type='submit']:has-text('Submit')",
-        ]
-
-        for i, selector in enumerate(submit_selectors, 16):
-            result = self._try_selector(selector, SelectorType.CSS, f"submit_{i}")
-            if result:
-                return result
-
-        # Strategy 21-25: ARIA and role-based selectors
-        aria_selectors = [
-            "button[aria-label*='Apply' i]",
-            "button[aria-label*='Submit' i]",
-            "a[aria-label*='Apply' i]",
-            "[role='button'][aria-label*='Apply' i]",
-            "[role='link'][aria-label*='Apply' i]",
-        ]
-
-        for i, selector in enumerate(aria_selectors, 21):
-            result = self._try_selector(selector, SelectorType.CSS, f"aria_{i}")
-            if result:
-                return result
-
-        # Strategy 26-30: XPath strategies (more flexible)
-        xpath_selectors = [
-            "//button[contains(translate(text(), 'APPLY', 'apply'), 'apply')]",
-            "//a[contains(translate(text(), 'APPLY', 'apply'), 'apply')]",
-            "//button[contains(@class, 'apply')]",
-            "//button[contains(@class, 'submit')]",
-            "//a[contains(@href, 'apply')]",
-        ]
-
-        for i, selector in enumerate(xpath_selectors, 26):
-            result = self._try_selector(selector, SelectorType.XPATH, f"xpath_{i}")
-            if result:
-                return result
-
-        # Strategy 31-35: Common CSS class patterns
-        class_selectors = [
-            "button.apply-button",
-            "button.btn-apply",
-            "button.submit-application",
-            ".apply-btn",
-            ".application-button",
-        ]
-
-        for i, selector in enumerate(class_selectors, 31):
-            result = self._try_selector(selector, SelectorType.CSS, f"class_{i}")
-            if result:
-                return result
-
-        # Strategy 36-40: ID-based selectors
-        id_selectors = [
-            "#apply-button",
-            "#applyButton",
-            "#apply_button",
-            "#submit-application",
-            "#submitApplication",
-        ]
-
-        for i, selector in enumerate(id_selectors, 36):
-            result = self._try_selector(selector, SelectorType.CSS, f"id_{i}")
-            if result:
-                return result
-
-        if self.logger:
-            self.logger.warning(
-                "No apply button found using rule-based locators",
-                phase=ExecutionPhase.RULES,
-            )
-
-        return LocatorResult(
-            success=False,
-            error="No apply button found",
-            phase=ExecutionPhase.RULES,
-        )
+        # If not found, recurse with incremented retry
+        return self.find(retry_count + 1)
 
     def click_apply_button(self) -> bool:
-        """Find and click the apply button."""
+        """Find and click the apply button safely."""
         result = self.find()
 
         if not result or not result.success:
             return False
 
         try:
-            if result.selector_type == SelectorType.CSS:
-                self.page.click(result.selector, timeout=5000)
+            selector = result.selector
+            context = self.page.context
+            
+            if result.selector_type == SelectorType.TEXT:
+                loc = self.page.get_by_text(selector, exact=True).first
+            elif result.selector_type == SelectorType.CSS:
+                loc = self.page.locator(selector).first
             elif result.selector_type == SelectorType.XPATH:
-                self.page.click(f"xpath={result.selector}", timeout=5000)
+                loc = self.page.locator(f"xpath={selector}").first
             else:
                 return False
 
-            if self.logger:
-                self.logger.info(
-                    "Successfully clicked apply button",
-                    phase=ExecutionPhase.RULES,
-                    selector=result.selector,
-                )
+            try:
+                with context.expect_page(timeout=5000) as new_page_info:
+                    loc.click(timeout=3000)
+                new_page = new_page_info.value
+                new_page.wait_for_load_state("domcontentloaded")
+            except TimeoutError:
+                # Page didn't open a new tab or click failed
+                try:
+                    loc.click(force=True, timeout=3000)
+                except Exception as click_err:
+                    if self.logger: self.logger.error("Click intercepted, resolving via force=True fallback", phase=ExecutionPhase.RULES)
+                    loc.click(force=True)
 
+            if self.logger:
+                self.logger.info("Successfully clicked apply button", phase=ExecutionPhase.RULES, selector=result.selector)
             return True
 
         except Exception as e:
             if self.logger:
-                self.logger.error(
-                    "Failed to click apply button",
-                    phase=ExecutionPhase.RULES,
-                    error=str(e),
-                )
+                self.logger.error("Failed to click apply button", phase=ExecutionPhase.RULES, error=str(e))
             return False
