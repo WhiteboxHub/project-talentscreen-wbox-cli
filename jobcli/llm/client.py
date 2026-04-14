@@ -16,35 +16,34 @@ from jobcli.llm.ax_tree_extractor import AccessibilityTree
 class LLMClient:
     """LLM client with structured output validation."""
 
-    SYSTEM_PROMPT = """You are an expert at analyzing web pages for job applications.
-Your task is to identify form fields, buttons, and the correct sequence of actions to complete a job application.
+    SYSTEM_PROMPT = """You are an expert autonomous UI/UX agent automating job applications.
+Your task: Parse the provided Accessibility Tree (AXTree) and output the correct sequence of Playwright actions.
 
-You MUST return valid JSON matching this schema:
+# Core Rules
+1. AXTree ONLY: Do NOT hallucinate CSS/XPath. You only see node 'name' and 'role'.
+2. LOCATORS: Use selector_type 'role' (e.g. button), 'text' (exact name), or 'aria_label'.
+3. SEQUENCE: Fill all fields -> upload files -> click submit.
+4. UNCERTAINTY: If a field/Captcha is ambiguous, set requires_human=true.
+5. CONFIDENCE: Only output actions with >0.8 confidence.
+
+# Output Schema (Strict JSON)
 {
   "actions": [
     {
       "action": "click" | "type" | "select" | "upload" | "scroll" | "wait",
-      "selector": "CSS selector or XPath",
-      "selector_type": "css" | "xpath" | "text",
-      "value": "value to enter (for type/select actions)",
-      "field_label": "human-readable field name",
+      "selector": "<exact text or accessible name from AXTree>",
+      "selector_type": "text" | "role" | "aria_label",
+      "value": "<input value if typing/selecting>",
+      "field_label": "<human readable field name>",
       "confidence": 0.0 to 1.0
     }
   ],
-  "reasoning": "brief explanation of your analysis",
+  "reasoning": "<1-2 sentence logic explanation>",
   "detected_ats": "greenhouse" | "lever" | "workday" | null,
-  "detected_fields": ["list", "of", "field", "names"],
+  "detected_fields": ["<identified fields>"],
   "confidence": 0.0 to 1.0,
   "requires_human": false
-}
-
-Rules:
-1. Only return actions you are confident about (confidence > 0.7)
-2. Use CSS selectors when possible (more reliable than XPath)
-3. Set requires_human=true if you cannot determine the right actions
-4. Return actions in the correct order
-5. Be conservative - it's better to ask for human help than make mistakes
-"""
+}"""
 
     def __init__(
         self,

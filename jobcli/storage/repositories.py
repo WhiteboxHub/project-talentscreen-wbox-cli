@@ -226,6 +226,35 @@ class LearnedLocatorRepository:
             for loc in locators
         ]
 
+    def get_by_purpose_and_ats(self, purpose: str, ats_type: ATSType) -> list[LearnedLocator]:
+        """Get all locators for a specific purpose and ATS type."""
+        locators = (
+            self.session.query(LearnedLocatorModel)
+            .filter(LearnedLocatorModel.ats_type == ats_type)
+            .filter(LearnedLocatorModel.purpose == purpose)
+            .order_by(LearnedLocatorModel.confidence_score.desc())
+            .all()
+        )
+        return [
+            LearnedLocator(
+                id=loc.id,
+                ats_type=loc.ats_type,
+                selector=loc.selector,
+                selector_type=loc.selector_type,
+                purpose=loc.purpose,
+                success_count=loc.success_count,
+                failure_count=loc.failure_count,
+                confidence_score=loc.confidence_score,
+                domain_pattern=loc.domain_pattern,
+                url_pattern=loc.url_pattern,
+                notes=loc.notes,
+                created_at=loc.created_at,
+                updated_at=loc.updated_at,
+                created_by=loc.created_by,
+            )
+            for loc in locators
+        ]
+
     def update_feedback(self, locator_id: int, success: bool) -> None:
         """Update locator based on feedback."""
         locator = (

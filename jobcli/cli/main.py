@@ -70,6 +70,19 @@ def save_config(config: Config) -> None:
     session.close()
 
 
+def ensure_configured(config: Config) -> None:
+    """Ensure the user has logged in and configured required credentials."""
+    if not config.job_board_username or not config.job_board_password:
+        console.print("[red]Missing job board credentials.[/red]")
+        console.print("Please run [cyan]jobcli login[/cyan] first.")
+        raise typer.Exit(1)
+        
+    has_llm = config.openai_api_key or config.anthropic_api_key or config.gemini_api_key
+    if not has_llm:
+        console.print("\n[yellow]Warning: No LLM API keys configured. Phase 2 (Autonomous Reasoning) will be disabled.[/yellow]")
+        console.print("Run [cyan]jobcli login[/cyan] to unlock full AI automation capabilities.\n")
+
+
 @app.command()
 def setup() -> None:
     """Initialize JobCLI configuration and database."""
@@ -320,6 +333,8 @@ def apply(
 
     # Load config and resume
     config = get_config()
+    ensure_configured(config)
+    
     db = get_database()
     session = db.get_session()
 
@@ -386,6 +401,9 @@ def discover(
     """Discover jobs from Whitebox Learning dashboard."""
     console.print("[bold cyan]Job Discovery[/bold cyan]\n")
 
+    config = get_config()
+    ensure_configured(config)
+
     db = get_database()
     session = db.get_session()
 
@@ -418,6 +436,9 @@ def discover(
 def open_dashboard() -> None:
     """Open Whitebox Learning dashboard in an interactive browser window."""
     console.print("[bold cyan]Opening Dashboard[/bold cyan]\n")
+    
+    config = get_config()
+    ensure_configured(config)
     
     db = get_database()
     session = db.get_session()

@@ -7,7 +7,7 @@ from langgraph.graph.message import add_messages
 from playwright.sync_api import Page
 
 from jobcli.core.logger import JobLogger
-from jobcli.core.schemas import ApplicationState, ApplicationStatus, ATSType, ExecutionPhase, ResumeData
+from jobcli.core.schemas import ApplicationState, ApplicationStatus, ATSType, ExecutionPhase, ResumeData, BrowserAction, ActionType
 from jobcli.human.interface import HumanInterface
 from jobcli.llm.ax_tree_extractor import AccessibilityTreeExtractor
 from jobcli.llm.client import LLMClient
@@ -16,6 +16,7 @@ from jobcli.locators.apply_button import ApplyButtonLocator
 from jobcli.locators.ats.handler_factory import ATSHandlerFactory
 from jobcli.locators.form_fields import FormFiller
 from jobcli.storage.repositories import LearnedLocatorRepository
+from jobcli.core.locator_schemas import LearnedLocator
 
 
 class ApplicationGraphState(TypedDict):
@@ -46,22 +47,22 @@ class ApplicationStateMachine:
         workflow = StateGraph(ApplicationGraphState)
 
         # Add nodes for each phase
-        workflow.add_node("phase_1_rules", self._phase_1_rules)
+        workflow.add_node("phase_0_memory", self._phase_0_memory)
         workflow.add_node("phase_2_llm", self._phase_2_llm)
+        workflow.add_node("phase_1_rules", self._phase_1_rules)
         workflow.add_node("phase_3_human", self._phase_3_human)
         workflow.add_node("finalize", self._finalize)
 
-        # Set entry point
-        workflow.set_entry_point("phase_1_rules")
+        # Set entry point to Memory First
+        workflow.set_entry_point("phase_0_memory")
 
-        # Add conditional edges
+        # Routing edges
         workflow.add_conditional_edges(
-            "phase_1_rules",
-            self._route_after_phase_1,
+            "phase_0_memory",
+            self._route_after_phase_0,
             {
                 "success": "finalize",
                 "try_llm": "phase_2_llm",
-                "try_human": "phase_3_human",
             },
         )
 
@@ -70,8 +71,16 @@ class ApplicationStateMachine:
             self._route_after_phase_2,
             {
                 "success": "finalize",
+                "try_rules": "phase_1_rules",
+            },
+        )
+
+        workflow.add_conditional_edges(
+            "phase_1_rules",
+            self._route_after_phase_1,
+            {
+                "success": "finalize",
                 "try_human": "phase_3_human",
-                "failed": "finalize",
             },
         )
 
@@ -88,8 +97,127 @@ class ApplicationStateMachine:
 
         return workflow.compile()
 
+    def _phase_0_memory(self, state: ApplicationGraphState) -> ApplicationGraphState:
+        """Phase 0: Memory Retrieval for Agentic reasoning."""
+        logger = state["logger"]
+        page = state["page"]
+        resume = state["resume"]
+        ats_type = state["ats_type"]
+        locator_repo = state["locator_repo"]
+
+        logger.log_phase_start(ExecutionPhase.LLM)
+        state["current_phase"] = ExecutionPhase.LLM
+
+        try:
+            locators = locator_repo.get_by_purpose_and_ats("find_apply_button_and_fill_form", ats_type)
+            llm_locators = [loc for loc in locators if loc.created_by == "llm"]
+            
+            if llm_locators:
+                logger.info(f"Retrieved {len(llm_locators)} agentic locators from memory.", phase=ExecutionPhase.LLM)
+                
+                # Execute these locators
+                executor = ToolExecutor(page, logger)
+                success_all = True
+                
+                # Typically we'd reconstruct BrowserActions from LearnedLocator notes/types
+                # But for simplicity, we mock a click sequence for any returned locator
+                for loc in llm_locators:
+                    action = BrowserAction(
+                        action=ActionType.CLICK, # Assumption for simplistic playback
+                        selector=loc.selector,
+                        selector_type=loc.selector_type,
+                        confidence=1.0
+                    )
+                    if not executor.execute_action(action):
+                        success_all = False
+                        break
+                
+                state["phase_results"]["memory"] = success_all
+                if success_all:
+                    logger.log_phase_end(ExecutionPhase.LLM, True)
+                    return state
+
+        except Exception as e:
+            logger.error(f"Phase 0 failed: {e}", phase=ExecutionPhase.LLM)
+
+        state["phase_results"]["memory"] = False
+        return state
+
+    def _phase_2_llm(self, state: ApplicationGraphState) -> ApplicationGraphState:
+        """Phase 2: LLM reasoning (Now primary intelligence driver)."""
+        logger = state["logger"]
+        page = state["page"]
+        resume = state["resume"]
+        llm_client = state.get("llm_client")
+
+        if not state.get("current_phase") == ExecutionPhase.LLM:
+            logger.log_phase_start(ExecutionPhase.LLM)
+            state["current_phase"] = ExecutionPhase.LLM
+
+        if not llm_client:
+            logger.warning("No LLM client configured")
+            state["phase_results"]["llm"] = False
+            logger.log_phase_end(ExecutionPhase.LLM, False)
+            return state
+
+        try:
+            # Extract Accessibility Tree for massive token reduction and semantic analysis
+            extractor = AccessibilityTreeExtractor(page)
+            ax_tree = extractor.extract()
+
+            logger.save_structured_dom(
+                ax_tree.model_dump(),
+                "ax_tree_snapshot",
+                ExecutionPhase.LLM,
+            )
+
+            # Get actions from LLM using optimized AXTree
+            llm_response = llm_client.analyze_page_from_axtree(
+                ax_tree,
+                resume,
+                task="find_apply_button_and_fill_form",
+            )
+            
+            print(f"LLM RAW PARSED RESPONSE: {llm_response}", flush=True)
+
+            if llm_response and not llm_response.requires_human:
+                executor = ToolExecutor(page, logger)
+                results = executor.execute_actions(llm_response)
+
+                success = all(results.values())
+                
+                # Agentic Self-Learning: Automatically Store Locators on Success
+                if success:
+                    locator_repo = state["locator_repo"]
+                    ats_type = state["ats_type"]
+                    for action in llm_response.actions:
+                        if action.selector:
+                            loc = LearnedLocator(
+                                ats_type=ats_type,
+                                selector=action.selector,
+                                selector_type=action.selector_type,
+                                purpose="find_apply_button_and_fill_form",
+                                notes=f"LLM Action: {action.action.value} - {action.field_label or ''}",
+                                created_by="llm",
+                            )
+                            locator_repo.create(loc)
+                            logger.info(f"Learned memory saved autonomously: {action.selector}", phase=ExecutionPhase.LLM)
+
+                state["phase_results"]["llm"] = success
+                logger.log_phase_end(ExecutionPhase.LLM, success)
+                return state
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            logger.error(f"Phase 2 failed: {e}", phase=ExecutionPhase.LLM)
+
+        state["phase_results"]["llm"] = False
+        logger.log_phase_end(ExecutionPhase.LLM, False)
+        return state
+
     def _phase_1_rules(self, state: ApplicationGraphState) -> ApplicationGraphState:
-        """Phase 1: Rule-based locators."""
+        """Phase 1: Rule-based locators (Fallback)."""
         logger = state["logger"]
         page = state["page"]
         resume = state["resume"]
@@ -100,11 +228,10 @@ class ApplicationStateMachine:
         state["current_phase"] = ExecutionPhase.RULES
 
         try:
-            # Try ATS-specific handler
             handler = ATSHandlerFactory.create_handler(ats_type, page, resume, logger)
 
             if handler:
-                logger.info(f"Using {ats_type.value} handler", phase=ExecutionPhase.RULES)
+                logger.info(f"Using {ats_type.value} fallback handler", phase=ExecutionPhase.RULES)
 
                 if handler.find_apply_button():
                     handler.fill_form(resume_pdf_path)
@@ -114,7 +241,6 @@ class ApplicationStateMachine:
                     logger.log_phase_end(ExecutionPhase.RULES, success)
                     return state
 
-            # Fallback to generic locators
             apply_locator = ApplyButtonLocator(page, logger)
             if apply_locator.click_apply_button():
                 form_filler = FormFiller(page, resume, logger)
@@ -129,56 +255,6 @@ class ApplicationStateMachine:
 
         state["phase_results"]["rules"] = False
         logger.log_phase_end(ExecutionPhase.RULES, False)
-        return state
-
-    def _phase_2_llm(self, state: ApplicationGraphState) -> ApplicationGraphState:
-        """Phase 2: LLM reasoning."""
-        logger = state["logger"]
-        page = state["page"]
-        resume = state["resume"]
-        llm_client = state.get("llm_client")
-
-        logger.log_phase_start(ExecutionPhase.LLM)
-        state["current_phase"] = ExecutionPhase.LLM
-
-        if not llm_client:
-            logger.warning("No LLM client configured")
-            state["phase_results"]["llm"] = False
-            logger.log_phase_end(ExecutionPhase.LLM, False)
-            return state
-
-        try:
-            # Extract Accessibility Tree (more efficient than full DOM)
-            extractor = AccessibilityTreeExtractor(page)
-            ax_tree = extractor.extract()
-
-            logger.save_structured_dom(
-                ax_tree.model_dump(),
-                "ax_tree",
-                ExecutionPhase.LLM,
-            )
-
-            # Get actions from LLM
-            llm_response = llm_client.analyze_page_from_axtree(
-                ax_tree,
-                resume,
-                task="find_apply_button_and_fill_form",
-            )
-
-            if llm_response and not llm_response.requires_human:
-                executor = ToolExecutor(page, logger)
-                results = executor.execute_actions(llm_response)
-
-                success = all(results.values())
-                state["phase_results"]["llm"] = success
-                logger.log_phase_end(ExecutionPhase.LLM, success)
-                return state
-
-        except Exception as e:
-            logger.error(f"Phase 2 failed: {e}", phase=ExecutionPhase.LLM)
-
-        state["phase_results"]["llm"] = False
-        logger.log_phase_end(ExecutionPhase.LLM, False)
         return state
 
     def _phase_3_human(self, state: ApplicationGraphState) -> ApplicationGraphState:
@@ -196,24 +272,20 @@ class ApplicationStateMachine:
         try:
             human = HumanInterface(page, locator_repo, logger)
 
-            # Request help
             success, selector, selector_type = human.request_help(
                 "find_apply_button",
                 ats_type,
             )
 
             if success and selector:
-                # Click apply button
                 if selector_type and selector_type.value == "css":
                     page.click(selector)
                 elif selector_type and selector_type.value == "xpath":
                     page.click(f"xpath={selector}")
 
-                # Fill form
                 form_filler = FormFiller(page, resume, logger)
                 form_filler.fill_all(resume_pdf_path)
 
-                # Submit
                 if human.confirm_submission():
                     submit_selectors = [
                         "button[type='submit']",
@@ -240,46 +312,30 @@ class ApplicationStateMachine:
     def _finalize(self, state: ApplicationGraphState) -> ApplicationGraphState:
         """Finalize application."""
         phase_results = state["phase_results"]
-
-        # Determine final status
         if any(phase_results.values()):
             state["final_status"] = ApplicationStatus.SUBMITTED
         else:
             state["final_status"] = ApplicationStatus.FAILED
-
         return state
 
-    def _route_after_phase_1(
-        self, state: ApplicationGraphState
-    ) -> Literal["success", "try_llm", "try_human"]:
-        """Route after phase 1."""
-        if state["phase_results"].get("rules", False):
+    def _route_after_phase_0(self, state: ApplicationGraphState) -> Literal["success", "try_llm"]:
+        if state["phase_results"].get("memory", False):
             return "success"
+        return "try_llm"
 
-        # Try LLM if available
-        if state.get("llm_client"):
-            return "try_llm"
-
-        # Fall back to human
-        return "try_human"
-
-    def _route_after_phase_2(
-        self, state: ApplicationGraphState
-    ) -> Literal["success", "try_human", "failed"]:
-        """Route after phase 2."""
+    def _route_after_phase_2(self, state: ApplicationGraphState) -> Literal["success", "try_rules"]:
         if state["phase_results"].get("llm", False):
             return "success"
+        return "try_rules"
 
-        # Fall back to human
+    def _route_after_phase_1(self, state: ApplicationGraphState) -> Literal["success", "try_human"]:
+        if state["phase_results"].get("rules", False):
+            return "success"
         return "try_human"
 
-    def _route_after_phase_3(
-        self, state: ApplicationGraphState
-    ) -> Literal["success", "failed"]:
-        """Route after phase 3."""
+    def _route_after_phase_3(self, state: ApplicationGraphState) -> Literal["success", "failed"]:
         if state["phase_results"].get("human", False):
             return "success"
-
         return "failed"
 
     def run(
@@ -304,11 +360,9 @@ class ApplicationStateMachine:
             "locator_repo": locator_repo,
             "llm_client": llm_client,
             "phase_results": {},
-            "current_phase": ExecutionPhase.RULES,
+            "current_phase": ExecutionPhase.LLM,
             "final_status": ApplicationStatus.PENDING,
         }
 
-        # Run the graph
         final_state = self.graph.invoke(initial_state)
-
         return final_state["final_status"]

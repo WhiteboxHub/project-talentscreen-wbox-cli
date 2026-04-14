@@ -11,3 +11,12 @@
 {"event": "Extracting job links from grid", "level": "info", "timestamp": "2026-04-14T00:17:58.899193Z"}
 {"event": "Discovered 0 new jobs", "level": "info", "timestamp": "2026-04-14T00:18:04.067467Z"}
 {"job_url": "https://boards.greenhouse.io/vanta/jobs/4513686004", "event": "Starting application for job 1", "level": "info", "timestamp": "2026-04-14T00:18:47.705076Z"}
+{"job_url": "https://whitebox-learning.com/login", "event": "Starting application for job 1", "level": "info", "timestamp": "2026-04-14T02:37:06.683281Z"}
+{"status": "in_progress", "event": "Completed job 1", "level": "info", "timestamp": "2026-04-14T02:38:24.082500Z"}
+{"event": "Logging into https://whitebox-learning.com/login", "level": "info", "timestamp": "2026-04-14T02:51:31.245690Z"}
+{"event": "Successfully logged in, navigating to dashboard", "level": "info", "timestamp": "2026-04-14T02:51:33.772890Z"}
+{"event": "Extracting job links from grid", "level": "info", "timestamp": "2026-04-14T02:51:35.612922Z"}
+{"event": "Discovered 16 new jobs", "level": "info", "timestamp": "2026-04-14T02:51:40.745902Z"}
+{"job_url": "https://www.linkedin.com/jobs/view/4399524348", "event": "Starting application for job 2", "level": "info", "timestamp": "2026-04-14T02:52:00.229937Z"}
+{"job_url": "https://www.linkedin.com/jobs/view/4399524348", "event": "Starting application for job 2", "level": "info", "timestamp": "2026-04-14T02:55:25.052100Z"}
+{"job_url": "https://www.linkedin.com/jobs/view/4399524348", "event": "Starting application for job 2", "level": "info", "timestamp": "2026-04-14T02:58:15.717146Z"}

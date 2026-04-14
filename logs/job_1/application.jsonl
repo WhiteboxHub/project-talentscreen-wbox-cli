@@ -26,3 +26,23 @@
 {"job_id": 1, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-14T00:18:50.692233Z"}
 {"job_id": 1, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-14T00:18:50.692233Z"}
 {"job_id": 1, "phase": "human", "task": "find_apply_button", "event": "Requesting human assistance", "level": "info", "timestamp": "2026-04-14T00:18:50.692233Z"}
+{"job_id": 1, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-14T02:37:10.150918Z"}
+{"job_id": 1, "phase": "rules", "screenshot_path": "logs/job_1/screenshots/001_20260413_193713_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T02:37:13.537538Z"}
+{"job_id": 1, "phase": "rules", "url": "https://whitebox-learning.com/login", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-14T02:37:13.537734Z"}
+{"job_id": 1, "phase": "rules", "signature": "px-", "event": "Detected phenom_people from DOM", "level": "info", "timestamp": "2026-04-14T02:37:13.564513Z"}
+{"job_id": 1, "phase": "rules", "event": "Detected ATS: phenom_people", "level": "info", "timestamp": "2026-04-14T02:37:13.567215Z"}
+{"job_id": 1, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-14T02:37:13.567242Z"}
+{"job_id": 1, "phase": "rules", "event": "Using generic locators", "level": "info", "timestamp": "2026-04-14T02:37:13.567270Z"}
+{"job_id": 1, "phase": "rules", "event": "Starting apply button search", "level": "info", "timestamp": "2026-04-14T02:37:13.567296Z"}
+{"job_id": 1, "phase": "rules", "event": "No apply button found using rule-based locators", "level": "warning", "timestamp": "2026-04-14T02:37:13.622259Z"}
+{"job_id": 1, "phase": null, "event": "Generic apply button locator failed", "level": "warning", "timestamp": "2026-04-14T02:37:13.622538Z"}
+{"job_id": 1, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-14T02:37:13.622564Z"}
+{"job_id": 1, "phase": "llm", "dom_path": "logs/job_1/dom_snapshots/001_20260413_193713_for_llm.json", "name": "for_llm", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-14T02:37:13.655465Z"}
+{"job_id": 1, "phase": "llm", "task": "find_apply_button_and_fill_form", "event": "Requesting LLM analysis from openai", "level": "info", "timestamp": "2026-04-14T02:37:13.698663Z"}
+{"job_id": 1, "phase": "llm", "provider": "openai", "event": "LLM request failed: Error code: 404 - {'error': {'message': 'The model `gpt-4-turbo-preview` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}", "level": "error", "timestamp": "2026-04-14T02:37:15.030062Z"}
+{"job_id": 1, "phase": null, "event": "LLM returned no response", "level": "error", "timestamp": "2026-04-14T02:37:15.030310Z"}
+{"job_id": 1, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-14T02:37:15.030367Z"}
+{"job_id": 1, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-14T02:37:15.030423Z"}
+{"job_id": 1, "phase": "human", "task": "find_apply_button", "event": "Requesting human assistance", "level": "info", "timestamp": "2026-04-14T02:37:15.030804Z"}
+{"job_id": 1, "phase": null, "event": "Application failed", "level": "error", "timestamp": "2026-04-14T02:38:23.934025Z"}
+{"job_id": 1, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-14T02:38:24.082390Z"}
