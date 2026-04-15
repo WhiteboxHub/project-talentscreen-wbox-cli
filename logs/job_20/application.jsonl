@@ -1,0 +1,4 @@
+{"job_id": 20, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-15T19:34:30.932524Z"}
+{"job_id": 20, "phase": null, "event": "Application error: Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to \"https://eluq.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_2001/job/186363\", waiting until \"load\"\n", "level": "error", "timestamp": "2026-04-15T19:35:00.961787Z"}
+{"job_id": 20, "phase": "rules", "screenshot_path": "logs\\job_20\\screenshots\\001_20260415_123500_error.png", "name": "error", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-15T19:35:16.344049Z"}
+{"job_id": 20, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-15T19:35:16.450204Z"}

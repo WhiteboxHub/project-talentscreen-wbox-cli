@@ -1,6 +1,7 @@
 """Repository pattern for data access."""
 
 import json
+from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
@@ -263,7 +264,7 @@ class UserDataRepository:
 
         if user_data:
             user_data.data = json.loads(resume.model_dump_json())
-            user_data.updated_at = json.loads(resume.model_dump_json())
+            user_data.updated_at = datetime.now()
         else:
             user_data = UserDataModel(
                 data_type="resume", data=json.loads(resume.model_dump_json())
