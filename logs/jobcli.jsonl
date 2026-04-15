@@ -1,3 +1,4 @@
+
 {"job_url": "https://boards.greenhouse.io/vanta/jobs/4513686004", "event": "Starting application for job 1", "level": "info", "timestamp": "2026-04-14T00:06:04.816593Z"}
 {"job_url": "https://boards.greenhouse.io/greenhouse/jobs/4329243007", "event": "Starting application for job 2", "level": "info", "timestamp": "2026-04-14T00:06:38.697797Z"}
 {"event": "Missing credentials for Wbox login", "level": "error", "timestamp": "2026-04-14T00:15:16.173622Z"}
@@ -35,3 +36,6 @@
 {"job_url": "https://www.klaviyo.com/careers/jobs/7688488003?gh_jid=7688488003&gh_src=1284ec8c3us", "event": "Starting application for job 34", "level": "info", "timestamp": "2026-04-15T17:31:10.659294Z"}
 {"job_url": "https://www.klaviyo.com/careers/jobs/7688488003?gh_jid=7688488003&gh_src=1284ec8c3us", "event": "Starting application for job 34", "level": "info", "timestamp": "2026-04-15T17:39:23.538276Z"}
 {"status": "in_progress", "event": "Completed job 34", "level": "info", "timestamp": "2026-04-15T18:36:32.830094Z"}
+{"job_url": "https://eluq.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_2001/job/186363", "event": "Starting application for job 20", "level": "info", "timestamp": "2026-04-15T19:34:21.214147Z"}
+{"status": "in_progress", "event": "Completed job 20", "level": "info", "timestamp": "2026-04-15T19:35:16.450204Z"}
+
