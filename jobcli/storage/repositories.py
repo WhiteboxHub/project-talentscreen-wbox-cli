@@ -18,6 +18,9 @@ from jobcli.core.schemas import (
 from jobcli.storage.models import (
     ApplicationLogModel,
     ConfigModel,
+    DropdownStrategyModel,
+    FieldAnswerModel,
+    InteractionLogModel,
     JobModel,
     LearnedLocatorModel,
     UserDataModel,
@@ -343,6 +346,36 @@ class UserDataRepository:
 
         return CommonQuestions(**user_data.data)
 
+    def save_dynamic_answers(self, answers: dict[str, str]) -> None:
+        """Save user answers for mandatory fields."""
+        user_data = (
+            self.session.query(UserDataModel)
+            .filter(UserDataModel.data_type == "dynamic_answers")
+            .first()
+        )
+
+        if user_data:
+            user_data.data = answers
+        else:
+            user_data = UserDataModel(
+                data_type="dynamic_answers", data=answers
+            )
+            self.session.add(user_data)
+
+        self.session.commit()
+
+    def get_dynamic_answers(self) -> dict[str, str]:
+        """Get user answers for mandatory fields."""
+        user_data = (
+            self.session.query(UserDataModel)
+            .filter(UserDataModel.data_type == "dynamic_answers")
+            .first()
+        )
+        if not user_data:
+            return {}
+
+        return user_data.data
+
 
 class ConfigRepository:
     """Repository for configuration."""
@@ -385,3 +418,182 @@ class ConfigRepository:
         for key, value in config_dict.items():
             if value is not None:
                 self.set(key, str(value))
+
+
+class FieldAnswerRepository:
+    """Repository for managing field-level answer memory."""
+
+    def __init__(self, session: Session) -> None:
+        """Initialize repository."""
+        self.session = session
+
+    def save_answer(
+        self,
+        field_label: str,
+        normalized_label: str,
+        value: str,
+        ats_type: ATSType,
+        success: bool = True,
+        source: str = "human",
+    ) -> None:
+        """Save or update an answer with success tracking."""
+        existing = (
+            self.session.query(FieldAnswerModel)
+            .filter(
+                FieldAnswerModel.normalized_label == normalized_label,
+                FieldAnswerModel.ats_type == ats_type,
+            )
+            .first()
+        )
+
+        if existing:
+            existing.value = value
+            existing.source = source
+            if success:
+                existing.success_count += 1
+            else:
+                existing.failure_count += 1
+        else:
+            new_answer = FieldAnswerModel(
+                field_label=field_label,
+                normalized_label=normalized_label,
+                value=value,
+                ats_type=ats_type,
+                success_count=1 if success else 0,
+                failure_count=0 if success else 1,
+                source=source,
+            )
+            self.session.add(new_answer)
+
+        self.session.commit()
+
+    def get_by_normalized_label(self, normalized_label: str, ats_type: ATSType) -> Optional[FieldAnswerModel]:
+        """Get best known answer for a normalized label on specific ATS."""
+        return (
+            self.session.query(FieldAnswerModel)
+            .filter(
+                FieldAnswerModel.normalized_label == normalized_label,
+                FieldAnswerModel.ats_type == ats_type,
+            )
+            .order_by(FieldAnswerModel.success_count.desc())
+            .first()
+        )
+
+    def get_universal(self, normalized_label: str) -> Optional[FieldAnswerModel]:
+        """Get universal answer across all ATS types."""
+        return (
+            self.session.query(FieldAnswerModel)
+            .filter(FieldAnswerModel.normalized_label == normalized_label)
+            .order_by(FieldAnswerModel.success_count.desc())
+            .first()
+        )
+
+
+class InteractionLogRepository:
+    """Repository for interaction event tracking."""
+
+    def __init__(self, session: Session) -> None:
+        """Initialize repository."""
+        self.session = session
+
+    def log_interaction(
+        self,
+        ats_type: ATSType,
+        action_type: str,
+        field_label: str,
+        selector: str,
+        strategy_name: str,
+        success: bool,
+        page_url_pattern: str,
+    ) -> None:
+        """Save interaction attempt."""
+        log_entry = InteractionLogModel(
+            ats_type=ats_type,
+            action_type=action_type,
+            field_label=field_label,
+            selector=selector,
+            strategy_name=strategy_name,
+            success=success,
+            page_url_pattern=page_url_pattern,
+        )
+        self.session.add(log_entry)
+        self.session.commit()
+
+    def get_best_strategy(self, ats_type: ATSType, action_type: str) -> Optional[str]:
+        """Determine what Playwright strategy works best for an ATS/Action."""
+        from sqlalchemy import func
+
+        result = (
+            self.session.query(
+                InteractionLogModel.strategy_name,
+                func.sum(func.cast(InteractionLogModel.success, Integer)).label("successes"),
+            )
+            .filter(
+                InteractionLogModel.ats_type == ats_type,
+                InteractionLogModel.action_type == action_type,
+            )
+            .group_by(InteractionLogModel.strategy_name)
+            .order_by(func.sum(func.cast(InteractionLogModel.success, Integer)).desc())
+            .first()
+        )
+
+        return result[0] if result else None
+
+
+class DropdownStrategyRepository:
+    """Repository for tracking dropdown interaction strategies."""
+
+    def __init__(self, session: Session) -> None:
+        """Initialize repository."""
+        self.session = session
+
+    def save_strategy(
+        self,
+        ats_type: ATSType,
+        field_label: str,
+        strategy_name: str,
+        options_json: Optional[list[str]],
+        success: bool = True,
+    ) -> None:
+        """Save or update dropdown strategy."""
+        existing = (
+            self.session.query(DropdownStrategyModel)
+            .filter(
+                DropdownStrategyModel.ats_type == ats_type,
+                DropdownStrategyModel.field_label == field_label,
+            )
+            .first()
+        )
+
+        if existing:
+            existing.strategy_name = strategy_name
+            if options_json is not None:
+                existing.options_json = options_json
+            if success:
+                existing.success_count += 1
+            else:
+                existing.failure_count += 1
+        else:
+            new_strategy = DropdownStrategyModel(
+                ats_type=ats_type,
+                field_label=field_label,
+                strategy_name=strategy_name,
+                options_json=options_json,
+                success_count=1 if success else 0,
+                failure_count=0 if success else 1,
+            )
+            self.session.add(new_strategy)
+
+        self.session.commit()
+
+    def get_best_strategy(self, ats_type: ATSType, field_label: str) -> Optional[DropdownStrategyModel]:
+        """Get best known dropdown strategy for this field."""
+        return (
+            self.session.query(DropdownStrategyModel)
+            .filter(
+                DropdownStrategyModel.ats_type == ats_type,
+                DropdownStrategyModel.field_label == field_label,
+            )
+            .order_by(DropdownStrategyModel.success_count.desc())
+            .first()
+        )

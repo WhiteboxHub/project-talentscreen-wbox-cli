@@ -36,6 +36,9 @@ class JobModel(Base):
     description = Column(Text)
     ats_type = Column(Enum(ATSType), default=ATSType.UNKNOWN)
     status = Column(Enum(ApplicationStatus), default=ApplicationStatus.PENDING)
+    score = Column(Float, nullable=True)
+    scan_source = Column(String(100), nullable=True)
+    evaluation_report_path = Column(String(1000), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -99,6 +102,56 @@ class ConfigModel(Base):
     key = Column(String(200), nullable=False, unique=True)
     value = Column(Text, nullable=False)
     encrypted = Column(Boolean, default=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class FieldAnswerModel(Base):
+    """Memory of answers provided for specific fields across ATS platforms."""
+
+    __tablename__ = "field_answers"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    field_label = Column(String(500), nullable=False)
+    normalized_label = Column(String(500))
+    value = Column(Text, nullable=False)
+    ats_type = Column(Enum(ATSType), default=ATSType.UNKNOWN)
+    field_type = Column(String(50), default="text")
+    success_count = Column(Integer, default=0)
+    failure_count = Column(Integer, default=0)
+    source = Column(String(50), default="human")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class InteractionLogModel(Base):
+    """Log of all Playwright interaction attempts to learn what strategies work."""
+
+    __tablename__ = "interaction_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ats_type = Column(Enum(ATSType), default=ATSType.UNKNOWN)
+    action_type = Column(String(50), nullable=False) 
+    field_label = Column(String(500))
+    selector = Column(String(1000))
+    strategy_name = Column(String(100))
+    success = Column(Boolean, default=False)
+    page_url_pattern = Column(String(500))
+    timestamp = Column(DateTime, default=datetime.now)
+
+
+class DropdownStrategyModel(Base):
+    """Strategies that successfully interacted with dropdowns on specific ATS platforms."""
+
+    __tablename__ = "dropdown_strategies"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ats_type = Column(Enum(ATSType), default=ATSType.UNKNOWN)
+    field_label = Column(String(500), nullable=False)
+    strategy_name = Column(String(100), nullable=False)
+    options_json = Column(JSON, nullable=True)
+    selected_value = Column(String(500), nullable=True)
+    success_count = Column(Integer, default=0)
+    failure_count = Column(Integer, default=0)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 

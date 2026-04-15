@@ -1,0 +1,34 @@
+# Track companies to automatically scan via ATS APIs
+scan_frequency_hours: 12
+
+portals:
+  # Greenhouse (company identifier is in URL: boards.greenhouse.io/<identifier>)
+  - name: scaleai
+    ats: greenhouse
+    company_id: scaleai
+
+  # Lever (jobs.lever.co/<identifier>)
+  - name: netflix
+    ats: lever
+    company_id: netflix
+    
+  # Ashby (jobs.ashbyhq.com/<identifier>)
+  - name: notion
+    ats: ashby
+    company_id: notion
+
+  # BambooHR (<identifier>.bamboohr.com)
+  - name: example_startup
+    ats: bamboo_hr
+    company_id: example
+
+# Filters applied during scanning (Positive points / Negative flags)
+filter:
+  required_keywords:
+    - "ai"
+    - "machine learning"
+    - "engineer"
+  exclude_keywords:
+    - "senior director"
+    - "manager"
+    - "staff"

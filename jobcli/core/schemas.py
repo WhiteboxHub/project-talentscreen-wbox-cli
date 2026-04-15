@@ -34,14 +34,18 @@ class ATSType(str, Enum):
 
 
 class ApplicationStatus(str, Enum):
-    """Application status."""
+    """Application lifecycle status."""
 
     PENDING = "pending"
+    EVALUATING = "evaluating"
     IN_PROGRESS = "in_progress"
     SUBMITTED = "submitted"
     FAILED = "failed"
     SKIPPED = "skipped"
     REQUIRES_HUMAN = "requires_human"
+    REJECTED = "rejected"
+    INTERVIEW = "interview"
+    OFFER = "offer"
 
 
 class ExecutionPhase(str, Enum):
@@ -66,12 +70,14 @@ class ActionType(str, Enum):
     """Browser action types."""
 
     CLICK = "click"
+    FILL = "fill"
     TYPE = "type"
     SELECT = "select"
     UPLOAD = "upload"
     SCROLL = "scroll"
     WAIT = "wait"
     NAVIGATE = "navigate"
+    ASK = "ask"
 
 
 class PersonalInfo(BaseModel):
@@ -125,6 +131,7 @@ class Demographics(BaseModel):
     """Demographic information (optional)."""
 
     gender: Optional[str] = None
+    pronouns: Optional[str] = None
     race: Optional[str] = None
     veteran_status: Optional[str] = None
     disability_status: Optional[str] = None
@@ -155,6 +162,17 @@ class CommonQuestions(BaseModel):
     additional_info: Optional[str] = None
 
 
+class EvaluationReport(BaseModel):
+    """A-F scoring evaluation of a job posting."""
+    job_url: str
+    match_score: str  # A, B, C, D, F
+    north_star_alignment: str
+    compensation_check: str
+    culture_fit: str
+    red_flags: list[str]
+    summary: str
+
+
 class Job(BaseModel):
     """Job posting information."""
 
@@ -166,6 +184,9 @@ class Job(BaseModel):
     description: Optional[str] = None
     ats_type: ATSType = ATSType.UNKNOWN
     status: ApplicationStatus = ApplicationStatus.PENDING
+    score: Optional[float] = None
+    scan_source: Optional[str] = None
+    evaluation_report_path: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
@@ -175,7 +196,7 @@ class BrowserAction(BaseModel):
 
     action: ActionType
     selector: str
-    selector_type: SelectorType
+    selector_type: Optional[SelectorType] = None
     value: Optional[str] = None
     field_label: Optional[str] = None
     confidence: float = Field(ge=0.0, le=1.0, default=1.0)

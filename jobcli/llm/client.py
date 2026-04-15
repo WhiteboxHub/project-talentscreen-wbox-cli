@@ -1,6 +1,7 @@
 """LLM client with structured output for OpenAI, Anthropic, and Gemini."""
 
 import json
+import time
 from typing import Literal, Optional
 
 import anthropic
@@ -17,31 +18,31 @@ class LLMClient:
     """LLM client with structured output validation."""
 
     SYSTEM_PROMPT = """You are an expert autonomous UI/UX agent automating job applications.
-Your task: Parse the provided Accessibility Tree (AXTree) and output the correct sequence of Playwright actions.
+Your task: Parse the provided Accessibility Snapshot and output the correct sequence of Playwright actions.
 
 # Core Rules
-1. AXTree ONLY: Do NOT hallucinate CSS/XPath. You only see node 'name' and 'role'.
-2. LOCATORS: Use selector_type 'role' (e.g. button), 'text' (exact name), or 'aria_label'.
-3. SEQUENCE: Fill all fields -> upload files -> click submit.
-4. UNCERTAINTY: If a field/Captcha is ambiguous, set requires_human=true.
-5. CONFIDENCE: Only output actions with >0.8 confidence.
+1. ALWAYS ACT: Never set requires_human=true. You must always attempt to fill fields and click buttons.
+2. LOCATORS: Use selector_type 'text' (exact accessible name from the snapshot) or 'role'.
+3. SEQUENCE: Fill ALL visible form fields first -> upload resume -> click submit/continue.
+4. FILL ACTION: Use action="fill" for text inputs, action="click" for buttons/links.
+5. MATCH FIELDS: Map user info to form fields by their accessible name (e.g. textbox "First Name" -> first_name).
 
 # Output Schema (Strict JSON)
 {
   "actions": [
     {
-      "action": "click" | "type" | "select" | "upload" | "scroll" | "wait",
-      "selector": "<exact text or accessible name from AXTree>",
+      "action": "click" | "fill" | "type" | "select" | "upload" | "scroll" | "wait" | "ask",
+      "selector": "<exact accessible name from snapshot>",
       "selector_type": "text" | "role" | "aria_label",
-      "value": "<input value if typing/selecting>",
+      "value": "<input value if filling/typing/selecting/asking>",
       "field_label": "<human readable field name>",
-      "confidence": 0.0 to 1.0
+      "confidence": 0.95
     }
   ],
   "reasoning": "<1-2 sentence logic explanation>",
   "detected_ats": "greenhouse" | "lever" | "workday" | null,
   "detected_fields": ["<identified fields>"],
-  "confidence": 0.0 to 1.0,
+  "confidence": 0.95,
   "requires_human": false
 }"""
 
@@ -58,7 +59,7 @@ Your task: Parse the provided Accessibility Tree (AXTree) and output the correct
 
         if provider == "openai":
             self.client = openai.OpenAI(api_key=api_key)
-            self.model = "gpt-4-turbo-preview"
+            self.model = "gpt-4o"
         elif provider == "anthropic":
             self.client = anthropic.Anthropic(api_key=api_key)
             self.model = "claude-3-5-sonnet-20241022"
@@ -84,28 +85,41 @@ Your task: Parse the provided Accessibility Tree (AXTree) and output the correct
         # Build prompt
         user_prompt = self._build_prompt(dom_snapshot, resume, task)
 
-        # Call appropriate provider
-        try:
-            if self.provider == "openai":
-                response = self._call_openai(user_prompt)
-            elif self.provider == "anthropic":
-                response = self._call_anthropic(user_prompt)
-            elif self.provider == "gemini":
-                response = self._call_gemini(user_prompt)
-            else:
-                return None
+        max_retries = 3
+        base_delay = 2.0
 
-            # Validate and parse response
-            return self._validate_response(response)
+        for attempt in range(max_retries):
+            try:
+                if self.provider == "openai":
+                    response = self._call_openai(user_prompt)
+                elif self.provider == "anthropic":
+                    response = self._call_anthropic(user_prompt)
+                elif self.provider == "gemini":
+                    response = self._call_gemini(user_prompt)
+                else:
+                    return None
 
-        except Exception as e:
-            if self.logger:
-                self.logger.error(
-                    f"LLM request failed: {e}",
-                    phase=ExecutionPhase.LLM,
-                    provider=self.provider,
-                )
-            return None
+                # Validate and parse response
+                validated = self._validate_response(response)
+                if validated:
+                    return validated
+
+                self.logger.warning(f"LLM validation failed on attempt {attempt + 1}", phase=ExecutionPhase.LLM)
+
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(
+                        f"LLM request failed (attempt {attempt + 1}/{max_retries}): {e}",
+                        phase=ExecutionPhase.LLM,
+                        provider=self.provider,
+                    )
+
+            if attempt < max_retries - 1:
+                time.sleep(base_delay * (2 ** attempt))
+
+        if self.logger:
+            self.logger.error("All LLM attempts failed", phase=ExecutionPhase.LLM)
+        return None
 
     def _build_prompt(
         self, dom_snapshot: DOMSnapshot, resume: ResumeData, task: str
@@ -260,6 +274,9 @@ Remember to return valid JSON matching the schema in the system prompt.
         ax_tree: AccessibilityTree,
         resume: ResumeData,
         task: str = "find_apply_button",
+        memory_context: Optional[str] = None,
+        dropdown_options: Optional[list[dict[str, Any]]] = None,
+        resume_pdf_path: Optional[str] = None,
     ) -> Optional[LLMActionResponse]:
         """Analyze page using Accessibility Tree (more token efficient)."""
         if self.logger:
@@ -270,66 +287,103 @@ Remember to return valid JSON matching the schema in the system prompt.
             )
 
         # Build prompt with AXTree data (much more efficient)
-        user_prompt = self._build_axtree_prompt(ax_tree, resume, task)
+        user_prompt = self._build_axtree_prompt(
+            ax_tree, resume, task, memory_context, dropdown_options, resume_pdf_path
+        )
 
-        # Call appropriate provider
-        try:
-            if self.provider == "openai":
-                response = self._call_openai(user_prompt)
-            elif self.provider == "anthropic":
-                response = self._call_anthropic(user_prompt)
-            elif self.provider == "gemini":
-                response = self._call_gemini(user_prompt)
-            else:
-                return None
+        max_retries = 3
+        base_delay = 2.0
 
-            # Validate and parse response
-            return self._validate_response(response)
+        for attempt in range(max_retries):
+            try:
+                if self.provider == "openai":
+                    response = self._call_openai(user_prompt)
+                elif self.provider == "anthropic":
+                    response = self._call_anthropic(user_prompt)
+                elif self.provider == "gemini":
+                    response = self._call_gemini(user_prompt)
+                else:
+                    return None
 
-        except Exception as e:
-            if self.logger:
-                self.logger.error(
-                    f"LLM request failed: {e}",
-                    phase=ExecutionPhase.LLM,
-                    provider=self.provider,
-                )
-            return None
+                # Validate and parse response
+                validated = self._validate_response(response)
+                if validated:
+                    return validated
+
+                self.logger.warning(f"LLM validation failed on attempt {attempt + 1}", phase=ExecutionPhase.LLM)
+
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(
+                        f"LLM request failed (attempt {attempt + 1}/{max_retries}): {e}",
+                        phase=ExecutionPhase.LLM,
+                        provider=self.provider,
+                    )
+
+            if attempt < max_retries - 1:
+                time.sleep(base_delay * (2 ** attempt))
+
+        if self.logger:
+            self.logger.error("All LLM attempts failed via AXTree", phase=ExecutionPhase.LLM)
+        return None
 
     def _build_axtree_prompt(
-        self, ax_tree: AccessibilityTree, resume: ResumeData, task: str
+        self,
+        ax_tree: AccessibilityTree,
+        resume: ResumeData,
+        task: str,
+        memory_context: Optional[str] = None,
+        dropdown_options: Optional[list[dict[str, Any]]] = None,
+        resume_pdf_path: Optional[str] = None,
     ) -> str:
         """Build prompt using Accessibility Tree (token efficient)."""
-        # Extract summary - much smaller than full DOM
-        summary = {
-            "url": ax_tree.url,
-            "title": ax_tree.title,
-            "buttons": ax_tree.buttons[:15],
-            "form_fields": ax_tree.form_fields[:20],
-            "links": [l for l in ax_tree.links if "apply" in l.get("name", "").lower()][:10],
-        }
+        # Get the raw aria snapshot text if available — best for LLM reasoning
+        raw_aria = getattr(ax_tree, "_raw_aria", "")
 
-        # Build user info summary
-        user_info = {
-            "name": f"{resume.personal.first_name} {resume.personal.last_name}",
-            "email": resume.personal.email,
-            "phone": resume.personal.phone,
-        }
+        # Build user info summary using full resume
+        user_info = json.loads(resume.model_dump_json())
+        
+        if resume_pdf_path:
+            user_info["resume_file_path"] = resume_pdf_path
+
+        dropdown_context = ""
+        if dropdown_options:
+            dropdown_context = "\n## Pre-extracted Dropdown Options:\n"
+            for dropdown in dropdown_options:
+                opt_str = ", ".join(f"'{o}'" for o in dropdown["options"])
+                dropdown_context += f"- '{dropdown['label']}': [{opt_str}]\n"
+
+        instructions = (
+            "1. You are filling out a job application. Check if the Apply button should be clicked first.\n"
+            "2. Fill EVERY SINGLE visible form field with user info. DO NOT GUESS mandatory field values.\n"
+            "3. **DATA PRIORITY CHAIN:** First use 'User Information'. If missing, use 'Known Answers from Agent Memory'.\n"
+            "4. For dropdowns, your value MUST exactly match an option from 'Pre-extracted Dropdown Options' or be a valid option string.\n"
+            "5. If a mandatory field answer is entirely missing, output action=\"ask\", selector=\"<exact field label>\", and value=\"<clarifying question>\".\n"
+            "6. Use action=\"fill\" for text, action=\"click\" for buttons, action=\"select\" for dropdowns, action=\"upload\" for files.\n"
+            "7. Complete all fields and submit the application if on the final page.\n"
+        )
+        if task == "fill_form_fields_only":
+            instructions = "IMPORTANT - Target the Form directly. DO NOT CLICK APPLY.\n" + instructions
 
         prompt = f"""Task: {task}
 
-Page Accessibility Tree (optimized):
-{json.dumps(summary, indent=2)}
+Page URL: {ax_tree.url}
+Page Title: {ax_tree.title}
 
-User Information:
+## Accessibility Snapshot (screen-reader view of the page):
+```
+{raw_aria}
+```
+
+## Agent Memory Context (Known Answers & Strategies):
+{memory_context or "No previous memory available."}
+{dropdown_context}
+
+## User Information to Fill:
 {json.dumps(user_info, indent=2)}
 
-Please analyze the page and return the necessary actions to complete the task.
-Return valid JSON matching the schema in the system prompt.
-
-Focus on:
-- Buttons with names containing "apply", "submit", "continue"
-- Form fields that need user information
-- The correct sequence of actions
+## Instructions:
+{instructions}
 """
 
         return prompt

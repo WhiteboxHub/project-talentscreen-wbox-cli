@@ -244,11 +244,27 @@ class ApplicationStateMachine:
             apply_locator = ApplyButtonLocator(page, logger)
             if apply_locator.click_apply_button():
                 form_filler = FormFiller(page, resume, logger)
-                form_filler.fill_all(resume_pdf_path)
+                fill_results = form_filler.fill_all(resume_pdf_path)
 
-                state["phase_results"]["rules"] = True
-                logger.log_phase_end(ExecutionPhase.RULES, True)
-                return state
+                # Validate: did we actually fill anything?
+                personal_results = fill_results.get("personal_info", {})
+                fields_filled = sum(1 for v in personal_results.values() if v)
+                resume_uploaded = fill_results.get("resume_uploaded", False)
+
+                if fields_filled > 0 or resume_uploaded:
+                    logger.info(
+                        f"Form fill validated: {fields_filled} fields filled, resume={'yes' if resume_uploaded else 'no'}",
+                        phase=ExecutionPhase.RULES,
+                    )
+                    state["phase_results"]["rules"] = True
+                    logger.log_phase_end(ExecutionPhase.RULES, True)
+                    return state
+                else:
+                    logger.warning(
+                        "Apply button clicked but form fill failed — 0 fields filled. Falling through to LLM.",
+                        phase=ExecutionPhase.RULES,
+                    )
+                    # Fall through to LLM phase instead of lying
 
         except Exception as e:
             logger.error(f"Phase 1 failed: {e}", phase=ExecutionPhase.RULES)

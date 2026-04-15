@@ -1,0 +1,26 @@
+# User profile mapping to guide LLM & evaluation
+
+target_roles:
+  - "AI Engineer"
+  - "Machine Learning Engineer"
+  - "Software Engineer"
+  - "Backend Engineer"
+
+baseline_salary: 120000
+
+north_star: "Roles focused on building agentic AI features, utilizing LLMs, or RAG systems."
+
+must_haves:
+  - "Remote or Hybrid in SF Bay Area"
+  - "Modern tech stack (Python, TypeScript, Go)"
+
+red_flags:
+  - "C++"
+  - "Embedded Systems"
+  - "Clearance required"
+  - "Contract role"
+
+# Core answers that override standard logic
+overrides:
+  visa_sponsorship: false
+  relocation: false

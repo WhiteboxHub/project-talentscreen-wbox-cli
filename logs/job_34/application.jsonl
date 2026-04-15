@@ -1,0 +1,658 @@
+{"job_id": 34, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-14T23:42:18.400591Z"}
+{"job_id": 34, "phase": "rules", "screenshot_path": "logs/job_34/screenshots/001_20260414_164226_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T23:42:27.825396Z"}
+{"job_id": 34, "phase": "rules", "url": "https://www.klaviyo.com/careers/jobs/7688488003?gh_jid=7688488003&gh_src=1284ec8c3us", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-14T23:42:27.825898Z"}
+{"job_id": 34, "phase": "rules", "event": "Could not detect ATS type, using UNKNOWN", "level": "warning", "timestamp": "2026-04-14T23:42:28.035419Z"}
+{"job_id": 34, "phase": "rules", "event": "Detected ATS: unknown", "level": "info", "timestamp": "2026-04-14T23:42:28.057547Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-14T23:42:28.057613Z"}
+{"job_id": 34, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-14T23:42:28.057664Z"}
+{"job_id": 34, "phase": "rules", "event": "Using GenericATSHandler for unknown", "level": "info", "timestamp": "2026-04-14T23:42:28.057696Z"}
+{"job_id": 34, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-14T23:42:28.057948Z"}
+{"job_id": 34, "phase": "rules", "selector": "a:has-text('Apply Now')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-14T23:42:28.312480Z"}
+{"job_id": 34, "phase": "rules", "screenshot_path": "logs/job_34/screenshots/002_20260414_164230_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T23:42:31.650251Z"}
+{"job_id": 34, "phase": "rules", "event": "Filling form (generic handler)", "level": "info", "timestamp": "2026-04-14T23:42:31.652451Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-14T23:42:31.654228Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:42:31.661383Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:42:31.663887Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:42:31.733553Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:42:31.734803Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:42:31.775824Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:42:31.776839Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:42:31.811293Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:42:31.812405Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:42:31.862560Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:42:31.864350Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:42:31.886890Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:42:31.887965Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:42:31.980329Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:42:31.981396Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:42:31.992565Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:42:31.993646Z"}
+{"job_id": 34, "phase": "rules", "results": {"personal_info": {"first_name": false, "last_name": false, "email": false, "phone": false, "city": false, "state": false, "country": false, "linkedin": false}, "resume_uploaded": false, "work_authorization": {"authorized": false, "sponsorship": false}, "demographics": {}}, "event": "Form fill complete: 0/8 personal fields filled", "level": "info", "timestamp": "2026-04-14T23:42:32.107618Z"}
+{"job_id": 34, "phase": "rules", "event": "Generic fill complete: 0/8 personal fields", "level": "info", "timestamp": "2026-04-14T23:42:32.107677Z"}
+{"job_id": 34, "phase": "rules", "results": {"personal_info": {"first_name": false, "last_name": false, "email": false, "phone": false, "city": false, "state": false, "country": false, "linkedin": false}, "resume_uploaded": false, "work_authorization": {"authorized": false, "sponsorship": false}, "demographics": {}}, "event": "form fill results", "level": "info", "timestamp": "2026-04-14T23:42:32.107695Z"}
+{"job_id": 34, "phase": "rules", "screenshot_path": "logs/job_34/screenshots/003_20260414_164234_form_filled.png", "name": "form_filled", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T23:42:35.394890Z"}
+{"job_id": 34, "phase": "rules", "event": "Handling step 1 (generic)", "level": "info", "timestamp": "2026-04-14T23:42:35.395286Z"}
+{"job_id": 34, "phase": "rules", "event": "Submitting application (generic)", "level": "info", "timestamp": "2026-04-14T23:42:35.420214Z"}
+{"job_id": 34, "phase": "rules", "event": "No submit button found (generic)", "level": "warning", "timestamp": "2026-04-14T23:42:35.427895Z"}
+{"job_id": 34, "phase": "rules", "success": false, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-14T23:42:35.427954Z"}
+{"job_id": 34, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-14T23:42:35.428003Z"}
+{"job_id": 34, "phase": "llm", "dom_path": "logs/job_34/dom_snapshots/001_20260414_164235_for_llm.json", "name": "for_llm", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-14T23:42:35.565914Z"}
+{"job_id": 34, "phase": "llm", "task": "find_apply_button_and_fill_form", "event": "Requesting LLM analysis from openai", "level": "info", "timestamp": "2026-04-14T23:42:35.668328Z"}
+{"job_id": 34, "phase": "llm", "provider": "openai", "event": "LLM request failed: Error code: 404 - {'error': {'message': 'The model `gpt-4-turbo-preview` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}", "level": "error", "timestamp": "2026-04-14T23:42:37.146791Z"}
+{"job_id": 34, "phase": null, "event": "LLM returned no response", "level": "error", "timestamp": "2026-04-14T23:42:37.146932Z"}
+{"job_id": 34, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-14T23:42:37.146965Z"}
+{"job_id": 34, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-14T23:42:37.147000Z"}
+{"job_id": 34, "phase": "human", "task": "find_apply_button", "event": "Requesting human assistance", "level": "info", "timestamp": "2026-04-14T23:42:37.147190Z"}
+{"job_id": 34, "phase": "human", "purpose": "find_apply_button", "selector": "._currentLanguage_18hva_65", "event": "Learned locator saved", "level": "info", "timestamp": "2026-04-14T23:42:45.322376Z"}
+{"job_id": 34, "phase": null, "event": "Clicked apply button with human help", "level": "info", "timestamp": "2026-04-14T23:42:45.435286Z"}
+{"job_id": 34, "phase": "human", "screenshot_path": "logs/job_34/screenshots/004_20260414_164247_human_apply_click.png", "name": "human_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T23:42:48.549406Z"}
+{"job_id": 34, "phase": "human", "event": "Phase 3 failed: name 'FormFiller' is not defined", "level": "error", "timestamp": "2026-04-14T23:42:50.298762Z"}
+{"job_id": 34, "phase": "human", "success": false, "event": "Completed phase: human", "level": "info", "timestamp": "2026-04-14T23:42:50.299685Z"}
+{"job_id": 34, "phase": null, "event": "Application failed", "level": "error", "timestamp": "2026-04-14T23:42:50.299870Z"}
+{"job_id": 34, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-14T23:42:50.654701Z"}
+{"job_id": 34, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-14T23:53:51.768660Z"}
+{"job_id": 34, "phase": "rules", "screenshot_path": "logs/job_34/screenshots/001_20260414_165359_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T23:54:00.683329Z"}
+{"job_id": 34, "phase": "rules", "url": "https://www.klaviyo.com/careers/jobs/7688488003?gh_jid=7688488003&gh_src=1284ec8c3us", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-14T23:54:00.684379Z"}
+{"job_id": 34, "phase": "rules", "event": "Could not detect ATS type, using UNKNOWN", "level": "warning", "timestamp": "2026-04-14T23:54:00.827671Z"}
+{"job_id": 34, "phase": "rules", "event": "Detected ATS: unknown", "level": "info", "timestamp": "2026-04-14T23:54:00.858026Z"}
+{"job_id": 34, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-14T23:54:00.858562Z"}
+{"job_id": 34, "phase": "rules", "event": "Using unknown handler", "level": "info", "timestamp": "2026-04-14T23:54:00.858606Z"}
+{"job_id": 34, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-14T23:54:00.858629Z"}
+{"job_id": 34, "phase": "rules", "selector": "a:has-text('Apply Now')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-14T23:54:01.045837Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-14T23:54:03.059084Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-14T23:54:03.060614Z"}
+{"job_id": 34, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-14T23:54:03.060843Z"}
+{"job_id": 34, "phase": "rules", "event": "Filling form (generic handler)", "level": "info", "timestamp": "2026-04-14T23:54:03.060972Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-14T23:54:03.061143Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:03.076459Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:03.080944Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:03.138310Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:03.139350Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:03.179968Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:03.180963Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:03.274118Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:03.275167Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:03.352522Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:03.353586Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:03.372774Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:03.373880Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:03.402752Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:03.403716Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:03.413352Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:03.414309Z"}
+{"job_id": 34, "phase": "rules", "results": {"personal_info": {"first_name": false, "last_name": false, "email": false, "phone": false, "city": false, "state": false, "country": false, "linkedin": false}, "resume_uploaded": false, "work_authorization": {"authorized": false, "sponsorship": false}, "demographics": {}}, "event": "Form fill complete: 0/8 personal fields filled", "level": "info", "timestamp": "2026-04-14T23:54:03.514454Z"}
+{"job_id": 34, "phase": "rules", "event": "Generic fill complete: 0/8 personal fields", "level": "info", "timestamp": "2026-04-14T23:54:03.514510Z"}
+{"job_id": 34, "phase": "rules", "event": "Submitting application (generic)", "level": "info", "timestamp": "2026-04-14T23:54:03.514531Z"}
+{"job_id": 34, "phase": "rules", "event": "No submit button found (generic)", "level": "warning", "timestamp": "2026-04-14T23:54:03.521233Z"}
+{"job_id": 34, "phase": "rules", "success": false, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-14T23:54:03.521267Z"}
+{"job_id": 34, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-14T23:54:03.521297Z"}
+{"job_id": 34, "phase": "llm", "dom_path": "logs/job_34/dom_snapshots/001_20260414_165405_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-14T23:54:05.604903Z"}
+{"job_id": 34, "phase": "llm", "event": "Phase 2 failed: 'UserDataRepository' object has no attribute 'get_dynamic_answers'", "level": "error", "timestamp": "2026-04-14T23:54:05.668422Z"}
+{"job_id": 34, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-14T23:54:05.668490Z"}
+{"job_id": 34, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-14T23:54:05.668517Z"}
+{"job_id": 34, "phase": "human", "task": "find_apply_button", "event": "Requesting human assistance", "level": "info", "timestamp": "2026-04-14T23:54:05.668656Z"}
+{"job_id": 34, "phase": "human", "purpose": "find_apply_button", "selector": "._currentLanguage_18hva_65", "event": "Learned locator saved", "level": "info", "timestamp": "2026-04-14T23:54:14.342637Z"}
+{"job_id": 34, "phase": null, "event": "Clicked apply button with human help", "level": "info", "timestamp": "2026-04-14T23:54:14.415083Z"}
+{"job_id": 34, "phase": "human", "screenshot_path": "logs/job_34/screenshots/002_20260414_165415_human_apply_click.png", "name": "human_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T23:54:16.471835Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-14T23:54:18.264620Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:18.271425Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:18.275457Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:18.323825Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:18.324884Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:18.364004Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:18.364998Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:18.402321Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:18.403332Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:18.449673Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:18.450651Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:18.469577Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:18.470554Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:18.506211Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:18.507280Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:18.517707Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:54:18.518702Z"}
+{"job_id": 34, "phase": "rules", "results": {"personal_info": {"first_name": false, "last_name": false, "email": false, "phone": false, "city": false, "state": false, "country": false, "linkedin": false}, "resume_uploaded": false, "work_authorization": {"authorized": false, "sponsorship": false}, "demographics": {}}, "event": "Form fill complete: 0/8 personal fields filled", "level": "info", "timestamp": "2026-04-14T23:54:18.615438Z"}
+{"job_id": 34, "phase": "human", "screenshot_path": "logs/job_34/screenshots/003_20260414_165420_human_form_filled.png", "name": "human_form_filled", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T23:54:20.953048Z"}
+{"job_id": 34, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-14T23:57:40.196198Z"}
+{"job_id": 34, "phase": "rules", "screenshot_path": "logs/job_34/screenshots/001_20260414_165747_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-14T23:57:48.197188Z"}
+{"job_id": 34, "phase": "rules", "url": "https://www.klaviyo.com/careers/jobs/7688488003?gh_jid=7688488003&gh_src=1284ec8c3us", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-14T23:57:48.199070Z"}
+{"job_id": 34, "phase": "rules", "event": "Could not detect ATS type, using UNKNOWN", "level": "warning", "timestamp": "2026-04-14T23:57:48.364783Z"}
+{"job_id": 34, "phase": "rules", "event": "Detected ATS: unknown", "level": "info", "timestamp": "2026-04-14T23:57:48.383614Z"}
+{"job_id": 34, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-14T23:57:48.383668Z"}
+{"job_id": 34, "phase": "rules", "event": "Using unknown handler", "level": "info", "timestamp": "2026-04-14T23:57:48.383704Z"}
+{"job_id": 34, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-14T23:57:48.383726Z"}
+{"job_id": 34, "phase": "rules", "selector": "a:has-text('Apply Now')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-14T23:57:48.525899Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-14T23:57:50.540356Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-14T23:57:50.541198Z"}
+{"job_id": 34, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-14T23:57:50.541473Z"}
+{"job_id": 34, "phase": "rules", "event": "Filling form (generic handler)", "level": "info", "timestamp": "2026-04-14T23:57:50.541638Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-14T23:57:50.541773Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:57:50.559897Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:57:50.565152Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:57:50.622365Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:57:50.623432Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:57:50.662948Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:57:50.664002Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:57:50.746358Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:57:50.747391Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:57:50.796285Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:57:50.797449Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:57:50.816413Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:57:50.817595Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:57:50.845927Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:57:50.846961Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:57:50.859016Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-14T23:57:50.859973Z"}
+{"job_id": 34, "phase": "rules", "results": {"personal_info": {"first_name": false, "last_name": false, "email": false, "phone": false, "city": false, "state": false, "country": false, "linkedin": false}, "resume_uploaded": false, "work_authorization": {"authorized": false, "sponsorship": false}, "demographics": {}}, "event": "Form fill complete: 0/8 personal fields filled", "level": "info", "timestamp": "2026-04-14T23:57:50.961117Z"}
+{"job_id": 34, "phase": "rules", "event": "Generic fill complete: 0/8 personal fields", "level": "info", "timestamp": "2026-04-14T23:57:50.961178Z"}
+{"job_id": 34, "phase": "rules", "event": "Submitting application (generic)", "level": "info", "timestamp": "2026-04-14T23:57:50.961203Z"}
+{"job_id": 34, "phase": "rules", "event": "No submit button found (generic)", "level": "warning", "timestamp": "2026-04-14T23:57:50.968091Z"}
+{"job_id": 34, "phase": "rules", "success": false, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-14T23:57:50.968137Z"}
+{"job_id": 34, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-14T23:57:50.968168Z"}
+{"job_id": 34, "phase": "llm", "dom_path": "logs/job_34/dom_snapshots/001_20260414_165753_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-14T23:57:53.063876Z"}
+{"job_id": 34, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-14T23:57:53.145544Z"}
+{"job_id": 34, "phase": "llm", "tokens": 10369, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-14T23:58:06.244398Z"}
+{"job_id": 34, "phase": "llm", "action_count": 19, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-14T23:58:06.245987Z"}
+{"job_id": 34, "phase": "llm", "selector": "First Name", "field_label": "First Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-14T23:58:06.246228Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-14T23:58:06.246786Z"}
+{"job_id": 34, "phase": "llm", "selector": "First Name", "value_length": 6, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-14T23:58:36.303438Z"}
+{"job_id": 34, "phase": "llm", "selector": "Last Name", "field_label": "Last Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-14T23:58:36.304364Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-14T23:58:36.304632Z"}
+{"job_id": 34, "phase": "llm", "selector": "Last Name", "value_length": 7, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-14T23:58:36.972267Z"}
+{"job_id": 34, "phase": "llm", "selector": "Preferred First Name", "field_label": "Preferred First Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-14T23:58:36.972357Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-14T23:58:36.972417Z"}
+{"job_id": 34, "phase": "llm", "selector": "Preferred First Name", "value_length": 6, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-14T23:58:37.729043Z"}
+{"job_id": 34, "phase": "llm", "selector": "Email", "field_label": "Email", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-14T23:58:37.729267Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-14T23:58:37.731073Z"}
+{"job_id": 34, "phase": "llm", "selector": "Email", "value_length": 25, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-14T23:58:38.187353Z"}
+{"job_id": 34, "phase": "llm", "selector": "Phone", "field_label": "Phone", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-14T23:58:38.187531Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-14T23:58:38.187609Z"}
+{"job_id": 34, "phase": "llm", "selector": "Phone", "value_length": 15, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-14T23:58:38.560649Z"}
+{"job_id": 34, "phase": "llm", "selector": "Location (City)", "field_label": "Location (City)", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-14T23:58:38.560749Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-14T23:58:38.560810Z"}
+{"job_id": 34, "phase": "llm", "selector": "Location (City)", "value_length": 13, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-14T23:58:38.932615Z"}
+{"job_id": 34, "phase": "llm", "selector": "Resume/CV*", "field_label": "Resume/CV", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-14T23:58:38.932693Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-14T23:58:38.932766Z"}
+{"job_id": 34, "phase": "llm", "file": "/Users/bavishsaireddy/Desktop/dub-resume/BAVISH_AI/AI_Engineer1.pdf", "event": "Upload executed via css generic input file", "level": "info", "timestamp": "2026-04-14T23:58:38.983153Z"}
+{"job_id": 34, "phase": "llm", "selector": "LinkedIn Profile", "field_label": "LinkedIn Profile", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-14T23:58:38.983266Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-14T23:58:38.983351Z"}
+{"job_id": 34, "phase": "llm", "selector": "LinkedIn Profile", "value_length": 59, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-14T23:58:39.387217Z"}
+{"job_id": 34, "phase": "llm", "selector": "School", "field_label": "School", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-14T23:58:39.387402Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-14T23:58:39.387517Z"}
+{"job_id": 34, "phase": "llm", "selector": "School", "value_length": 36, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-14T23:58:39.905282Z"}
+{"job_id": 34, "phase": "llm", "selector": "Degree", "field_label": "Degree", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-14T23:58:39.905425Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-14T23:58:39.905534Z"}
+{"job_id": 34, "phase": "llm", "selector": "Degree", "value_length": 4, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-14T23:58:40.370843Z"}
+{"job_id": 34, "phase": "llm", "selector": "Discipline", "field_label": "Discipline", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-14T23:58:40.371010Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-14T23:58:40.371082Z"}
+{"job_id": 34, "phase": "llm", "selector": "Discipline", "value_length": 16, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-14T23:58:40.814945Z"}
+{"job_id": 34, "phase": "llm", "selector": "End date year", "field_label": "End date year", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-14T23:58:40.815125Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-14T23:58:40.815267Z"}
+{"job_id": 34, "phase": "llm", "selector": "End date year", "value_length": 4, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-14T23:58:41.180972Z"}
+{"job_id": 34, "phase": "llm", "selector": "This role is based out of Boston, MA and requires a weekly in-office hybrid component (3 days on site). Are you either based in the Boston area or are you willing to relocate to the Boston area?", "field_label": "Relocation to Boston", "event": "Executing select action", "level": "info", "timestamp": "2026-04-14T23:58:41.181118Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-14T23:58:41.181484Z"}
+{"job_id": 34, "phase": "llm", "selector": "This role is based out of Boston, MA and requires a weekly in-office hybrid component (3 days on site). Are you either based in the Boston area or are you willing to relocate to the Boston area?", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-14T23:59:17.458424Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 12 failed, continuing execution", "level": "warning", "timestamp": "2026-04-14T23:59:17.458898Z"}
+{"job_id": 34, "phase": "llm", "selector": "Do you currently have legal work authorization in the country where this position is based?", "field_label": "Work Authorization", "event": "Executing select action", "level": "info", "timestamp": "2026-04-14T23:59:17.458958Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-14T23:59:17.459073Z"}
+{"job_id": 34, "phase": "llm", "selector": "Do you currently have legal work authorization in the country where this position is based?", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-14T23:59:53.569717Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 13 failed, continuing execution", "level": "warning", "timestamp": "2026-04-14T23:59:53.570059Z"}
+{"job_id": 34, "phase": "llm", "selector": "Would you, now or in the future, require immigration sponsorship* for work authorization?", "field_label": "Immigration Sponsorship", "event": "Executing select action", "level": "info", "timestamp": "2026-04-14T23:59:53.570135Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-14T23:59:53.570267Z"}
+{"job_id": 34, "phase": "llm", "selector": "Would you, now or in the future, require immigration sponsorship* for work authorization?", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T00:00:29.747355Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 14 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:00:29.747742Z"}
+{"job_id": 34, "phase": "llm", "selector": "How did you hear about us?", "field_label": "How did you hear about us?", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T00:00:29.747773Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:00:29.747816Z"}
+{"job_id": 34, "phase": "llm", "selector": "How did you hear about us?", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T00:01:05.839621Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 15 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:01:05.842273Z"}
+{"job_id": 34, "phase": "llm", "selector": "Gender Identity", "field_label": "Gender Identity", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T00:01:05.842332Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:01:05.842491Z"}
+{"job_id": 34, "phase": "llm", "selector": "Gender Identity", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T00:01:23.813318Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 16 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:01:23.813548Z"}
+{"job_id": 34, "phase": "llm", "selector": "Race/Ethnicity", "field_label": "Race/Ethnicity", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T00:01:23.813602Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:01:23.813710Z"}
+{"job_id": 34, "phase": "llm", "selector": "Race/Ethnicity", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T00:01:23.820383Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 17 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:01:23.820436Z"}
+{"job_id": 34, "phase": "llm", "selector": "Submit application", "field_label": "Submit Application", "event": "Executing click action", "level": "info", "timestamp": "2026-04-15T00:01:23.820461Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:01:23.820508Z"}
+{"job_id": 34, "phase": "llm", "selector": "Submit application", "event": "Element not found for click", "level": "error", "timestamp": "2026-04-15T00:01:23.823338Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 18 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:01:23.823371Z"}
+{"job_id": 34, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-15T00:01:23.823435Z"}
+{"job_id": 34, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-15T00:01:23.823484Z"}
+{"job_id": 34, "phase": "human", "task": "find_apply_button", "event": "Requesting human assistance", "level": "info", "timestamp": "2026-04-15T00:01:23.823841Z"}
+{"job_id": 34, "phase": null, "event": "Human declined to help", "level": "warning", "timestamp": "2026-04-15T00:01:31.995238Z"}
+{"job_id": 34, "phase": "human", "success": false, "event": "Completed phase: human", "level": "info", "timestamp": "2026-04-15T00:01:31.996398Z"}
+{"job_id": 34, "phase": null, "event": "Application failed", "level": "error", "timestamp": "2026-04-15T00:01:31.996523Z"}
+{"job_id": 34, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-15T00:01:32.205295Z"}
+{"job_id": 34, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-15T00:10:27.787719Z"}
+{"job_id": 34, "phase": "rules", "screenshot_path": "logs/job_34/screenshots/001_20260414_171035_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-15T00:10:36.237946Z"}
+{"job_id": 34, "phase": "rules", "url": "https://www.klaviyo.com/careers/jobs/7688488003?gh_jid=7688488003&gh_src=1284ec8c3us", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-15T00:10:36.238252Z"}
+{"job_id": 34, "phase": "rules", "event": "Could not detect ATS type, using UNKNOWN", "level": "warning", "timestamp": "2026-04-15T00:10:36.341314Z"}
+{"job_id": 34, "phase": "rules", "event": "Detected ATS: unknown", "level": "info", "timestamp": "2026-04-15T00:10:36.356044Z"}
+{"job_id": 34, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-15T00:10:36.356135Z"}
+{"job_id": 34, "phase": "rules", "event": "Using unknown handler", "level": "info", "timestamp": "2026-04-15T00:10:36.356171Z"}
+{"job_id": 34, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-15T00:10:36.356193Z"}
+{"job_id": 34, "phase": "rules", "selector": "a:has-text('Apply Now')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-15T00:10:36.548445Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-15T00:10:38.559452Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-15T00:10:38.562663Z"}
+{"job_id": 34, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-15T00:10:38.564250Z"}
+{"job_id": 34, "phase": "rules", "event": "Filling form (generic handler)", "level": "info", "timestamp": "2026-04-15T00:10:38.565009Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-15T00:10:38.565235Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T00:10:38.576896Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T00:10:38.579113Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T00:10:38.632430Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T00:10:38.633552Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T00:10:38.676849Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T00:10:38.677855Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T00:10:38.760269Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T00:10:38.761430Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T00:10:38.828215Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T00:10:38.829336Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T00:10:38.849702Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T00:10:38.851001Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T00:10:38.881934Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T00:10:38.883059Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T00:10:38.897752Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T00:10:38.899017Z"}
+{"job_id": 34, "phase": "rules", "results": {"personal_info": {"first_name": false, "last_name": false, "email": false, "phone": false, "city": false, "state": false, "country": false, "linkedin": false}, "resume_uploaded": false, "work_authorization": {"authorized": false, "sponsorship": false}, "demographics": {}}, "event": "Form fill complete: 0/8 personal fields filled", "level": "info", "timestamp": "2026-04-15T00:10:39.004850Z"}
+{"job_id": 34, "phase": "rules", "event": "Generic fill complete: 0/8 personal fields", "level": "info", "timestamp": "2026-04-15T00:10:39.004908Z"}
+{"job_id": 34, "phase": "rules", "event": "Submitting application (generic)", "level": "info", "timestamp": "2026-04-15T00:10:39.004928Z"}
+{"job_id": 34, "phase": "rules", "event": "No submit button found (generic)", "level": "warning", "timestamp": "2026-04-15T00:10:39.012290Z"}
+{"job_id": 34, "phase": "rules", "success": false, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-15T00:10:39.012344Z"}
+{"job_id": 34, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-15T00:10:39.012370Z"}
+{"job_id": 34, "phase": "llm", "dom_path": "logs/job_34/dom_snapshots/001_20260414_171041_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-15T00:10:41.126258Z"}
+{"job_id": 34, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-15T00:10:41.213364Z"}
+{"job_id": 34, "phase": "llm", "tokens": 10595, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-15T00:10:58.009477Z"}
+{"job_id": 34, "phase": "llm", "action_count": 21, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-15T00:10:58.012115Z"}
+{"job_id": 34, "phase": "llm", "selector": "First Name", "field_label": "First Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T00:10:58.012725Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:10:58.013400Z"}
+{"job_id": 34, "phase": "llm", "selector": "First Name", "event": "Element not found for type", "level": "error", "timestamp": "2026-04-15T00:11:20.610400Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 0 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.610656Z"}
+{"job_id": 34, "phase": "llm", "selector": "Last Name", "field_label": "Last Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T00:11:20.610702Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.610849Z"}
+{"job_id": 34, "phase": "llm", "selector": "Last Name", "event": "Element not found for type", "level": "error", "timestamp": "2026-04-15T00:11:20.614318Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 1 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.614355Z"}
+{"job_id": 34, "phase": "llm", "selector": "Preferred First Name", "field_label": "Preferred First Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T00:11:20.614382Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.614420Z"}
+{"job_id": 34, "phase": "llm", "selector": "Preferred First Name", "event": "Element not found for type", "level": "error", "timestamp": "2026-04-15T00:11:20.627619Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 2 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.627673Z"}
+{"job_id": 34, "phase": "llm", "selector": "Email", "field_label": "Email", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T00:11:20.627696Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.627745Z"}
+{"job_id": 34, "phase": "llm", "selector": "Email", "event": "Element not found for type", "level": "error", "timestamp": "2026-04-15T00:11:20.630916Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 3 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.630951Z"}
+{"job_id": 34, "phase": "llm", "selector": "Phone", "field_label": "Phone", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T00:11:20.630987Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.631060Z"}
+{"job_id": 34, "phase": "llm", "selector": "Phone", "event": "Element not found for type", "level": "error", "timestamp": "2026-04-15T00:11:20.634168Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 4 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.634197Z"}
+{"job_id": 34, "phase": "llm", "selector": "Location (City)", "field_label": "Location (City)", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T00:11:20.634219Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.634252Z"}
+{"job_id": 34, "phase": "llm", "selector": "Location (City)", "event": "Element not found for type", "level": "error", "timestamp": "2026-04-15T00:11:20.637113Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 5 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.637143Z"}
+{"job_id": 34, "phase": "llm", "selector": "Resume/CV*", "field_label": "Resume/CV", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-15T00:11:20.637161Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.637202Z"}
+{"job_id": 34, "phase": "llm", "selector": "Resume/CV*", "event": "Element not found for upload", "level": "error", "timestamp": "2026-04-15T00:11:20.641618Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 6 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.641639Z"}
+{"job_id": 34, "phase": "llm", "selector": "LinkedIn Profile", "field_label": "LinkedIn Profile", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T00:11:20.641654Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.641682Z"}
+{"job_id": 34, "phase": "llm", "selector": "LinkedIn Profile", "event": "Element not found for type", "level": "error", "timestamp": "2026-04-15T00:11:20.644490Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 7 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.644514Z"}
+{"job_id": 34, "phase": "llm", "selector": "School", "field_label": "School", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T00:11:20.644539Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.644568Z"}
+{"job_id": 34, "phase": "llm", "selector": "School", "event": "Element not found for type", "level": "error", "timestamp": "2026-04-15T00:11:20.647763Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 8 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.647791Z"}
+{"job_id": 34, "phase": "llm", "selector": "Degree", "field_label": "Degree", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T00:11:20.647807Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.647836Z"}
+{"job_id": 34, "phase": "llm", "selector": "Degree", "event": "Element not found for type", "level": "error", "timestamp": "2026-04-15T00:11:20.669048Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 9 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.669091Z"}
+{"job_id": 34, "phase": "llm", "selector": "Discipline", "field_label": "Discipline", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T00:11:20.669111Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.669146Z"}
+{"job_id": 34, "phase": "llm", "selector": "Discipline", "event": "Element not found for type", "level": "error", "timestamp": "2026-04-15T00:11:20.672484Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 10 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.672523Z"}
+{"job_id": 34, "phase": "llm", "selector": "End date year", "field_label": "Graduation Year", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T00:11:20.672541Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.672572Z"}
+{"job_id": 34, "phase": "llm", "selector": "End date year", "event": "Element not found for type", "level": "error", "timestamp": "2026-04-15T00:11:20.675502Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 11 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.675533Z"}
+{"job_id": 34, "phase": "llm", "selector": "This role is based out of Boston, MA and requires a weekly in-office hybrid component (3 days on site). Are you either based in the Boston area or are you willing to relocate to the Boston area?", "field_label": "Relocation", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T00:11:20.675550Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.675581Z"}
+{"job_id": 34, "phase": "llm", "selector": "This role is based out of Boston, MA and requires a weekly in-office hybrid component (3 days on site). Are you either based in the Boston area or are you willing to relocate to the Boston area?", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T00:11:20.691297Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 12 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.691330Z"}
+{"job_id": 34, "phase": "llm", "selector": "Do you currently have legal work authorization in the country where this position is based?", "field_label": "Work Authorization", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T00:11:20.691347Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.691378Z"}
+{"job_id": 34, "phase": "llm", "selector": "Do you currently have legal work authorization in the country where this position is based?", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T00:11:20.712015Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 13 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.712047Z"}
+{"job_id": 34, "phase": "llm", "selector": "Would you, now or in the future, require immigration sponsorship* for work authorization?", "field_label": "Sponsorship Requirement", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T00:11:20.712065Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.712096Z"}
+{"job_id": 34, "phase": "llm", "selector": "Would you, now or in the future, require immigration sponsorship* for work authorization?", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T00:11:20.720509Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 14 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.720540Z"}
+{"job_id": 34, "phase": "llm", "selector": "How did you hear about us?", "field_label": "Source", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T00:11:20.720557Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.720586Z"}
+{"job_id": 34, "phase": "llm", "selector": "How did you hear about us?", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T00:11:20.782646Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 15 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.782685Z"}
+{"job_id": 34, "phase": "llm", "selector": "Gender Identity", "field_label": "Gender Identity", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T00:11:20.782705Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.782737Z"}
+{"job_id": 34, "phase": "llm", "selector": "Gender Identity", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T00:11:20.791419Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 16 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.791440Z"}
+{"job_id": 34, "phase": "llm", "selector": "Race/Ethnicity", "field_label": "Race/Ethnicity", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T00:11:20.791454Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.791479Z"}
+{"job_id": 34, "phase": "llm", "selector": "Race/Ethnicity", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T00:11:20.800024Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 17 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.800049Z"}
+{"job_id": 34, "phase": "llm", "selector": "Pronoun", "field_label": "Pronoun", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T00:11:20.800065Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.800090Z"}
+{"job_id": 34, "phase": "llm", "selector": "Pronoun", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T00:11:20.809321Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 18 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.809358Z"}
+{"job_id": 34, "phase": "llm", "selector": "Sexual Orientation", "field_label": "Sexual Orientation", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T00:11:20.809374Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.809402Z"}
+{"job_id": 34, "phase": "llm", "selector": "Sexual Orientation", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T00:11:20.818066Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 19 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.818091Z"}
+{"job_id": 34, "phase": "llm", "selector": "Submit application", "field_label": "Submit Application", "event": "Executing click action", "level": "info", "timestamp": "2026-04-15T00:11:20.818107Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe: https://job-boards.greenhouse.io/embed/job_app?for=klaviyo&t", "level": "info", "timestamp": "2026-04-15T00:11:20.818141Z"}
+{"job_id": 34, "phase": "llm", "selector": "Submit application", "event": "Element not found for click", "level": "error", "timestamp": "2026-04-15T00:11:20.820920Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 20 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T00:11:20.820936Z"}
+{"job_id": 34, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-15T17:21:54.676585Z"}
+{"job_id": 34, "phase": "rules", "screenshot_path": "logs/job_34/screenshots/001_20260415_102201_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-15T17:22:02.817879Z"}
+{"job_id": 34, "phase": "rules", "url": "https://www.klaviyo.com/careers/jobs/7688488003?gh_jid=7688488003&gh_src=1284ec8c3us", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-15T17:22:02.818915Z"}
+{"job_id": 34, "phase": "rules", "event": "Could not detect ATS type, using UNKNOWN", "level": "warning", "timestamp": "2026-04-15T17:22:02.947385Z"}
+{"job_id": 34, "phase": "rules", "event": "Detected ATS: unknown", "level": "info", "timestamp": "2026-04-15T17:22:02.965757Z"}
+{"job_id": 34, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-15T17:22:02.965808Z"}
+{"job_id": 34, "phase": "rules", "event": "Using unknown handler", "level": "info", "timestamp": "2026-04-15T17:22:02.965846Z"}
+{"job_id": 34, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-15T17:22:02.965867Z"}
+{"job_id": 34, "phase": "rules", "selector": "a:has-text('Apply Now')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-15T17:22:03.115461Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-15T17:22:05.126332Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-15T17:22:05.127072Z"}
+{"job_id": 34, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-15T17:22:05.127266Z"}
+{"job_id": 34, "phase": "rules", "event": "Filling form (generic handler)", "level": "info", "timestamp": "2026-04-15T17:22:05.127364Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-15T17:22:05.127492Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:22:05.136651Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:22:05.141318Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:22:05.203273Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:22:05.204284Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:22:05.280579Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:22:05.281680Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:22:05.311488Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:22:05.312615Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:22:05.359642Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:22:05.360674Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:22:05.380484Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:22:05.381462Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:22:05.409359Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:22:05.410372Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:22:05.421960Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:22:05.423123Z"}
+{"job_id": 34, "phase": "rules", "results": {"personal_info": {"first_name": false, "last_name": false, "email": false, "phone": false, "city": false, "state": false, "country": false, "linkedin": false}, "resume_uploaded": false, "work_authorization": {"authorized": false, "sponsorship": false}, "demographics": {}}, "event": "Form fill complete: 0/8 personal fields filled", "level": "info", "timestamp": "2026-04-15T17:22:05.521543Z"}
+{"job_id": 34, "phase": "rules", "event": "Generic fill complete: 0/8 personal fields", "level": "info", "timestamp": "2026-04-15T17:22:05.521589Z"}
+{"job_id": 34, "phase": "rules", "event": "Submitting application (generic)", "level": "info", "timestamp": "2026-04-15T17:22:05.521610Z"}
+{"job_id": 34, "phase": "rules", "event": "No submit button found (generic)", "level": "warning", "timestamp": "2026-04-15T17:22:05.528121Z"}
+{"job_id": 34, "phase": "rules", "success": false, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-15T17:22:05.528160Z"}
+{"job_id": 34, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-15T17:22:05.528178Z"}
+{"job_id": 34, "phase": "llm", "dom_path": "logs/job_34/dom_snapshots/001_20260415_102207_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-15T17:22:07.609372Z"}
+{"job_id": 34, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-15T17:22:07.675208Z"}
+{"job_id": 34, "phase": "llm", "tokens": 10257, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-15T17:22:21.970657Z"}
+{"job_id": 34, "phase": "llm", "action_count": 17, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-15T17:22:21.972372Z"}
+{"job_id": 34, "phase": "llm", "selector": "First Name", "field_label": "First Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:22:21.973389Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:22:22.008075Z"}
+{"job_id": 34, "phase": "llm", "selector": "First Name", "value_length": 6, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:22:52.119749Z"}
+{"job_id": 34, "phase": "llm", "selector": "Last Name", "field_label": "Last Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:22:52.120906Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:22:52.143814Z"}
+{"job_id": 34, "phase": "llm", "selector": "Last Name", "value_length": 7, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:22:52.798910Z"}
+{"job_id": 34, "phase": "llm", "selector": "Preferred First Name", "field_label": "Preferred First Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:22:52.798995Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:22:52.801094Z"}
+{"job_id": 34, "phase": "llm", "selector": "Preferred First Name", "value_length": 6, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:22:53.336963Z"}
+{"job_id": 34, "phase": "llm", "selector": "Email", "field_label": "Email", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:22:53.337221Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:22:53.339456Z"}
+{"job_id": 34, "phase": "llm", "selector": "Email", "value_length": 25, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:22:53.784888Z"}
+{"job_id": 34, "phase": "llm", "selector": "Phone", "field_label": "Phone", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:22:53.784989Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:22:53.787007Z"}
+{"job_id": 34, "phase": "llm", "selector": "Phone", "value_length": 15, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:22:54.170595Z"}
+{"job_id": 34, "phase": "llm", "selector": "Location (City)", "field_label": "Location (City)", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:22:54.170673Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:22:54.172975Z"}
+{"job_id": 34, "phase": "llm", "selector": "Location (City)", "value_length": 13, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:22:54.534238Z"}
+{"job_id": 34, "phase": "llm", "selector": "Resume/CV*", "field_label": "Resume/CV", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-15T17:22:54.534324Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:22:54.536335Z"}
+{"job_id": 34, "phase": "llm", "file": "/Users/bavishsaireddy/Desktop/dub-resume/BAVISH_AI/AI_Engineer1.pdf", "event": "Upload executed via css generic input file", "level": "info", "timestamp": "2026-04-15T17:22:54.626179Z"}
+{"job_id": 34, "phase": "llm", "selector": "LinkedIn Profile", "field_label": "LinkedIn Profile", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:22:54.626307Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:22:54.628742Z"}
+{"job_id": 34, "phase": "llm", "selector": "LinkedIn Profile", "value_length": 59, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:22:55.014477Z"}
+{"job_id": 34, "phase": "llm", "selector": "School", "field_label": "School", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:22:55.014570Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:22:55.017128Z"}
+{"job_id": 34, "phase": "llm", "selector": "School", "value_length": 36, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:22:55.492382Z"}
+{"job_id": 34, "phase": "llm", "selector": "Degree", "field_label": "Degree", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:22:55.492784Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:22:55.495872Z"}
+{"job_id": 34, "phase": "llm", "selector": "Degree", "value_length": 4, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:22:55.978952Z"}
+{"job_id": 34, "phase": "llm", "selector": "Discipline", "field_label": "Discipline", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:22:55.979032Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:22:55.981204Z"}
+{"job_id": 34, "phase": "llm", "selector": "Discipline", "value_length": 16, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:22:56.469477Z"}
+{"job_id": 34, "phase": "llm", "selector": "End date year", "field_label": "End date year", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:22:56.469552Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:22:56.471781Z"}
+{"job_id": 34, "phase": "llm", "selector": "End date year", "value_length": 4, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:22:56.838336Z"}
+{"job_id": 34, "phase": "llm", "selector": "Do you currently have legal work authorization in the country where this position is based?", "field_label": "Work Authorization", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T17:22:56.838402Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:22:56.840461Z"}
+{"job_id": 34, "phase": "llm", "selector": "Do you currently have legal work authorization in the country where this position is based?", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T17:23:41.095488Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 12 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T17:23:41.098730Z"}
+{"job_id": 34, "phase": "llm", "selector": "Would you, now or in the future, require immigration sponsorship* for work authorization?", "field_label": "Immigration Sponsorship", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T17:23:41.098933Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:23:41.106847Z"}
+{"job_id": 34, "phase": "llm", "selector": "Would you, now or in the future, require immigration sponsorship* for work authorization?", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T17:24:25.092340Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 13 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T17:24:25.095036Z"}
+{"job_id": 34, "phase": "llm", "selector": "Gender Identity", "field_label": "Gender Identity", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T17:24:25.095112Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:24:25.101373Z"}
+{"job_id": 34, "phase": "llm", "selector": "Gender Identity", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T17:25:09.297178Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 14 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T17:25:09.301679Z"}
+{"job_id": 34, "phase": "llm", "selector": "Race/Ethnicity", "field_label": "Race/Ethnicity", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T17:25:09.301819Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:25:11.700892Z"}
+{"job_id": 34, "phase": "llm", "selector": "Race/Ethnicity", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T17:25:55.760207Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 15 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T17:25:55.765336Z"}
+{"job_id": 34, "phase": "llm", "selector": "Submit application", "field_label": "Submit Application", "event": "Executing click action", "level": "info", "timestamp": "2026-04-15T17:25:55.765491Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:25:55.774069Z"}
+{"job_id": 34, "phase": "llm", "selector": "Submit application", "event": "Click executed via get_by_role button", "level": "info", "timestamp": "2026-04-15T17:25:56.422046Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:29:38.588750Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:29:47.407463Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:29:53.992164Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:30:00.935426Z"}
+{"job_id": 34, "phase": "llm", "event": "LLM phase result: 13/21 actions succeeded", "level": "info", "timestamp": "2026-04-15T17:30:03.292483Z"}
+{"job_id": 34, "phase": "llm", "success": true, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-15T17:30:03.292655Z"}
+{"job_id": 34, "phase": "llm", "screenshot_path": "logs/job_34/screenshots/002_20260415_103006_llm_success.png", "name": "llm_success", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-15T17:30:08.234503Z"}
+{"job_id": 34, "phase": null, "event": "CAPTCHA detected: recaptcha", "level": "warning", "timestamp": "2026-04-15T17:30:08.529232Z"}
+{"job_id": 34, "phase": "llm", "event": "CAPTCHA detected after LLM execution. Pausing for human intervention.", "level": "warning", "timestamp": "2026-04-15T17:30:08.529301Z"}
+{"job_id": 34, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-15T17:31:14.838129Z"}
+{"job_id": 34, "phase": "rules", "screenshot_path": "logs/job_34/screenshots/001_20260415_103122_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-15T17:31:23.170075Z"}
+{"job_id": 34, "phase": "rules", "url": "https://www.klaviyo.com/careers/jobs/7688488003?gh_jid=7688488003&gh_src=1284ec8c3us", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-15T17:31:23.171270Z"}
+{"job_id": 34, "phase": "rules", "event": "Could not detect ATS type, using UNKNOWN", "level": "warning", "timestamp": "2026-04-15T17:31:23.260258Z"}
+{"job_id": 34, "phase": "rules", "event": "Detected ATS: unknown", "level": "info", "timestamp": "2026-04-15T17:31:23.309946Z"}
+{"job_id": 34, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-15T17:31:23.310000Z"}
+{"job_id": 34, "phase": "rules", "event": "Using unknown handler", "level": "info", "timestamp": "2026-04-15T17:31:23.310032Z"}
+{"job_id": 34, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-15T17:31:23.310060Z"}
+{"job_id": 34, "phase": "rules", "selector": "a:has-text('Apply Now')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-15T17:31:23.572948Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-15T17:31:25.578111Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-15T17:31:25.578842Z"}
+{"job_id": 34, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-15T17:31:25.578985Z"}
+{"job_id": 34, "phase": "rules", "event": "Filling form (generic handler)", "level": "info", "timestamp": "2026-04-15T17:31:25.579070Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-15T17:31:25.579165Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:31:25.586449Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:31:25.589077Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:31:25.640161Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:31:25.641317Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:31:25.684513Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:31:25.685598Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:31:25.764709Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:31:25.765736Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:31:25.814269Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:31:25.815241Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:31:25.834186Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:31:25.835128Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:31:25.862496Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:31:25.863466Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:31:25.873647Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:31:25.874640Z"}
+{"job_id": 34, "phase": "rules", "results": {"personal_info": {"first_name": false, "last_name": false, "email": false, "phone": false, "city": false, "state": false, "country": false, "linkedin": false}, "resume_uploaded": false, "work_authorization": {"authorized": false, "sponsorship": false}, "demographics": {}}, "event": "Form fill complete: 0/8 personal fields filled", "level": "info", "timestamp": "2026-04-15T17:31:26.004645Z"}
+{"job_id": 34, "phase": "rules", "event": "Generic fill complete: 0/8 personal fields", "level": "info", "timestamp": "2026-04-15T17:31:26.004704Z"}
+{"job_id": 34, "phase": "rules", "event": "Submitting application (generic)", "level": "info", "timestamp": "2026-04-15T17:31:26.004727Z"}
+{"job_id": 34, "phase": "rules", "event": "No submit button found (generic)", "level": "warning", "timestamp": "2026-04-15T17:31:26.011522Z"}
+{"job_id": 34, "phase": "rules", "success": false, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-15T17:31:26.011560Z"}
+{"job_id": 34, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-15T17:31:26.011584Z"}
+{"job_id": 34, "phase": "llm", "dom_path": "logs/job_34/dom_snapshots/001_20260415_103128_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-15T17:31:28.145270Z"}
+{"job_id": 34, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-15T17:31:28.221841Z"}
+{"job_id": 34, "phase": "llm", "tokens": 10321, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-15T17:31:50.560255Z"}
+{"job_id": 34, "phase": "llm", "action_count": 17, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-15T17:31:50.561116Z"}
+{"job_id": 34, "phase": "llm", "selector": "First Name", "field_label": "First Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:31:50.561352Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:31:50.571541Z"}
+{"job_id": 34, "phase": "llm", "selector": "First Name", "value_length": 6, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:32:20.663459Z"}
+{"job_id": 34, "phase": "llm", "selector": "Last Name", "field_label": "Last Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:32:20.664279Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:32:20.701177Z"}
+{"job_id": 34, "phase": "llm", "selector": "Last Name", "value_length": 7, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:32:21.451987Z"}
+{"job_id": 34, "phase": "llm", "selector": "Preferred First Name", "field_label": "Preferred First Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:32:21.452350Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:32:21.455996Z"}
+{"job_id": 34, "phase": "llm", "selector": "Preferred First Name", "value_length": 6, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:32:22.327655Z"}
+{"job_id": 34, "phase": "llm", "selector": "Email", "field_label": "Email", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:32:22.327774Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:32:22.334410Z"}
+{"job_id": 34, "phase": "llm", "selector": "Email", "value_length": 25, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:32:22.822282Z"}
+{"job_id": 34, "phase": "llm", "selector": "Phone", "field_label": "Phone", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:32:22.822365Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:32:22.823974Z"}
+{"job_id": 34, "phase": "llm", "selector": "Phone", "value_length": 15, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:32:23.188384Z"}
+{"job_id": 34, "phase": "llm", "selector": "Location (City)", "field_label": "Location (City)", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:32:23.188465Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:32:23.191830Z"}
+{"job_id": 34, "phase": "llm", "selector": "Location (City)", "value_length": 13, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:32:26.150382Z"}
+{"job_id": 34, "phase": "llm", "selector": "Resume/CV*", "field_label": "Resume/CV", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-15T17:32:26.150814Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:32:26.156962Z"}
+{"job_id": 34, "phase": "llm", "file": "/Users/bavishsaireddy/Desktop/dub-resume/BAVISH_AI/AI_Engineer1.pdf", "event": "Upload executed via css generic input file", "level": "info", "timestamp": "2026-04-15T17:32:26.206212Z"}
+{"job_id": 34, "phase": "llm", "selector": "LinkedIn Profile", "field_label": "LinkedIn Profile", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:32:26.206297Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:32:26.208309Z"}
+{"job_id": 34, "phase": "llm", "selector": "LinkedIn Profile", "value_length": 59, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:32:26.673878Z"}
+{"job_id": 34, "phase": "llm", "selector": "School", "field_label": "School", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:32:26.673963Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:32:26.676614Z"}
+{"job_id": 34, "phase": "llm", "selector": "School", "value_length": 36, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:32:30.731633Z"}
+{"job_id": 34, "phase": "llm", "selector": "Degree", "field_label": "Degree", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:32:30.733380Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:32:30.738126Z"}
+{"job_id": 34, "phase": "llm", "selector": "Degree", "value_length": 4, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:32:33.095019Z"}
+{"job_id": 34, "phase": "llm", "selector": "Discipline", "field_label": "Discipline", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:32:33.096055Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:32:33.100325Z"}
+{"job_id": 34, "phase": "llm", "selector": "Discipline", "value_length": 16, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:32:34.420427Z"}
+{"job_id": 34, "phase": "llm", "selector": "End date year", "field_label": "End date year", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:32:34.420662Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:32:34.422238Z"}
+{"job_id": 34, "phase": "llm", "selector": "End date year", "value_length": 4, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:32:34.777116Z"}
+{"job_id": 34, "phase": "llm", "selector": "Do you currently have legal work authorization in the country where this position is based?", "field_label": "Legal Work Authorization", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T17:32:34.777186Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:32:34.779907Z"}
+{"job_id": 34, "phase": "llm", "selector": "Do you currently have legal work authorization in the country where this position is based?", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T17:33:19.175279Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 12 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T17:33:19.176814Z"}
+{"job_id": 34, "phase": "llm", "selector": "Would you, now or in the future, require immigration sponsorship* for work authorization?", "field_label": "Immigration Sponsorship", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T17:33:19.176884Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:33:19.182702Z"}
+{"job_id": 34, "phase": "llm", "selector": "Would you, now or in the future, require immigration sponsorship* for work authorization?", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T17:34:02.855245Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 13 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T17:34:02.856898Z"}
+{"job_id": 34, "phase": "llm", "selector": "Gender Identity", "field_label": "Gender Identity", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T17:34:02.856954Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:34:02.859359Z"}
+{"job_id": 34, "phase": "llm", "selector": "Gender Identity", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T17:34:46.725912Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 14 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T17:34:46.727816Z"}
+{"job_id": 34, "phase": "llm", "selector": "Race/Ethnicity", "field_label": "Race/Ethnicity", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T17:34:46.728005Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:34:46.732394Z"}
+{"job_id": 34, "phase": "llm", "selector": "Race/Ethnicity", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T17:35:30.362973Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 15 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T17:35:30.364464Z"}
+{"job_id": 34, "phase": "llm", "selector": "Submit application", "field_label": "Submit Application", "event": "Executing click action", "level": "info", "timestamp": "2026-04-15T17:35:30.364598Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:35:30.370042Z"}
+{"job_id": 34, "phase": "llm", "selector": "Submit application", "event": "Click executed via get_by_role button", "level": "info", "timestamp": "2026-04-15T17:35:30.810507Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:37:27.616377Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:37:33.008359Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:37:40.308906Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:37:46.795339Z"}
+{"job_id": 34, "phase": "llm", "event": "LLM phase result: 13/21 actions succeeded", "level": "info", "timestamp": "2026-04-15T17:37:48.851258Z"}
+{"job_id": 34, "phase": "llm", "success": true, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-15T17:37:48.851322Z"}
+{"job_id": 34, "phase": "llm", "screenshot_path": "logs/job_34/screenshots/002_20260415_103751_llm_success.png", "name": "llm_success", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-15T17:37:52.861219Z"}
+{"job_id": 34, "phase": null, "event": "CAPTCHA detected: recaptcha", "level": "warning", "timestamp": "2026-04-15T17:37:52.898842Z"}
+{"job_id": 34, "phase": "llm", "event": "CAPTCHA detected after LLM execution. Pausing for human intervention.", "level": "warning", "timestamp": "2026-04-15T17:37:52.898927Z"}
+{"job_id": 34, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-15T17:39:26.857299Z"}
+{"job_id": 34, "phase": "rules", "screenshot_path": "logs/job_34/screenshots/001_20260415_103933_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-15T17:39:34.115970Z"}
+{"job_id": 34, "phase": "rules", "url": "https://www.klaviyo.com/careers/jobs/7688488003?gh_jid=7688488003&gh_src=1284ec8c3us", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-15T17:39:34.116333Z"}
+{"job_id": 34, "phase": "rules", "event": "Could not detect ATS type, using UNKNOWN", "level": "warning", "timestamp": "2026-04-15T17:39:34.262857Z"}
+{"job_id": 34, "phase": "rules", "event": "Detected ATS: unknown", "level": "info", "timestamp": "2026-04-15T17:39:34.277189Z"}
+{"job_id": 34, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-15T17:39:34.277253Z"}
+{"job_id": 34, "phase": "rules", "event": "Using unknown handler", "level": "info", "timestamp": "2026-04-15T17:39:34.277286Z"}
+{"job_id": 34, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-15T17:39:34.277308Z"}
+{"job_id": 34, "phase": "rules", "event": "Apply button selector failed 'a:has-text('Apply Now')': ElementHandle.click: Timeout 3000ms exceeded.\nCall log:\n  - attempting click action\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <iframe name=\"\" data-mirrored=\"true\" id=\"q-messenger-frame\" allow=\"camera;microphone\" title=\"Qualified Messenger\" class=\"qlfd-not-mobile qlfd-not-full-screen\" src=\"https://app.qualified.com/w/1/QXXydKGCPwwjwrgb/messenger?uuid=bb5d6eaa-5bde-445f-be6f-e40b3a8899e1\"></iframe> intercepts pointer events\n  - retrying click action\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div id=\"transcend-consent-manager\"></div> intercepts pointer events\n  - retrying click action\n    - waiting 20ms\n    - waiting for element to be visible, enabled and stable\n    - element is not stable\n  2 \u00d7 retrying click action\n      - waiting 100ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <span class=\"_currentLanguageName_18hva_81\">\u2026</span> from <astro-island prefix=\"r17\" uid=\"Z1H6Dxc\" client=\"load\" await-children=\"\" component-export=\"Header\" opts=\"{\"name\":\"ReactHeader\",\"value\":true}\" renderer-url=\"/careers/_astro/client.DxoDb3dB.js\" component-url=\"/careers/_astro/header.Cqh1AFgn.js\" before-hydration-url=\"/careers/_astro/astro_scripts/before-hydration.js.-sttK5WG.js\" props=\"{\"slot\":[0,\"header\"],\"alertBar\":[0],\"basePathType\":[0,\"path\"],\"homeLink\":[0,\"/\"],\"langCode\":[0,\"en-US\"],\"navigationBackgroundColor\":[0],\"path\":[0,\"/careers/jobs/7688488003\"],\"si\u2026>\u2026</astro-island> subtree intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div id=\"transcend-consent-manager\"></div> intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n    - waiting for element to be visible, enabled and stable\n    - element is not stable\n  - retrying click action\n    - waiting 500ms\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div>Sign up</div> from <astro-island prefix=\"r17\" uid=\"Z1H6Dxc\" client=\"load\" await-children=\"\" component-export=\"Header\" opts=\"{\"name\":\"ReactHeader\",\"value\":true}\" renderer-url=\"/careers/_astro/client.DxoDb3dB.js\" component-url=\"/careers/_astro/header.Cqh1AFgn.js\" before-hydration-url=\"/careers/_astro/astro_scripts/before-hydration.js.-sttK5WG.js\" props=\"{\"slot\":[0,\"header\"],\"alertBar\":[0],\"basePathType\":[0,\"path\"],\"homeLink\":[0,\"/\"],\"langCode\":[0,\"en-US\"],\"navigationBackgroundColor\":[0],\"path\":[0,\"/careers/jobs/7688488003\"],\"si\u2026>\u2026</astro-island> subtree intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n", "level": "warning", "timestamp": "2026-04-15T17:39:37.296357Z"}
+{"job_id": 34, "phase": "rules", "selector": "a:has-text('Apply')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-15T17:39:39.168805Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-15T17:39:41.175721Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-15T17:39:41.177433Z"}
+{"job_id": 34, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-15T17:39:41.177727Z"}
+{"job_id": 34, "phase": "rules", "event": "Filling form (generic handler)", "level": "info", "timestamp": "2026-04-15T17:39:41.177902Z"}
+{"job_id": 34, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-15T17:39:41.178064Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:39:41.190695Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:39:41.194585Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:39:41.252737Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:39:41.253754Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:39:41.293074Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:39:41.294027Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:39:41.365169Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:39:41.366204Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:39:41.412378Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:39:41.413305Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:39:41.431908Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:39:41.432923Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:39:41.463329Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:39:41.464318Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:39:41.474438Z"}
+{"job_id": 34, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-15T17:39:41.475356Z"}
+{"job_id": 34, "phase": "rules", "results": {"personal_info": {"first_name": false, "last_name": false, "email": false, "phone": false, "city": false, "state": false, "country": false, "linkedin": false}, "resume_uploaded": false, "work_authorization": {"authorized": false, "sponsorship": false}, "demographics": {}}, "event": "Form fill complete: 0/8 personal fields filled", "level": "info", "timestamp": "2026-04-15T17:39:41.592140Z"}
+{"job_id": 34, "phase": "rules", "event": "Generic fill complete: 0/8 personal fields", "level": "info", "timestamp": "2026-04-15T17:39:41.592197Z"}
+{"job_id": 34, "phase": "rules", "event": "Submitting application (generic)", "level": "info", "timestamp": "2026-04-15T17:39:41.592219Z"}
+{"job_id": 34, "phase": "rules", "event": "No submit button found (generic)", "level": "warning", "timestamp": "2026-04-15T17:39:41.598729Z"}
+{"job_id": 34, "phase": "rules", "success": false, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-15T17:39:41.598772Z"}
+{"job_id": 34, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-15T17:39:41.598791Z"}
+{"job_id": 34, "phase": "llm", "dom_path": "logs/job_34/dom_snapshots/001_20260415_103943_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-15T17:39:43.678256Z"}
+{"job_id": 34, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-15T17:39:43.763337Z"}
+{"job_id": 34, "phase": "llm", "tokens": 10367, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-15T17:39:57.542848Z"}
+{"job_id": 34, "phase": "llm", "action_count": 18, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-15T17:39:57.543749Z"}
+{"job_id": 34, "phase": "llm", "selector": "First Name", "field_label": "First Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:39:57.543913Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:39:57.551954Z"}
+{"job_id": 34, "phase": "llm", "selector": "First Name", "value_length": 6, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:39:58.611257Z"}
+{"job_id": 34, "phase": "llm", "selector": "Last Name", "field_label": "Last Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:39:58.611339Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:39:58.623179Z"}
+{"job_id": 34, "phase": "llm", "selector": "Last Name", "value_length": 7, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:39:59.130254Z"}
+{"job_id": 34, "phase": "llm", "selector": "Preferred First Name", "field_label": "Preferred First Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:39:59.130333Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:39:59.132384Z"}
+{"job_id": 34, "phase": "llm", "selector": "Preferred First Name", "value_length": 6, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:39:59.876538Z"}
+{"job_id": 34, "phase": "llm", "selector": "Email", "field_label": "Email", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:40:00.012591Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:40:00.016499Z"}
+{"job_id": 34, "phase": "llm", "selector": "Email", "value_length": 25, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:40:00.522645Z"}
+{"job_id": 34, "phase": "llm", "selector": "Phone", "field_label": "Phone", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:40:00.523061Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:40:00.525171Z"}
+{"job_id": 34, "phase": "llm", "selector": "Phone", "value_length": 15, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:40:00.927823Z"}
+{"job_id": 34, "phase": "llm", "selector": "Location (City)", "field_label": "Location (City)", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:40:00.927924Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:40:00.930570Z"}
+{"job_id": 34, "phase": "llm", "selector": "Location (City)", "value_length": 13, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:40:03.738459Z"}
+{"job_id": 34, "phase": "llm", "selector": "Resume/CV*", "field_label": "Resume/CV", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-15T17:40:03.738574Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:40:03.740650Z"}
+{"job_id": 34, "phase": "llm", "file": "/Users/bavishsaireddy/Desktop/dub-resume/BAVISH_AI/AI_Engineer1.pdf", "event": "Upload executed via css generic input file", "level": "info", "timestamp": "2026-04-15T17:40:03.807927Z"}
+{"job_id": 34, "phase": "llm", "selector": "School", "field_label": "School", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:40:03.808002Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:40:03.812476Z"}
+{"job_id": 34, "phase": "llm", "selector": "School", "value_length": 36, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:40:08.016859Z"}
+{"job_id": 34, "phase": "llm", "selector": "Degree", "field_label": "Degree", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:40:08.017319Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:40:08.124179Z"}
+{"job_id": 34, "phase": "llm", "selector": "Degree", "value_length": 4, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:40:10.617610Z"}
+{"job_id": 34, "phase": "llm", "selector": "Discipline", "field_label": "Discipline", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:40:10.617974Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:40:10.620500Z"}
+{"job_id": 34, "phase": "llm", "selector": "Discipline", "value_length": 16, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:40:11.648542Z"}
+{"job_id": 34, "phase": "llm", "selector": "End date year", "field_label": "End date year", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:40:11.648663Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:40:11.652793Z"}
+{"job_id": 34, "phase": "llm", "selector": "End date year", "value_length": 4, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:40:12.643021Z"}
+{"job_id": 34, "phase": "llm", "selector": "Preferred Name", "field_label": "Preferred Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:40:12.643158Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:40:12.649504Z"}
+{"job_id": 34, "phase": "llm", "selector": "Preferred Name", "value_length": 6, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:40:13.014904Z"}
+{"job_id": 34, "phase": "llm", "selector": "LinkedIn Profile", "field_label": "LinkedIn Profile", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-15T17:40:13.015011Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:40:13.017292Z"}
+{"job_id": 34, "phase": "llm", "selector": "LinkedIn Profile", "value_length": 59, "event": "Fill executed via get_by_label", "level": "info", "timestamp": "2026-04-15T17:40:13.409754Z"}
+{"job_id": 34, "phase": "llm", "selector": "Do you currently have legal work authorization in the country where this position is based?", "field_label": "Legal Work Authorization", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T17:40:13.409839Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:40:13.411782Z"}
+{"job_id": 34, "phase": "llm", "selector": "Do you currently have legal work authorization in the country where this position is based?", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T17:40:27.533839Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 13 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T17:40:27.534977Z"}
+{"job_id": 34, "phase": "llm", "selector": "Would you, now or in the future, require immigration sponsorship* for work authorization?", "field_label": "Immigration Sponsorship", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T17:40:27.535057Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:40:27.539283Z"}
+{"job_id": 34, "phase": "llm", "selector": "Would you, now or in the future, require immigration sponsorship* for work authorization?", "event": "Element not found for select", "level": "error", "timestamp": "2026-04-15T17:40:42.676876Z"}
+{"job_id": 34, "phase": "llm", "event": "Action 14 failed, continuing execution", "level": "warning", "timestamp": "2026-04-15T17:40:42.677663Z"}
+{"job_id": 34, "phase": "llm", "selector": "Gender Identity", "field_label": "Gender Identity", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T17:40:42.677840Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:40:42.684643Z"}
+{"job_id": 34, "phase": "llm", "selector": "Gender Identity", "value": "man", "event": "Select executed via custom: label text click (custom dropdown)", "level": "info", "timestamp": "2026-04-15T17:40:48.524488Z"}
+{"job_id": 34, "phase": "llm", "selector": "Race/Ethnicity", "field_label": "Race/Ethnicity", "event": "Executing select action", "level": "info", "timestamp": "2026-04-15T17:40:48.524985Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:40:48.530330Z"}
+{"job_id": 34, "phase": "llm", "selector": "Race/Ethnicity", "value": "asian", "event": "Select executed via custom: get_by_label (custom dropdown)", "level": "info", "timestamp": "2026-04-15T17:40:59.069097Z"}
+{"job_id": 34, "phase": "llm", "selector": "Submit application", "field_label": "Submit Application", "event": "Executing click action", "level": "info", "timestamp": "2026-04-15T17:40:59.069426Z"}
+{"job_id": 34, "phase": "llm", "event": "Switched to ATS iframe locator: greenhouse.io", "level": "info", "timestamp": "2026-04-15T17:40:59.071259Z"}
+{"job_id": 34, "phase": "llm", "selector": "Submit application", "event": "Click executed via get_by_role button", "level": "info", "timestamp": "2026-04-15T17:40:59.549163Z"}
+{"job_id": 34, "phase": null, "event": "Application error: [Errno 5] Input/output error", "level": "error", "timestamp": "2026-04-15T18:36:32.232979Z"}
+{"job_id": 34, "phase": "llm", "error": "Page.screenshot: Target page, context or browser has been closed", "event": "Failed to capture screenshot", "level": "error", "timestamp": "2026-04-15T18:36:32.369471Z"}
+{"job_id": 34, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-15T18:36:32.828785Z"}

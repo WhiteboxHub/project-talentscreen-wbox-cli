@@ -454,5 +454,74 @@ def open_dashboard() -> None:
         session.close()
 
 
+@app.command()
+def scan(
+    portal_config: str = typer.Option(
+        "config/portals.example.yml",
+        "--config",
+        "-c",
+        help="Path to portals configuration YAML",
+    )
+) -> None:
+    """Scan configured ATS portals for open jobs."""
+    console.print("[bold cyan]ATS Zero-Token Scanner[/bold cyan]\n")
+    
+    import yaml
+    from jobcli.core.scanner import ATSScanner
+    from jobcli.storage.repositories import JobRepository
+    
+    try:
+        with open(portal_config, "r") as f:
+            config_data = yaml.safe_load(f)
+    except Exception as e:
+        console.print(f"[red]Error loading config: {e}[/red]")
+        return
+        
+    portals = config_data.get("portals", [])
+    if not portals:
+        console.print("[yellow]No portals configured to scan.[/yellow]")
+        return
+        
+    scanner = ATSScanner()
+    db = get_database()
+    session = db.get_session()
+    job_repo = JobRepository(session)
+    
+    total_added = 0
+    with console.status("[bold green]Scanning portals..."):
+        for portal in portals:
+            name = portal.get("name")
+            ats = portal.get("ats")
+            company_id = portal.get("company_id")
+            
+            if not all([name, ats, company_id]):
+                continue
+                
+            console.print(f"Scanning {name} ({ats})...")
+            
+            jobs = []
+            if ats == "greenhouse":
+                jobs = scanner.scan_greenhouse(company_id)
+            elif ats == "lever":
+                jobs = scanner.scan_lever(company_id)
+            elif ats == "ashby":
+                jobs = scanner.scan_ashby(company_id)
+            elif ats == "bamboo_hr":
+                jobs = scanner.scan_bamboohr(company_id)
+                
+            added = 0
+            for job in jobs:
+                if not job_repo.get_by_url(job.url):
+                    job_repo.create(job)
+                    added += 1
+            
+            if added:
+                console.print(f"  [green]✓ Found {added} new jobs![/green]")
+            total_added += added
+            
+    session.close()
+    console.print(f"\n[bold green]Scan complete. Added {total_added} new jobs to database.[/bold green]")
+
+
 if __name__ == "__main__":
     app()
