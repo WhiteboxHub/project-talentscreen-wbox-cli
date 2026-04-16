@@ -83,3 +83,6 @@
 {"status": "in_progress", "event": "Completed job 24", "level": "info", "timestamp": "2026-04-16T00:04:36.211820Z"}
 {"job_url": "https://jobs.ashbyhq.com/greenboard/951d472b-cd45-4e87-9b86-b8afbef2b8ee", "event": "Starting application for job 23", "level": "info", "timestamp": "2026-04-16T00:04:50.090943Z"}
 {"job_url": "https://recruiting.paylocity.com/Recruiting/Jobs/Apply/4085913", "event": "Starting application for job 25", "level": "info", "timestamp": "2026-04-16T00:08:21.130696Z"}
+{"job_url": "https://eluq.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_2001/job/186363", "event": "Starting application for job 20", "level": "info", "timestamp": "2026-04-15T19:34:21.214147Z"}
+{"status": "in_progress", "event": "Completed job 20", "level": "info", "timestamp": "2026-04-15T19:35:16.450204Z"}
+
