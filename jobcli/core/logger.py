@@ -66,6 +66,10 @@ class JobLogger:
         )
 
         self.logger = structlog.get_logger()
+        
+        # Add a rich console for user-facing output
+        from rich.console import Console
+        self.console = Console()
 
     def log(
         self,
@@ -82,6 +86,38 @@ class JobLogger:
             phase=phase.value if phase else None,
             **metadata,
         )
+        
+        # Mirror important info to terminal for monitoring
+        if level.lower() in ["info", "warning", "error", "critical"]:
+            self._print_to_console(level, message, phase, **metadata)
+
+    def _print_to_console(self, level: str, message: str, phase: Optional[ExecutionPhase], **metadata: Any) -> None:
+        """Helper to format and print logs to console for user visibility."""
+        if not hasattr(self, "console"):
+            return
+            
+        color = "white"
+        if level.lower() == "warning": color = "yellow"
+        elif level.lower() == "error": color = "red"
+        elif level.lower() == "critical": color = "bold red"
+        elif level.lower() == "info": color = "cyan"
+        
+        prefix = f"[{color}][{level.upper()}][/{color}]"
+        if phase:
+            prefix += f" [dim]({phase.value})[/dim]"
+            
+        # Format actions specifically
+        if "action" in metadata:
+            msg = f"{prefix} [bold]AI Action:[/bold] {metadata['action']}"
+            if "selector" in metadata: msg += f" on {metadata['selector']}"
+            if "value" in metadata: msg += f" -> [green]{metadata['value']}[/green]"
+            self.console.print(msg)
+        elif "success" in metadata:
+             status = "[green]✓[/green]" if metadata["success"] else "[red]✗[/red]"
+             self.console.print(f"{prefix} {status} {message}")
+        else:
+            self.console.print(f"{prefix} {message}")
+
 
     def debug(
         self, message: str, phase: Optional[ExecutionPhase] = None, **metadata: Any

@@ -230,12 +230,12 @@ class FieldConfidenceScorer:
         return str(obj) if obj is not None else None
 
     def resolve_from_autocomplete(
-        self, autocomplete: str, resume: ResumeData
+        self, autocomplete: str, resume: ResumeData, field_key: str
     ) -> Optional[tuple[str, int]]:
-        """Return (value, confidence=99) from autocomplete attr, or None."""
+        """Return (value, confidence=99) IF the autocomplete matches field_key."""
         ac = autocomplete.lower().strip()
         path = self.AUTOCOMPLETE_MAP.get(ac)
-        if not path:
+        if not path or path != field_key:
             return None
         value = self.resolve_from_resume(path, resume)
         return (value, 99) if value else None
@@ -391,7 +391,7 @@ class FormFieldLocator:
                 # --- Autocomplete fast-path (highest priority) ---
                 ac = features.get("autocomplete", "")
                 if ac:
-                    result = self._scorer.resolve_from_autocomplete(ac, resume)
+                    result = self._scorer.resolve_from_autocomplete(ac, resume, field_key)
                     if result:
                         _, confidence = result
                         if confidence > best_confidence:
@@ -685,26 +685,30 @@ class FormFiller:
             ("personal.website",    "website",     personal.website),
         ]
 
+        used_selectors = set()
         for field_key, short_key, value in field_map:
             if not value:
                 continue
 
             # Primary: confidence scoring
-            success = self.field_locator.fill_field_with_confidence(
-                field_key, value, self.resume
-            )
+            result = self.field_locator.find_best_selector(field_key, self.resume)
+            if result:
+                selector, confidence = result
+                if selector in used_selectors:
+                    continue  # Don't overwrite 
+                
+                try:
+                    self.page.fill(selector, value, timeout=3000)
+                    used_selectors.add(selector)
+                    results[short_key] = True
+                except Exception:
+                    pass
 
-            if not success:
+            if not results.get(short_key):
                 # Fallback: legacy label matching
                 labels = self.FIELD_LABELS.get(short_key, [short_key.replace("_", " ").title()])
                 success = self.field_locator.fill_text_field(labels, value)
-                if success and self.logger:
-                    self.logger.info(
-                        f"'{ short_key}' filled via legacy label fallback",
-                        phase=ExecutionPhase.RULES,
-                    )
-
-            results[short_key] = success
+                results[short_key] = success
 
         return results
 

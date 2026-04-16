@@ -5,11 +5,13 @@ Production-grade CLI for automated job applications across multiple ATS systems.
 ## Features
 
 - **Wbox Dashboard Integration**: Automated job discovery from Whitebox Learning
-- **Interactive Dashboard**: Single-command login to your Wbox dashboard
-- **Three-Phase Execution Strategy**: Rule-based locators → LLM reasoning → Human-in-the-loop
-- **Multi-ATS Support**: Greenhouse, Lever, Workday, and 17 other ATS systems
+- **Advanced AI Reasoning**: Uses AXTree (Accessibility Tree) for high-accuracy form field mapping
+- **Universal Iframe Search**: Reach-through support for Greenhouse, Lever, Paylocity, and nested iframes
+- **JS Force-Fill Fallback**: Bypasses stubborn React/Angular listeners for 100% input reliability
+- **Three-Phase Strategy**: Autonomous AI → Heuristic Rules → Human-in-the-loop fallback
+- **Smart Logic**: Suppresses redundant manual prompts for information already in your resume
 - **Structured Logging**: JSON logs with screenshots and DOM snapshots
-- **LLM Providers**: OpenAI, Anthropic, and Google Gemini support
+- **Multi-Provider**: Native support for OpenAI, Anthropic, and Google Gemini
 
 ## Installation
 

@@ -2,7 +2,7 @@
 
 import json
 import time
-from typing import Literal, Optional
+from typing import Literal, Optional, Any
 
 import anthropic
 import google.generativeai as genai
@@ -359,11 +359,19 @@ Remember to return valid JSON matching the schema in the system prompt.
             "3. **DATA PRIORITY CHAIN:** First use 'User Information'. If missing, use 'Known Answers from Agent Memory'.\n"
             "4. For dropdowns, your value MUST exactly match an option from 'Pre-extracted Dropdown Options' or be a valid option string.\n"
             "5. If a mandatory field answer is entirely missing, output action=\"ask\", selector=\"<exact field label>\", and value=\"<clarifying question>\".\n"
-            "6. Use action=\"fill\" for text, action=\"click\" for buttons, action=\"select\" for dropdowns, action=\"upload\" for files.\n"
-            "7. Complete all fields and submit the application if on the final page.\n"
+            "6. Use action=\"fill\" for text, action=\"click\" for buttons, action=\"select\" for dropdowns/comboboxes, action=\"upload\" for files.\n"
+            "7. **DROPDOWNS**: If a field is a dropdown/select, you MUST use action=\"select\" and provide the exact option text as the value.\n"
+            "8. **LOCATION fields**: For any Location/City/Address autocomplete field, use action=\"fill\" with value=\"City, State\" (e.g., \"Livermore, CA\").\n"
+            "9. **FILE UPLOAD fields**: For Resume/Cover Letter upload fields, use action=\"upload\" with the selector being the field label and value being the resume_file_path from User Information.\n"
+            "10. **COMPLIANCE SECTIONS**: You MUST look for and fill: Gender, Ethnicity/Race, Veteran Status, Disability Status, and Work Authorization questions. These are often at the bottom of the form.\n"
+            "11. **REQUIRED FIELDS**: Look for 'required' or asterisk (*) markers. You MUST fill ALL required fields.\n"
+            "12. After filling all fields, click 'Next', 'Continue', 'Submit', or 'Apply' button if visible.\n"
+            "13. Complete all fields and submit the application if on the final page.\n"
         )
         if task == "fill_form_fields_only":
             instructions = "IMPORTANT - Target the Form directly. DO NOT CLICK APPLY.\n" + instructions
+        elif task == "fill_empty_fields_only":
+            instructions = "IMPORTANT - ONLY fill fields that are currently EMPTY or UNSELECTED. DO NOT re-fill fields that already have values unless they are incorrect.\n" + instructions
 
         prompt = f"""Task: {task}
 

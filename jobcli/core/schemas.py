@@ -30,6 +30,7 @@ class ATSType(str, Enum):
     CORNERSTONE = "cornerstone"
     AVATURE = "avature"
     PHENOM_PEOPLE = "phenom_people"
+    RIPPLING = "rippling"
     UNKNOWN = "unknown"
 
 

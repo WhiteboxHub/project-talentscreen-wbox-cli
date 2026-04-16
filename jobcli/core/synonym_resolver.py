@@ -274,18 +274,23 @@ class SynonymResolver:
         # Remove common suffixes: *, (optional), (required)
         normalized = re.sub(r"\s*[\*\(\)].*$", "", normalized).strip()
 
-        best_match: Optional[str] = None
-        best_length = 0
-
+        # Step 3: Fuzzy / Keyword matching
+        # Calculate how many keywords from LABEL_SYNONYMS appear in the label
+        best_keyword_match: Optional[str] = None
+        max_keywords = 0
+        
         for key, synonyms in self.LABEL_SYNONYMS.items():
             for syn in synonyms:
-                if syn in normalized:
-                    # Prefer longer matches (more specific)
-                    if len(syn) > best_length:
-                        best_match = key
-                        best_length = len(syn)
+                # Use word boundaries for better accuracy
+                if re.search(r'\b' + re.escape(syn) + r'\b', normalized):
+                    if len(syn.split()) > max_keywords:
+                        best_keyword_match = key
+                        max_keywords = len(syn.split())
+        
+        if best_keyword_match:
+            return best_keyword_match
 
-        return best_match
+        return None
 
     def find_best_option(
         self, our_value: str, dropdown_options: list[str]

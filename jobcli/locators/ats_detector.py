@@ -39,6 +39,7 @@ class ATSDetector:
         ATSType.CORNERSTONE: [r"csod\.com", r".*\.csod\.com"],
         ATSType.AVATURE: [r"avature\.net", r".*\.avature\.net"],
         ATSType.PHENOM_PEOPLE: [r"phenompeople\.com", r".*\.phenompeople\.com"],
+        ATSType.RIPPLING: [r"rippling\.com", r".*\.rippling\.com"],
     }
 
     # DOM signatures for ATS detection
@@ -65,8 +66,9 @@ class ATSDetector:
         ATSType.PAYLOCITY: ["paylocity", "pcty-"],
         ATSType.UKG_PRO: ["ultipro", "ukg-"],
         ATSType.CORNERSTONE: ["csod", "cornerstone"],
-        ATSType.AVATURE: ["avature", "av-"],
+        ATSType.AVATURE: ["avature", "avature-"],
         ATSType.PHENOM_PEOPLE: ["phenom", "px-"],
+        ATSType.RIPPLING: ["rippling", "ats-rippling"],
     }
 
     # Meta tag patterns
@@ -138,7 +140,7 @@ class ATSDetector:
                 content = generator.get_attribute("content") or ""
                 for ats_type, patterns in self.META_PATTERNS.items():
                     for pattern in patterns:
-                        if pattern.lower() in content.lower():
+                        if re.search(r'\b' + re.escape(pattern.lower()) + r'\b', content.lower()):
                             if self.logger:
                                 self.logger.info(
                                     f"Detected {ats_type.value} from meta tag",
@@ -153,7 +155,7 @@ class ATSDetector:
                 content = meta.get_attribute("content") or ""
                 for ats_type, patterns in self.META_PATTERNS.items():
                     for pattern in patterns:
-                        if pattern.lower() in content.lower():
+                        if re.search(r'\b' + re.escape(pattern.lower()) + r'\b', content.lower()):
                             if self.logger:
                                 self.logger.info(
                                     f"Detected {ats_type.value} from meta content",

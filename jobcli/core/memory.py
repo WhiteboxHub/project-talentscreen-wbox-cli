@@ -27,15 +27,20 @@ class AgentMemory:
 
     def save_field_answer(
         self, field_label: str, value: str, ats_type: ATSType, success: bool = True, source: str = "human"
-    ) -> None:
-        """Save an answer provided for a field."""
+    ) -> bool:
+        """Save an answer provided for a field. Returns True if saved."""
         if not field_label or not value:
-            return
+            return False
 
         normalized = self.synonym_resolver.resolve_field_label(field_label)
         if not normalized:
             # If we don't have a canonical name, use the lowercase version
             normalized = field_label.lower().strip()
+
+        # Check if we already have this exact answer to avoid spamming logs
+        best_val, _ = self.get_best_answer(field_label, ats_type)
+        if best_val == str(value).strip():
+            return False
 
         self.field_answer_repo.save_answer(
             field_label=field_label,
@@ -45,6 +50,7 @@ class AgentMemory:
             success=success,
             source=source,
         )
+        return True
 
     def get_best_answer(
         self, field_label: str, ats_type: ATSType, resume: Optional[ResumeData] = None
@@ -145,27 +151,34 @@ class AgentMemory:
         from sqlalchemy import func
         from jobcli.storage.models import FieldAnswerModel
 
-        # Fetch top successful universal answers
-        top_answers = (
+        # Fetch successful answers, prioritized by manual 'human' source first
+        # We group by field_label to avoid duplicates and keep context clean
+        all_answers = (
             self.session.query(
-                FieldAnswerModel.field_label, FieldAnswerModel.value, FieldAnswerModel.source
+                FieldAnswerModel.field_label, 
+                FieldAnswerModel.value, 
+                FieldAnswerModel.source,
+                FieldAnswerModel.success_count
             )
             .filter(
                 (FieldAnswerModel.ats_type == ats_type) | (FieldAnswerModel.ats_type == ATSType.UNKNOWN)
             )
-            .order_by(FieldAnswerModel.success_count.desc())
-            .limit(15)
+            .order_by(FieldAnswerModel.source.desc(), FieldAnswerModel.success_count.desc()) # 'human' comes before 'auto'
             .all()
         )
 
+        # Deduplicate and format
+        unique_answers = {}
+        for label, value, source, count in all_answers:
+            if label not in unique_answers:
+                unique_answers[label] = {"value": value, "source": source}
+
         context_lines = []
-        if top_answers:
-            context_lines.append(f"### Known Answers (Priority applies to {ats_type.value}):")
-            for label, value, source in top_answers:
-                if source == "human":
-                    context_lines.append(f"- '{label}' -> '{value}' (Learned from previous manual input)")
-                else:
-                    context_lines.append(f"- '{label}' -> '{value}' (Learned from previous successful run)")
+        if unique_answers:
+            context_lines.append(f"### FULL Memory Context for {ats_type.value}:")
+            for label, data in unique_answers.items():
+                prefix = "[MANUAL ENTRY]" if data["source"] == "human" else "[AUTO-LEARNED]"
+                context_lines.append(f"- {prefix} '{label}' -> '{data['value']}'")
 
         # Could add high-level strategy notes here (e.g., getting from get_best_strategy method)
         # e.g., "For custom dropdowns, click label first then select option."

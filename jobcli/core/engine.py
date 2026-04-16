@@ -31,6 +31,7 @@ from jobcli.storage.repositories import (
     JobRepository,
     LearnedLocatorRepository,
 )
+from jobcli.core.anti_bot import AntiBotManager
 
 
 class ApplicationEngine:
@@ -52,6 +53,8 @@ class ApplicationEngine:
         self.job_repo = JobRepository(self.session)
         self.log_repo = ApplicationLogRepository(self.session)
         self.locator_repo = LearnedLocatorRepository(self.session)
+        
+        self.anti_bot = AntiBotManager()
 
     def apply_to_job(self, job: Job) -> ApplicationStatus:
         """Apply to a single job using three-phase strategy."""
@@ -77,16 +80,24 @@ class ApplicationEngine:
             )
 
             context = browser.new_context(
-                user_agent=self.config.user_agent or None,
+                user_agent=self.config.user_agent or self.anti_bot.get_random_user_agent(),
             )
 
             page = context.new_page()
+            self.anti_bot.logger = logger
 
             try:
                 # Navigate to job
                 logger.info("Navigating to job page", phase=ExecutionPhase.RULES)
-                page.goto(job.url, timeout=30000)
+                import playwright.sync_api
+                try:
+                    page.goto(job.url, timeout=45000, wait_until="domcontentloaded")
+                except playwright.sync_api.TimeoutError:
+                    logger.warning("Page load timed out after 45s. Continuing anyway.", phase=ExecutionPhase.RULES)
                 self._random_delay()
+
+                # Dismiss any cookie consent modals that may block clicks
+                self._dismiss_cookie_consent(page, logger)
 
                 # Capture initial screenshot
                 logger.capture_screenshot(page, "initial", ExecutionPhase.RULES)
@@ -106,37 +117,79 @@ class ApplicationEngine:
                 if apply_clicked:
                     # Wait for form to load after clicking apply
                     page.wait_for_timeout(2000)
-                    # Phase 1b: Try to fill form with rules
-                    success = self._fill_form_rules(page, state, logger, ats_type)
+                # --- Phase 1: AI Reasoning (LLM) ---
+                print("\n" + "="*60)
+                print("🧠 PHASE 1: AI REASONING (Autonomous Form Filling)")
+                print("="*60)
+                success = self._phase_llm(page, state, logger, apply_was_clicked=apply_clicked)
 
                 if not success:
-                    # Phase 2: Try LLM reasoning (on current page state, form visible)
-                    success = self._phase_llm(page, state, logger, apply_was_clicked=apply_clicked)
+                    # SAFETY: If the LLM already successfully filled fields, but just failed to verify submission,
+                    # don't run the Rules phase. The Rules phase is dumber and will likely corrupt the form.
+                    # We check if 'answers were saved' or if any actions succeeded.
+                    # For now, if LLM is active and it 'failed', we prefer HUMAN over RULES fallback if it had a try.
+                    
+                    print("\n" + "="*60)
+                    print("⚠️  AI PHASE UNCERTAIN - Falling back to alternate strategy...")
+                    print("="*60)
+                    
+                    # Phase 2: Rules-based fallback (Only if no significant progress was made by AI)
+                    if state.step_count == 0: 
+                        print("\n🤖 PHASE 2: RULE-BASED FALLBACK")
+                        success = self._fill_form_rules(page, state, logger, ats_type)
 
                 if not success:
                     # Phase 3: Human in the loop
+                    print("\n" + "="*60)
+                    print("🖐️  PHASE 3: HUMAN IN THE LOOP (Manual Inspection)")
+                    print("="*60)
                     success = self._phase_human(page, state, logger, ats_type, apply_was_clicked=apply_clicked)
 
                 if success:
                     logger.info("Application completed successfully")
                     self.job_repo.update_status(job.id or 0, ApplicationStatus.SUBMITTED)
-                    return ApplicationStatus.SUBMITTED
+                    status = ApplicationStatus.SUBMITTED
                 else:
                     logger.error("Application failed")
                     self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
-                    return ApplicationStatus.FAILED
+                    status = ApplicationStatus.FAILED
+
+                # Final inspection pause for headful mode
+                if not self.config.headless:
+                    print("\n" + "=" * 60)
+                    print("🏁 APPLICATION FLOW FINISHED")
+                    print("The browser will remain open so you can inspect the state.")
+                    print("Press ENTER to close the browser and finish.")
+                    print("=" * 60)
+                    try:
+                        input()
+                    except (EOFError, KeyboardInterrupt):
+                        pass
+
+                return status
 
             except Exception as e:
                 logger.error(f"Application error: {e}")
                 if self.config.screenshot_on_error:
-                    logger.capture_screenshot(page, "error", state.current_phase)
-
+                    try:
+                        logger.capture_screenshot(page, "error", state.current_phase)
+                    except Exception:
+                        pass
+                
                 self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
                 return ApplicationStatus.FAILED
-
             finally:
-                browser.close()
-                logger.info("Browser closed")
+                # Graceful browser closure
+                try:
+                    if 'page' in locals() and page:
+                        page.context.close()
+                except Exception:
+                    pass
+                try:
+                    browser.close()
+                    logger.info("Browser closed")
+                except Exception:
+                    pass
                 global_logger.info(f"Completed job {job.id}", status=state.status.value)
 
     def _click_apply_button(
@@ -313,6 +366,7 @@ class ApplicationEngine:
             loop_count = 0
             executor = ToolExecutor(page, logger, memory=memory, synonym_resolver=synonym_resolver, ats_type=state.detected_ats)
             results = {}
+            performed_uploads = set()  # Track what we've uploaded to avoid infinite loops
 
             while loop_count < MAX_ASK_LOOPS:
                 loop_count += 1
@@ -371,12 +425,44 @@ class ApplicationEngine:
                     
                     # LLM responses are updated with human answers, continue execution
                     
+                # Sort actions: Prioritize UPLOAD actions (resume/cover letter) 
+                # This triggers ATS autofill early and expands hidden field sections.
+                has_upload = any(a.action == ActionType.UPLOAD for a in llm_response.actions)
+                if has_upload:
+                    # Filter out uploads we've already done to avoid infinite loops
+                    new_uploads = []
+                    for act in llm_response.actions:
+                        if act.action == ActionType.UPLOAD:
+                            # Use only the filename as key to prevent redundant uploads via different selectors
+                            upload_key = str(act.value).split('/')[-1].split('\\')[-1]
+                            if upload_key not in performed_uploads:
+                                new_uploads.append(act)
+                                performed_uploads.add(upload_key)
+                    
+                    if new_uploads:
+                        llm_response.actions = new_uploads
+                        logger.info("Upload detected. Prioritizing upload and forcing re-scan to check for site autofill.", phase=ExecutionPhase.LLM)
+                    else:
+                        # We already did these uploads, ignore them this time
+                        has_upload = False
+                        llm_response.actions = [a for a in llm_response.actions if a.action != ActionType.UPLOAD]
+                
                 # Execute actions
                 llm_response.actions = [a for a in llm_response.actions if a.action != ActionType.ASK]
                 results = executor.execute_actions(llm_response)
-
+                
+                # If we uploaded something, wait and then force the loop to continue (re-scan)
+                if has_upload:
+                    wait_time = 5000 if "ashby" in page.url.lower() else 3500
+                    logger.info(f"Upload executed. Waiting {wait_time/1000}s for site-native autofill...", phase=ExecutionPhase.LLM)
+                    page.wait_for_timeout(wait_time)
+                    # We skip the rest of the loop and go to re-scan
+                    continue
+ 
                 # Save successful actions automatically
                 for action in llm_response.actions:
+                    if action.field_label and action.value:
+                        memory.save_field_answer(action.field_label, action.value, state.detected_ats)
                     success = results.get(f"action_{llm_response.actions.index(action)}_{action.action.value}", False)
                     if success and action.value and action.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT):
                         label = action.field_label or action.selector
@@ -404,6 +490,11 @@ class ApplicationEngine:
                             label = act.field_label or act.selector
                             current_val = act.value or ""
                             
+                            # SAFETY: If we already have a value in resume/memory, DO NOT prompt.
+                            # The AI failed to mechanically click/type, so let the outer loop or rules phase try.
+                            if current_val and current_val.strip():
+                                continue
+
                             if act.action == ActionType.SELECT:
                                 options = executor.last_dropdown_options.get(act.selector, [])
                                 if options:
@@ -411,7 +502,7 @@ class ApplicationEngine:
                                     for i, opt in enumerate(options, 1):
                                         print(f"  {i}. {opt}")
                                         
-                            answer = input(f"\n? {label} (attempted: {current_val}): ").strip()
+                            answer = input(f"\n? {label}: ").strip()
                             if answer:
                                 memory.save_field_answer(label, answer, state.detected_ats, success=True)
                                 # Next loop will retry with the new memory context
@@ -419,51 +510,211 @@ class ApplicationEngine:
                 # Check for completion (Did we click apply, and did it navigate away or show success)
                 # Here we are simplifying the check. If "Apply" or "Submit" was executed and no more actions remain.
                 if not failed_actions and not ask_actions:
+                    print("\n✅ Answers saved for future applications.")
+                    print("=" * 60 + "\n")
                     break
-                        print("\n✅ Answers saved for future applications.")
-                        print("=" * 60 + "\n")
 
-                break
+            # --- Multi-page form loop ---
+            # After the initial LLM pass, check if we navigated to a new page
+            # (e.g., user clicked Next). If so, repeat the LLM cycle.
+            MAX_PAGES = 5
+            page_count = 1
+            
+            while page_count < MAX_PAGES:
+                # Check overall success of this page
+                total = len(results)
+                successes = sum(1 for v in results.values() if v)
+                
+                if total == 0 or (successes / total) < 0.5:
+                    logger.info(f"LLM page {page_count} result: {successes}/{total} actions succeeded", phase=ExecutionPhase.LLM)
+                    break
+                
+                logger.info(f"LLM page {page_count} result: {successes}/{total} actions succeeded", phase=ExecutionPhase.LLM)
+                
+                # Check for mandatory fields that are still empty
+                required_but_empty = []
+                for field in ax_tree.form_fields:
+                    is_required = field.get("required") or "*" in field.get("label", "")
+                    curr_val = field.get("value")
+                    if is_required and not curr_val:
+                        label = field.get("label") or field.get("name")
+                        required_but_empty.append(label)
+                
+                if required_but_empty:
+                    print("\n" + "!" * 40)
+                    for lbl in required_but_empty:
+                        logger.warning(f"Mandatory field '{lbl}' is empty. No answer found in memory.", phase=ExecutionPhase.LLM)
+                    print("!" * 40 + "\n")
 
-            # Check overall success (ignore failed non-critical actions like demographics)
-            # Consider success if we have more successes than failures
-            total = len(results)
-            successes = sum(1 for v in results.values() if v)
-            # At minimum, basic fields should be filled (>50% success rate)
-            success = total > 0 and (successes / total) >= 0.5
-
-            logger.info(
-                f"LLM phase result: {successes}/{total} actions succeeded",
-                phase=ExecutionPhase.LLM,
-            )
-            logger.log_phase_end(ExecutionPhase.LLM, success)
-
-            if success:
-                # Give the next step (like Demographics or Captcha) time to load
+                # Give user a chance to manually interact with the browser
+                if not self.config.headless:
+                    print(f"⏳ Page {page_count} partially filled. You have 8 seconds to manually fix any empty fields.")
+                    watched_names = [f.get("label") or f.get("name") for f in ax_tree.form_fields if (f.get("label") or f.get("name"))]
+                    if watched_names:
+                        unique_names = list(dict.fromkeys(watched_names))
+                        print(f"   (Watching: {', '.join(unique_names[:8])}{'...' if len(unique_names) > 8 else ''})")
+                    print("   Press ENTER to continue immediately, or wait for auto-continue.")
+                    
+                    try:
+                        # Non-blocking wait: auto-continue after 8 seconds
+                        import msvcrt
+                        import time as _time
+                        start = _time.time()
+                        while (_time.time() - start) < 8:
+                            if msvcrt.kbhit():
+                                msvcrt.getch()
+                                break
+                            _time.sleep(0.2)
+                    except (ImportError, Exception):
+                        # Fallback for non-Windows or if msvcrt fails
+                        page.wait_for_timeout(8000)
+                    print("   ▶ Continuing automation...")
+                
+                # Wait for potential page transition after Next/Continue click
                 page.wait_for_timeout(3000)
-                logger.capture_screenshot(page, "llm_success", ExecutionPhase.LLM)
-
+                
+                # Dismiss cookie consent on new page
+                self._dismiss_cookie_consent(page, logger)
+                
                 # Check for Captcha
                 from jobcli.core.anti_bot import AntiBotManager
                 anti_bot = AntiBotManager(logger)
                 if anti_bot.detect_captcha(page):
-                    logger.warning(
-                        "CAPTCHA detected after LLM execution. Pausing for human intervention.",
-                        phase=ExecutionPhase.LLM,
-                    )
+                    logger.warning("CAPTCHA detected. Pausing for human intervention.", phase=ExecutionPhase.LLM)
                     if not self.config.headless:
                         print("\n" + "=" * 60)
-                        print("🤖 CAPTCHA OR MULTI-STEP FORM DETECTED 🤖")
-                        print("Please complete any remaining steps or Captchas in the browser.")
-                        print("Once you reach the final Success screen, press ENTER here.")
+                        print("🤖 CAPTCHA OR VERIFICATION DETECTED 🤖")
+                        print("Please complete any CAPTCHAs in the browser.")
+                        print("Once done, press ENTER here to continue.")
                         print("=" * 60 + "\n")
-                        input("Press ENTER to complete application: ")
+                        input("Press ENTER to continue: ")
                     else:
-                        logger.error(
-                            "CAPTCHA detected but running in headless mode. Cannot solve.",
-                            phase=ExecutionPhase.LLM,
-                        )
+                        logger.error("CAPTCHA detected in headless mode. Cannot solve.", phase=ExecutionPhase.LLM)
                         return False
+                
+                # Wait for any SPA transitions or dynamic content loads
+                page.wait_for_timeout(2000)
+                
+                # Check if there's a new form to fill (re-extract AX tree)
+                new_ax_tree = extractor.extract()
+                
+                # Build list of already-filled fields to tell LLM to skip them
+                filled_fields = []
+                placeholders = ["select", "choose", "please choose", "select...", "select an option"]
+                
+                for field in new_ax_tree.form_fields:
+                    val = str(field.get("value", "")).strip()
+                    label = field.get("name", "unknown")
+                    
+                    # Treat placeholders as empty
+                    is_placeholder = val.lower() in placeholders or val == ""
+                    
+                    if not is_placeholder:
+                        filled_fields.append(f"- {label}: already has value '{val}'")
+                        
+                        # PERSISTENCE: Save manually filled fields to memory for future use
+                        if memory.save_field_answer(label, val, state.detected_ats, source="human"):
+                            logger.info(f"Learned answer for '{label}' from browser manual input.", phase=ExecutionPhase.LLM)
+                
+                # Compare: if URL unchanged AND form fields unchanged, we're done
+                url_changed = new_ax_tree.url != ax_tree.url
+                
+                # Deep compare of fields (including values and checked state)
+                fields_changed = False
+                if len(new_ax_tree.form_fields) != len(ax_tree.form_fields):
+                    fields_changed = True
+                else:
+                    for i, field in enumerate(new_ax_tree.form_fields):
+                        old_field = ax_tree.form_fields[i]
+                        # Compare normalized values to avoid trivial differences
+                        if str(field.get("value", "")).strip() != str(old_field.get("value", "")).strip() or \
+                           bool(field.get("checked")) != bool(old_field.get("checked")):
+                            fields_changed = True
+                            break
+                
+                # If a button was clicked (e.g. 'Next', 'Continue'), the page might have changed 
+                button_clicked = any(a.action == ActionType.CLICK for a in (llm_response.actions if 'llm_response' in locals() else []))
+                
+                if not url_changed and not fields_changed and not button_clicked:
+                    logger.info("No more actions needed or manual changes detected. Finish page fill loop.", phase=ExecutionPhase.LLM)
+                    break
+                
+                filled_context = ""
+                if filled_fields:
+                    filled_context = "\n## ALREADY FILLED FIELDS (DO NOT re-fill these):\n" + "\n".join(filled_fields)
+                
+                # New page detected — run another LLM cycle
+                page_count += 1
+                ax_tree = new_ax_tree
+                
+                # Verify if we are missing common bottom-of-page fields
+                # Rippling/Workday/etc. often hide these until scrolled or later pages
+                mandatory_keywords = ["gender", "veteran", "disability", "authorization", "visa", "legal"]
+                found_in_tree = any(any(k in f.get("name", "").lower() for k in mandatory_keywords) for f in ax_tree.form_fields)
+                
+                if not found_in_tree and page_count < 4:
+                    logger.info("Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", phase=ExecutionPhase.LLM)
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    page.wait_for_timeout(2000)
+                    ax_tree = extractor.extract()
+                
+                logger.info(f"New form page detected (page {page_count}). Running LLM again.", phase=ExecutionPhase.LLM)
+                
+                logger.save_structured_dom(ax_tree.model_dump(), f"ax_tree_page_{page_count}", ExecutionPhase.LLM)
+                
+                memory_context = (memory.build_llm_context(state.detected_ats) or "") + filled_context
+                llm_response = llm_client.analyze_page_from_axtree(
+                    ax_tree, self.resume,
+                    task="fill_empty_fields_only",
+                    memory_context=memory_context,
+                    dropdown_options=ax_tree.dropdown_fields,
+                    resume_pdf_path=self.config.resume_pdf_path,
+                )
+                
+                if not llm_response:
+                    logger.warning("LLM returned no response for new page.", phase=ExecutionPhase.LLM)
+                    break
+                
+                llm_response.actions = [a for a in llm_response.actions if a.action != ActionType.ASK]
+                results = executor.execute_actions(llm_response)
+
+            # Final verification of mandatory fields before finishing Phase 2
+            required_missing = []
+            for field in ax_tree.form_fields:
+               if field.get("required") or "*" in field.get("name", ""):
+                   if not field.get("value") or not str(field.get("value")).strip():
+                       required_missing.append(field.get("name", "unknown"))
+            
+            if required_missing and page_count < 5:
+                logger.warning(f"Mandatory fields still empty: {required_missing}. Attempting one more fill cycle.", phase=ExecutionPhase.LLM)
+                # This will naturally trigger a re-scan in the outer loop if we can structure it to continue
+            
+            # Final success evaluation: Check if we actually ended on a success page or have red marks
+            red_marks = page.locator(".error, .invalid, [aria-invalid='true'], .red-text").count()
+            if red_marks > 0:
+                logger.warning(f"{red_marks} validation errors (red marks) detected on page. Application might not be submitted correctly.", phase=ExecutionPhase.LLM)
+                if not self.config.headless:
+                     page.wait_for_timeout(2000)
+
+            total = len(results)
+            successes = sum(1 for v in results.values() if v)
+            
+            # If we didn't fill many things, it might be a failure unless we are on a confirmation page
+            is_confirmation = any(term in page.url.lower() for term in ["success", "confirmation", "thank-you"]) or \
+                             page.locator("text=Thank you, Thank-you, application submitted, application is received").count() > 0
+            
+            success = is_confirmation or (total > 0 and (successes / total) >= 0.5)
+            
+            if success:
+                logger.info("Application appears successfully submitted!", phase=ExecutionPhase.LLM, success=True)
+            else:
+                logger.error("Application submission could not be verified.", phase=ExecutionPhase.LLM, success=False)
+
+            logger.log_phase_end(ExecutionPhase.LLM, success)
+
+            if success:
+                page.wait_for_timeout(1000)
+                logger.capture_screenshot(page, "llm_success", ExecutionPhase.LLM)
 
             return success
 
@@ -591,10 +842,57 @@ class ApplicationEngine:
             logger.log_phase_end(ExecutionPhase.HUMAN, False)
             return False
 
+    def _dismiss_cookie_consent(self, page: Page, logger: JobLogger) -> None:
+        """Dismiss cookie consent modals that block interaction."""
+        cookie_selectors = [
+            # Oracle Cloud / generic patterns
+            "button:has-text('Accept')",
+            "button:has-text('Accept All')",
+            "button:has-text('Accept Cookies')",
+            "button:has-text('I Accept')",
+            "button:has-text('OK')",
+            "button:has-text('Got it')",
+            "button:has-text('Agree')",
+            "button:has-text('Close')",
+            # CSS class patterns
+            ".cookie-consent__action button",
+            "[data-testid='cookie-accept']",
+            ".onetrust-accept-btn-handler",
+            "#onetrust-accept-btn-handler",
+            ".cc-btn.cc-dismiss",
+        ]
+
+        for selector in cookie_selectors:
+            try:
+                loc = page.locator(selector).first
+                if loc.is_visible(timeout=1000):
+                    loc.click(timeout=2000, force=True)
+                    logger.info(
+                        f"Dismissed cookie consent via: {selector}",
+                        phase=ExecutionPhase.RULES,
+                    )
+                    page.wait_for_timeout(500)
+                    return
+            except Exception:
+                continue
+
+        # Fallback: try to close any modal overlay by pressing Escape
+        try:
+            modal = page.locator(".cookie-consent-modal, [class*='cookie-consent']").first
+            if modal.is_visible(timeout=500):
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(500)
+                logger.info("Dismissed cookie modal via Escape key", phase=ExecutionPhase.RULES)
+        except Exception:
+            pass
+
     def _random_delay(self) -> None:
-        """Add random delay to avoid bot detection."""
-        delay = random.uniform(
-            self.config.random_delay_min,
-            self.config.random_delay_max,
-        )
-        time.sleep(delay)
+        """Add random delay using the anti-bot manager."""
+        if hasattr(self, "anti_bot") and self.anti_bot:
+            self.anti_bot.random_delay()
+        else:
+            delay = random.uniform(
+                self.config.random_delay_min,
+                self.config.random_delay_max,
+            )
+            time.sleep(delay)

@@ -191,26 +191,78 @@ class AccessibilityTreeExtractor:
             return None
 
     def _parse_aria_text(self, text: str) -> dict[str, Any]:
-        """Parse aria_snapshot text into a basic snapshot dict."""
+        """Parse aria_snapshot text into a hierarchical snapshot dict.
+        
+        The snapshot format is YAML-like:
+        - role "Name" [prop=val]
+          - child_role "Child"
+        """
+        lines = text.strip().split("\n")
+        if not lines:
+            return {"role": "WebArea", "name": "", "children": []}
+
         root: dict[str, Any] = {"role": "WebArea", "name": "", "children": []}
+        stack = [( -1, root )]  # Initial depth and parent node
 
-        for line in text.strip().split("\n"):
-            line = line.strip().lstrip("- ")
-            if not line:
+        import re
+        # Regex to match: role "name" [attributes]
+        line_pattern = re.compile(r'^(\s*)-?\s*(\w+)\s*(?:"([^"]*)")?\s*(?:\[(.*)\])?')
+
+        for line in lines:
+            if not line.strip():
                 continue
+            
+            match = line_pattern.match(line)
+            if not match:
+                continue
+            
+            indent, role, name, attrs_str = match.groups()
+            depth = len(indent)
+            
+            # Normalize name: strip common markers like '*' or ':' and extra whitespace
+            clean_name = name or ""
+            clean_name = clean_name.replace("*", "").strip()
+            if clean_name.endswith(":"): clean_name = clean_name[:-1].strip()
 
-            # Parse lines like: heading "Example Domain" [level=1]
-            # or: textbox "First Name"
-            # or: link "Apply":
-            role = line.split(" ", 1)[0] if " " in line else line.rstrip(":")
-            name = ""
-            if '"' in line:
-                parts = line.split('"')
-                if len(parts) >= 2:
-                    name = parts[1]
+            node: dict[str, Any] = {
+                "role": role,
+                "name": clean_name,
+                "children": [],
+            }
+            
+            # Parse attributes: [value="Sai", disabled]
+            if attrs_str:
+                # Handle value="Sai"
+                val_match = re.search(r'value="([^"]*)"', attrs_str)
+                if val_match:
+                    node["value"] = val_match.group(1)
+                
+                # Handle other flags
+                if "disabled" in attrs_str: node["disabled"] = True
+                if "checked" in attrs_str: node["checked"] = True
+                if "pressed" in attrs_str: node["pressed"] = True
+                if "required" in attrs_str: node["required"] = True
+                
+                # Handle numeric levels
+                lvl_match = re.search(r'level=(\d+)', attrs_str)
+                if lvl_match:
+                    node["level"] = int(lvl_match.group(1))
+            
+            # If the node has children and no name, it might have a text name in a child
+            # (common for custom buttons/dropdowns)
+            if not node["name"] and role in ["button", "combobox"]:
+                # We can't do much here as children aren't processed yet,
+                # but we'll handle this in the flattening/collection phase.
+                pass
 
-            child: dict[str, Any] = {"role": role, "name": name, "children": []}
-            root["children"].append(child)
+            # Pop stack until we find the parent (one level up)
+            while stack and stack[-1][0] >= depth:
+                stack.pop()
+            
+            if stack:
+                stack[-1][1]["children"].append(node)
+            
+            stack.append((depth, node))
 
         return root
 
@@ -287,19 +339,37 @@ class AccessibilityTreeExtractor:
         fields = []
 
         role = node.get("role", "")
-        field_roles = ["textbox", "searchbox", "combobox", "spinbutton"]
+        # Expand roles to include all typical form fields + custom buttons used as dropdowns
+        field_roles = [
+            "textbox", "searchbox", "combobox", "spinbutton", 
+            "checkbox", "radio", "listbox", "switch", "menuitemradio",
+            "button"  # Custom dropdowns often use button role
+        ]
 
         if role in field_roles:
+            # Handle checkboxes and radios: use 'checked' as value if no value exists
+            val = node.get("value", "")
+            if not val and node.get("checked"):
+                val = "on" if node.get("checked") is True else (node.get("checked") if node.get("checked") != "mixed" else "mixed")
+            
+            # For comboboxes or buttons with no value, try to find a child that might represent the selected text
+            if role in ["combobox", "button"] and not val:
+                for child in node.get("children", []):
+                    if child.get("role") in ["text", "StaticText", "plaintext"] and child.get("name"):
+                        val = child.get("name")
+                        break
+
             fields.append(
                 {
                     "role": role,
                     "name": node.get("name", ""),
-                    "value": node.get("value", ""),
+                    "value": val or "",
                     "placeholder": node.get("placeholder", ""),
                     "required": node.get("required", False),
                     "readonly": node.get("readonly", False),
                     "invalid": node.get("invalid", ""),
                     "autocomplete": node.get("autocomplete", ""),
+                    "checked": node.get("checked", False),
                 }
             )
 

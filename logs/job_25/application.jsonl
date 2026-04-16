@@ -1,0 +1,31 @@
+{"job_id": 25, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-16T00:08:22.622632Z"}
+{"job_id": 25, "phase": "rules", "event": "Dismissed cookie consent via: button:has-text('Accept')", "level": "info", "timestamp": "2026-04-16T00:08:32.152595Z"}
+{"job_id": 25, "phase": "rules", "screenshot_path": "logs\\job_25\\screenshots\\001_20260415_170832_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T00:08:33.020753Z"}
+{"job_id": 25, "phase": "rules", "url": "https://recruiting.paylocity.com/Recruiting/Jobs/Apply/4085913", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-16T00:08:33.022146Z"}
+{"job_id": 25, "phase": "rules", "url": "https://recruiting.paylocity.com/Recruiting/Jobs/Apply/4085913", "pattern": "paylocity\\.com", "event": "Detected paylocity from URL", "level": "info", "timestamp": "2026-04-16T00:08:33.024678Z"}
+{"job_id": 25, "phase": "rules", "event": "Detected ATS: paylocity", "level": "info", "timestamp": "2026-04-16T00:08:33.039664Z"}
+{"job_id": 25, "phase": "rules", "event": "Using paylocity handler", "level": "info", "timestamp": "2026-04-16T00:08:33.040170Z"}
+{"job_id": 25, "phase": "rules", "event": "Looking for Paylocity apply button", "level": "info", "timestamp": "2026-04-16T00:08:33.041213Z"}
+{"job_id": 25, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-16T00:08:33.062578Z"}
+{"job_id": 25, "phase": "rules", "event": "No apply button found (generic)", "level": "warning", "timestamp": "2026-04-16T00:08:33.138306Z"}
+{"job_id": 25, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-16T00:08:33.139321Z"}
+{"job_id": 25, "phase": "llm", "dom_path": "logs\\job_25\\dom_snapshots\\001_20260415_171535_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T00:15:35.131124Z"}
+{"job_id": 25, "phase": "llm", "task": "find_apply_button_and_fill_form", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T00:15:35.201479Z"}
+{"job_id": 25, "phase": "llm", "tokens": 3911, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T00:15:41.947777Z"}
+{"job_id": 25, "phase": "llm", "action_count": 9, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T00:15:41.948790Z"}
+{"job_id": 25, "phase": "llm", "event": "Upload detected. Prioritizing upload and forcing re-scan to check for site autofill.", "level": "info", "timestamp": "2026-04-16T00:15:41.949797Z"}
+{"job_id": 25, "phase": "llm", "selector": "Select Resume to Upload", "field_label": "Resume", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-16T00:15:41.950795Z"}
+{"job_id": 25, "phase": "llm", "event": "Upload executed. Waiting for site-native autofill...", "level": "info", "timestamp": "2026-04-16T00:15:41.989553Z"}
+{"job_id": 25, "phase": "llm", "task": "find_apply_button_and_fill_form", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T00:15:45.504175Z"}
+{"job_id": 25, "phase": "llm", "tokens": 3902, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T00:15:50.434777Z"}
+{"job_id": 25, "phase": "llm", "action_count": 9, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T00:15:50.434777Z"}
+{"job_id": 25, "phase": "llm", "selector": "First Name", "field_label": "First Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T00:15:50.436284Z"}
+{"job_id": 25, "phase": "llm", "selector": "Last Name", "field_label": "Last Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T00:15:50.482819Z"}
+{"job_id": 25, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T00:15:50.525164Z"}
+{"job_id": 25, "phase": "llm", "selector": "Mobile Number", "field_label": "Mobile Number", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T00:15:50.564708Z"}
+{"job_id": 25, "phase": "llm", "selector": "City", "field_label": "City", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T00:15:50.606608Z"}
+{"job_id": 25, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T00:15:50.662920Z"}
+{"job_id": 25, "phase": "llm", "selector": "State Select a state", "field_label": "State", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T00:15:50.664432Z"}
+{"job_id": 25, "phase": "llm", "selector": "LinkedIn Profile URL", "field_label": "LinkedIn Profile URL", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T00:15:50.716114Z"}
+{"job_id": 25, "phase": "llm", "selector": "Next Step", "field_label": "Next Step Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T00:15:50.778493Z"}
+{"job_id": 25, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T00:15:55.351356Z"}

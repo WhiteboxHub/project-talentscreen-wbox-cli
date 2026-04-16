@@ -1,0 +1,63 @@
+{"job_id": 24, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-16T00:04:14.951276Z"}
+{"job_id": 24, "phase": "rules", "screenshot_path": "logs\\job_24\\screenshots\\001_20260415_170420_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T00:04:25.999167Z"}
+{"job_id": 24, "phase": "rules", "url": "https://job-boards.greenhouse.io/...", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-16T00:04:26.000166Z"}
+{"job_id": 24, "phase": "rules", "url": "https://job-boards.greenhouse.io/...", "pattern": "greenhouse\\.io", "event": "Detected greenhouse from URL", "level": "info", "timestamp": "2026-04-16T00:04:26.001166Z"}
+{"job_id": 24, "phase": "rules", "event": "Detected ATS: greenhouse", "level": "info", "timestamp": "2026-04-16T00:04:26.014545Z"}
+{"job_id": 24, "phase": "rules", "event": "Using greenhouse handler", "level": "info", "timestamp": "2026-04-16T00:04:26.015063Z"}
+{"job_id": 24, "phase": "rules", "event": "Looking for Greenhouse apply button", "level": "info", "timestamp": "2026-04-16T00:04:26.015063Z"}
+{"job_id": 24, "phase": "rules", "event": "Trying generic apply button fallback", "level": "info", "timestamp": "2026-04-16T00:04:26.034151Z"}
+{"job_id": 24, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-16T00:04:26.034151Z"}
+{"job_id": 24, "phase": "rules", "event": "No apply button found (generic)", "level": "warning", "timestamp": "2026-04-16T00:04:26.083105Z"}
+{"job_id": 24, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-16T00:04:26.084620Z"}
+{"job_id": 24, "phase": "llm", "dom_path": "logs\\job_24\\dom_snapshots\\001_20260415_170427_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T00:04:27.632292Z"}
+{"job_id": 24, "phase": "llm", "task": "find_apply_button_and_fill_form", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T00:04:27.693705Z"}
+{"job_id": 24, "phase": "llm", "tokens": 2096, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T00:04:33.323982Z"}
+{"job_id": 24, "phase": "llm", "action_count": 0, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T00:04:33.324501Z"}
+{"job_id": 24, "phase": "llm", "event": "LLM page 1 result: 0/0 actions succeeded", "level": "info", "timestamp": "2026-04-16T00:04:33.325507Z"}
+{"job_id": 24, "phase": "llm", "event": "Phase 2 failed: Locator.count: Target page, context or browser has been closed", "level": "error", "timestamp": "2026-04-16T00:04:33.329598Z"}
+{"job_id": 24, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-16T00:04:33.330669Z"}
+{"job_id": 24, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-16T00:04:33.332784Z"}
+{"job_id": 24, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-16T00:04:33.332784Z"}
+{"job_id": 24, "phase": "rules", "event": "Filling Greenhouse form", "level": "info", "timestamp": "2026-04-16T00:04:33.333813Z"}
+{"job_id": 24, "phase": "rules", "selector": "input[name='job_application[first_name]']", "event": "Greenhouse fill failed for 'first_name': Page.fill: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.335865Z"}
+{"job_id": 24, "phase": "rules", "selector": "input[name='job_application[last_name]']", "event": "Greenhouse fill failed for 'last_name': Page.fill: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.339755Z"}
+{"job_id": 24, "phase": "rules", "selector": "input[name='job_application[email]']", "event": "Greenhouse fill failed for 'email': Page.fill: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.342439Z"}
+{"job_id": 24, "phase": "rules", "selector": "input[name='job_application[phone]']", "event": "Greenhouse fill failed for 'phone': Page.fill: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.346215Z"}
+{"job_id": 24, "phase": "rules", "selector": "input[name='job_application[linkedin_profile_url]']", "event": "Greenhouse fill failed for 'linkedin': Page.fill: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.349268Z"}
+{"job_id": 24, "phase": "rules", "event": "Greenhouse resume upload failed: Page.set_input_files: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.352373Z"}
+{"job_id": 24, "phase": "rules", "event": "Greenhouse work-auth field not found or failed: Page.select_option: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.356559Z"}
+{"job_id": 24, "phase": "rules", "event": "Greenhouse sponsorship field not found or failed: Page.select_option: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.359961Z"}
+{"job_id": 24, "phase": "rules", "event": "Generic fallback triggered for 8 failed field(s): ['first_name', 'last_name', 'email', 'phone', 'linkedin', 'resume', 'authorized_to_work', 'require_sponsorship']", "level": "info", "timestamp": "2026-04-16T00:04:33.361143Z"}
+{"job_id": 24, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.364995Z"}
+{"job_id": 24, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T00:04:33.365511Z"}
+{"job_id": 24, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.387582Z"}
+{"job_id": 24, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T00:04:33.389583Z"}
+{"job_id": 24, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.410943Z"}
+{"job_id": 24, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T00:04:33.411960Z"}
+{"job_id": 24, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.427729Z"}
+{"job_id": 24, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T00:04:33.428811Z"}
+{"job_id": 24, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.472919Z"}
+{"job_id": 24, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T00:04:33.473951Z"}
+{"job_id": 24, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.492309Z"}
+{"job_id": 24, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T00:04:33.493927Z"}
+{"job_id": 24, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.519560Z"}
+{"job_id": 24, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T00:04:33.522270Z"}
+{"job_id": 24, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.532639Z"}
+{"job_id": 24, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T00:04:33.532639Z"}
+{"job_id": 24, "phase": "rules", "results": {"first_name": false, "last_name": false, "email": false, "phone": false, "linkedin": false, "resume": false, "authorized_to_work": false, "require_sponsorship": false}, "event": "Greenhouse form fill complete", "level": "info", "timestamp": "2026-04-16T00:04:33.548992Z"}
+{"job_id": 24, "phase": "rules", "event": "Submitting Greenhouse application", "level": "info", "timestamp": "2026-04-16T00:04:33.548992Z"}
+{"job_id": 24, "phase": "rules", "event": "Greenhouse submit selector failed 'input[type='submit'][value='Submit Application']': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.552018Z"}
+{"job_id": 24, "phase": "rules", "event": "Greenhouse submit selector failed 'button[type='submit']': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.555744Z"}
+{"job_id": 24, "phase": "rules", "event": "Greenhouse submit selector failed '#submit_app_button': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.558795Z"}
+{"job_id": 24, "phase": "rules", "event": "Submitting application (generic)", "level": "info", "timestamp": "2026-04-16T00:04:33.559803Z"}
+{"job_id": 24, "phase": "rules", "event": "Submit selector failed 'button[type='submit']': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.563324Z"}
+{"job_id": 24, "phase": "rules", "event": "Submit selector failed 'input[type='submit']': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.566878Z"}
+{"job_id": 24, "phase": "rules", "event": "Submit selector failed 'button:has-text('Submit Application')': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.573369Z"}
+{"job_id": 24, "phase": "rules", "event": "Submit selector failed 'button:has-text('Submit application')': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.578449Z"}
+{"job_id": 24, "phase": "rules", "event": "Submit selector failed 'button:has-text('Submit')': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.582205Z"}
+{"job_id": 24, "phase": "rules", "event": "Submit selector failed 'button:has-text('Apply')': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T00:04:33.585272Z"}
+{"job_id": 24, "phase": "rules", "event": "No submit button found (generic)", "level": "warning", "timestamp": "2026-04-16T00:04:33.586522Z"}
+{"job_id": 24, "phase": "rules", "success": false, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-16T00:04:33.586522Z"}
+{"job_id": 24, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-16T00:04:33.588032Z"}
+{"job_id": 24, "phase": "human", "task": "find_apply_button", "event": "Requesting human assistance", "level": "info", "timestamp": "2026-04-16T00:04:33.589446Z"}
+{"job_id": 24, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-16T00:04:36.208952Z"}

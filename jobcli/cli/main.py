@@ -11,7 +11,7 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from jobcli.core.engine import ApplicationEngine
-from jobcli.core.schemas import CommonQuestions, Config, Job, ResumeData
+from jobcli.core.schemas import ApplicationStatus, CommonQuestions, Config, Job, ResumeData
 from jobcli.storage.models import Database
 from jobcli.core.wbox_discoverer import WboxDiscoverer
 from jobcli.storage.repositories import (
@@ -47,7 +47,10 @@ def get_database() -> Database:
 
 
 def get_config() -> Config:
-    """Load configuration."""
+    """Load configuration, respecting .env overrides."""
+    from dotenv import load_dotenv
+    load_dotenv()
+    
     db = get_database()
     session = db.get_session()
     config_repo = ConfigRepository(session)
@@ -56,6 +59,11 @@ def get_config() -> Config:
         config = config_repo.get_all()
     except Exception:
         config = Config()
+
+    # Override headless if set in .env
+    env_headless = os.getenv("HEADLESS")
+    if env_headless is not None:
+        config.headless = env_headless.lower() == "true"
 
     session.close()
     return config
@@ -355,9 +363,15 @@ def apply(
         if existing:
             job = existing
         else:
-            job = Job(url=url)
-            job = job_repo.create(job)
-        jobs.append(job)
+            job = job_repo.get_by_url(url)
+        if not job:
+            job = job_repo.create(Job(title="Manual Entry", url=url, status=ApplicationStatus.PENDING))
+        
+        # In case the user is retrying a previously failed/completed job, reset it to pending
+        if job.status != ApplicationStatus.PENDING:
+            job_repo.update_status(job.id, ApplicationStatus.PENDING)
+            
+        jobs = [job]
 
     elif batch:
         # All pending jobs

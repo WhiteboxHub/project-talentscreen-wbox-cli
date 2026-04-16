@@ -75,27 +75,40 @@ class AntiBotManager:
             return False
 
     def detect_captcha(self, page: Page) -> bool:
-        """Detect if CAPTCHA is present on page."""
-        captcha_indicators = [
-            "recaptcha",
-            "g-recaptcha",
-            "captcha",
-            "hcaptcha",
-            "h-captcha",
-            "cf-challenge",
-            "cloudflare",
-        ]
-
+        """Detect if an actual visible CAPTCHA challenge is present on page."""
         try:
-            html = page.content().lower()
+            # Check for visible CAPTCHA challenge iframes/elements
+            captcha_selectors = [
+                "iframe[src*='recaptcha']",
+                "iframe[src*='hcaptcha']",
+                ".g-recaptcha",
+                ".h-captcha",
+                "#cf-challenge-running",
+                "[data-callback='onCaptchaSuccess']",
+                "iframe[title*='challenge']",
+                "iframe[title*='recaptcha']",
+                "iframe[title*='hCaptcha']",
+            ]
 
-            for indicator in captcha_indicators:
-                if indicator in html:
+            for selector in captcha_selectors:
+                try:
+                    loc = page.locator(selector).first
+                    if loc.is_visible(timeout=1000):
+                        if self.logger:
+                            self.logger.warning(f"CAPTCHA detected: {selector}")
+                        return True
+                except Exception:
+                    continue
+
+            # Check for Cloudflare challenge page (not just CDN scripts)
+            try:
+                challenge = page.locator("#challenge-form, #challenge-running").first
+                if challenge.is_visible(timeout=500):
                     if self.logger:
-                        self.logger.warning(
-                            f"CAPTCHA detected: {indicator}",
-                        )
+                        self.logger.warning("CAPTCHA detected: cloudflare challenge page")
                     return True
+            except Exception:
+                pass
 
             return False
 
