@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from typing import Any, Optional
 
+from sqlalchemy import Integer
 from sqlalchemy.orm import Session
 
 from jobcli.core.locator_schemas import LearnedLocator
@@ -16,6 +17,7 @@ from jobcli.core.schemas import (
     Job,
     ResumeData,
 )
+from jobcli.core.url_normalize import normalize_job_url
 from jobcli.storage.models import (
     ApplicationLogModel,
     ConfigModel,
@@ -37,8 +39,10 @@ class JobRepository:
 
     def create(self, job: Job) -> Job:
         """Create a new job."""
+        canonical = normalize_job_url(job.url)
         job_model = JobModel(
-            url=job.url,
+            url=canonical,
+            resolved_url=job.resolved_url,
             title=job.title,
             company=job.company,
             location=job.location,
@@ -51,6 +55,7 @@ class JobRepository:
         self.session.refresh(job_model)
 
         job.id = job_model.id
+        job.url = canonical
         job.created_at = job_model.created_at
         job.updated_at = job_model.updated_at
         return job
@@ -64,6 +69,7 @@ class JobRepository:
         return Job(
             id=job_model.id,
             url=job_model.url,
+            resolved_url=getattr(job_model, "resolved_url", None),
             title=job_model.title,
             company=job_model.company,
             location=job_model.location,
@@ -75,14 +81,18 @@ class JobRepository:
         )
 
     def get_by_url(self, url: str) -> Optional[Job]:
-        """Get job by URL."""
+        """Get job by URL (exact or normalized match)."""
+        canonical = normalize_job_url(url)
         job_model = self.session.query(JobModel).filter(JobModel.url == url).first()
+        if not job_model and canonical != url:
+            job_model = self.session.query(JobModel).filter(JobModel.url == canonical).first()
         if not job_model:
             return None
 
         return Job(
             id=job_model.id,
             url=job_model.url,
+            resolved_url=getattr(job_model, "resolved_url", None),
             title=job_model.title,
             company=job_model.company,
             location=job_model.location,
@@ -107,6 +117,13 @@ class JobRepository:
         )
         self.session.commit()
 
+    def update_resolved_url(self, job_id: int, resolved_url: str) -> None:
+        """Store final browser URL after redirects (normalized)."""
+        self.session.query(JobModel).filter(JobModel.id == job_id).update(
+            {"resolved_url": normalize_job_url(resolved_url)}
+        )
+        self.session.commit()
+
     def list_pending(self) -> list[Job]:
         """List all pending jobs."""
         jobs = (
@@ -118,6 +135,7 @@ class JobRepository:
             Job(
                 id=j.id,
                 url=j.url,
+                resolved_url=getattr(j, "resolved_url", None),
                 title=j.title,
                 company=j.company,
                 location=j.location,

@@ -1,26 +1,40 @@
 """LangGraph-based state machine for 3-phase execution."""
 
-from typing import Annotated, Literal, TypedDict
+from typing import Literal, TypedDict
 
 from langgraph.graph import END, StateGraph
-from langgraph.graph.message import add_messages
 from playwright.sync_api import Page
 
 from jobcli.core.logger import JobLogger
-from jobcli.core.schemas import ApplicationState, ApplicationStatus, ATSType, ExecutionPhase, ResumeData, BrowserAction, ActionType
+from jobcli.core.memory import AgentMemory
+from jobcli.core.schemas import (
+    ActionType,
+    ApplicationState,
+    ApplicationStatus,
+    ATSType,
+    BrowserAction,
+    ExecutionPhase,
+    ResumeData,
+)
+from jobcli.core.synonym_resolver import SynonymResolver
+from jobcli.core.url_normalize import normalize_job_url
 from jobcli.human.interface import HumanInterface
 from jobcli.llm.ax_tree_extractor import AccessibilityTreeExtractor
 from jobcli.llm.client import LLMClient
 from jobcli.core.tool_executor import ToolExecutor
-from jobcli.locators.apply_button import ApplyButtonLocator
+from jobcli.locators.apply_button import ApplyButtonLocator, adopt_application_page_after_action
 from jobcli.locators.ats.handler_factory import ATSHandlerFactory
 from jobcli.locators.form_fields import FormFiller
-from jobcli.storage.repositories import LearnedLocatorRepository
+from jobcli.storage.repositories import JobRepository, LearnedLocatorRepository
 from jobcli.core.locator_schemas import LearnedLocator
 
 
 class ApplicationGraphState(TypedDict):
-    """State for the application state machine."""
+    """State for the application state machine.
+
+    LangGraph nodes (phase_0_memory, phase_2_llm, …) mirror an internal "agent graph";
+    this is unrelated to OpenClaw device nodes.
+    """
 
     page: Page
     state: ApplicationState
@@ -33,6 +47,11 @@ class ApplicationGraphState(TypedDict):
     phase_results: dict[str, bool]
     current_phase: ExecutionPhase
     final_status: ApplicationStatus
+    job_id: int | None
+    job_repo: JobRepository | None
+    agent_memory: AgentMemory | None
+    job_board_url: str | None
+    infer_location_country: bool
 
 
 class ApplicationStateMachine:
@@ -98,59 +117,119 @@ class ApplicationStateMachine:
         return workflow.compile()
 
     def _phase_0_memory(self, state: ApplicationGraphState) -> ApplicationGraphState:
-        """Phase 0: Memory Retrieval for Agentic reasoning."""
+        """Phase 0: Memory Retrieval — replay previously-learned LLM locator sequences."""
         logger = state["logger"]
         page = state["page"]
-        resume = state["resume"]
         ats_type = state["ats_type"]
         locator_repo = state["locator_repo"]
+        agent_memory = state.get("agent_memory")
+        infer_loc = state.get("infer_location_country", True)
 
-        logger.log_phase_start(ExecutionPhase.LLM)
-        state["current_phase"] = ExecutionPhase.LLM
+        logger.log_phase_start(ExecutionPhase.RULES)
+        state["current_phase"] = ExecutionPhase.RULES
 
         try:
             locators = locator_repo.get_by_purpose_and_ats("find_apply_button_and_fill_form", ats_type)
             llm_locators = [loc for loc in locators if loc.created_by == "llm"]
-            
+
             if llm_locators:
-                logger.info(f"Retrieved {len(llm_locators)} agentic locators from memory.", phase=ExecutionPhase.LLM)
-                
-                # Execute these locators
-                executor = ToolExecutor(page, logger)
+                logger.info(f"Retrieved {len(llm_locators)} agentic locators from memory.", phase=ExecutionPhase.RULES)
+
+                synonym_resolver = SynonymResolver(infer_location_country=infer_loc)
+                executor = ToolExecutor(
+                    page,
+                    logger,
+                    memory=agent_memory,
+                    synonym_resolver=synonym_resolver,
+                    ats_type=ats_type,
+                )
                 success_all = True
-                
-                # Typically we'd reconstruct BrowserActions from LearnedLocator notes/types
-                # But for simplicity, we mock a click sequence for any returned locator
+
+                n0 = len(page.context.pages)
+                u0 = page.url
+                pids0 = {id(p) for p in page.context.pages}
+
                 for loc in llm_locators:
+                    # Determine action type from stored notes: "LLM Action: fill - First Name"
+                    action_type = ActionType.CLICK
+                    if loc.notes:
+                        notes_lower = loc.notes.lower()
+                        if "action: fill" in notes_lower:
+                            action_type = ActionType.FILL
+                        elif "action: type" in notes_lower:
+                            action_type = ActionType.TYPE
+                        elif "action: select" in notes_lower:
+                            action_type = ActionType.SELECT
+                        elif "action: upload" in notes_lower:
+                            action_type = ActionType.UPLOAD
+
                     action = BrowserAction(
-                        action=ActionType.CLICK, # Assumption for simplistic playback
+                        action=action_type,
                         selector=loc.selector,
                         selector_type=loc.selector_type,
-                        confidence=1.0
+                        confidence=loc.confidence_score,
                     )
                     if not executor.execute_action(action):
                         success_all = False
                         break
-                
+
+                # Adopt any new tab opened by the replayed sequence (e.g. Apply button click)
+                adopted = adopt_application_page_after_action(
+                    page,
+                    page_count_before=n0,
+                    url_before=u0,
+                    page_ids_before=pids0,
+                    logger=logger,
+                )
+                if id(adopted) != id(page):
+                    page = adopted
+                    state["page"] = page
+                    logger.info(
+                        "Memory replay opened a new tab; switched to it.",
+                        phase=ExecutionPhase.RULES,
+                    )
+
                 state["phase_results"]["memory"] = success_all
                 if success_all:
-                    logger.log_phase_end(ExecutionPhase.LLM, True)
+                    logger.log_phase_end(ExecutionPhase.RULES, True)
                     return state
 
         except Exception as e:
-            logger.error(f"Phase 0 failed: {e}", phase=ExecutionPhase.LLM)
+            logger.error(f"Phase 0 failed: {e}", phase=ExecutionPhase.RULES)
 
         state["phase_results"]["memory"] = False
         return state
 
+    def _persist_resolved_url_if_redirected(self, state: ApplicationGraphState, page: Page) -> None:
+        """Record final URL after redirects (aligned with legacy engine URL awareness)."""
+        job_repo = state.get("job_repo")
+        job_id = state.get("job_id")
+        board_url = state.get("job_board_url") or ""
+        if not job_repo or not job_id or not page.url or not board_url:
+            return
+        if normalize_job_url(page.url) != normalize_job_url(board_url):
+            job_repo.update_resolved_url(job_id, page.url)
+            logger = state["logger"]
+            logger.info(
+                f"Resolved URL differs from job link; stored resolved_url: {page.url[:120]}",
+                phase=ExecutionPhase.LLM,
+            )
+
     def _phase_2_llm(self, state: ApplicationGraphState) -> ApplicationGraphState:
-        """Phase 2: LLM reasoning (Now primary intelligence driver)."""
+        """Phase 2: LLM reasoning with multi-page loop (URL / DOM change detection).
+
+        Matches legacy ``ApplicationEngine`` behavior: after actions, if the page URL
+        or form snapshot changes (e.g. Next / Continue), run another LLM pass.
+        """
         logger = state["logger"]
         page = state["page"]
         resume = state["resume"]
+        ats_type = state["ats_type"]
         llm_client = state.get("llm_client")
+        agent_memory = state.get("agent_memory")
+        infer_loc = state.get("infer_location_country", True)
 
-        if not state.get("current_phase") == ExecutionPhase.LLM:
+        if state.get("current_phase") != ExecutionPhase.LLM:
             logger.log_phase_start(ExecutionPhase.LLM)
             state["current_phase"] = ExecutionPhase.LLM
 
@@ -161,35 +240,144 @@ class ApplicationStateMachine:
             return state
 
         try:
-            # Extract Accessibility Tree for massive token reduction and semantic analysis
             extractor = AccessibilityTreeExtractor(page)
             ax_tree = extractor.extract()
+            self._persist_resolved_url_if_redirected(state, page)
 
-            logger.save_structured_dom(
-                ax_tree.model_dump(),
-                "ax_tree_snapshot",
-                ExecutionPhase.LLM,
-            )
+            MAX_PAGES = 5
+            page_idx = 0
+            overall_llm_success = False
+            performed_uploads: set[str] = set()
+            synonym_resolver = SynonymResolver(infer_location_country=infer_loc)
 
-            # Get actions from LLM using optimized AXTree
-            llm_response = llm_client.analyze_page_from_axtree(
-                ax_tree,
-                resume,
-                task="find_apply_button_and_fill_form",
-            )
-            
-            print(f"LLM RAW PARSED RESPONSE: {llm_response}", flush=True)
+            while page_idx < MAX_PAGES:
+                page_idx += 1
+                self._persist_resolved_url_if_redirected(state, page)
 
-            if llm_response and not llm_response.requires_human:
-                executor = ToolExecutor(page, logger)
+                logger.save_structured_dom(
+                    ax_tree.model_dump(),
+                    f"ax_tree_snapshot_p{page_idx}",
+                    ExecutionPhase.LLM,
+                )
+
+                memory_ctx = ""
+                if agent_memory:
+                    memory_ctx = agent_memory.combined_llm_memory_block(resume, ats_type)
+
+                llm_response = llm_client.analyze_page_from_axtree(
+                    ax_tree,
+                    resume,
+                    task="find_apply_button_and_fill_form",
+                    memory_context=memory_ctx,
+                    dropdown_options=ax_tree.dropdown_fields,
+                    resume_pdf_path=state["resume_pdf_path"] or None,
+                )
+
+                if not llm_response:
+                    break
+                if llm_response.requires_human:
+                    state["phase_results"]["llm"] = False
+                    logger.log_phase_end(ExecutionPhase.LLM, False)
+                    return state
+
+                if not llm_response.actions:
+                    logger.info("LLM returned no actions; stopping LLM loop.", phase=ExecutionPhase.LLM)
+                    break
+
+                ask_actions = [a for a in llm_response.actions if a.action == ActionType.ASK]
+                if ask_actions:
+                    logger.warning(
+                        "LLM requested clarifications (ASK); skipping autonomous execution this wave.",
+                        phase=ExecutionPhase.LLM,
+                    )
+                    state["phase_results"]["llm"] = False
+                    logger.log_phase_end(ExecutionPhase.LLM, False)
+                    return state
+
+                executor = ToolExecutor(
+                    page,
+                    logger,
+                    memory=agent_memory,
+                    synonym_resolver=synonym_resolver,
+                    ats_type=ats_type,
+                )
+
+                has_upload = any(a.action == ActionType.UPLOAD for a in llm_response.actions)
+                if has_upload:
+                    new_uploads = []
+                    for act in llm_response.actions:
+                        if act.action == ActionType.UPLOAD:
+                            upload_key = str(act.value or "").split("/")[-1].split("\\")[-1]
+                            if upload_key and upload_key not in performed_uploads:
+                                new_uploads.append(act)
+                                performed_uploads.add(upload_key)
+                    if new_uploads:
+                        llm_response.actions = new_uploads
+                        logger.info(
+                            "Prioritizing resume upload; will re-scan page after wait.",
+                            phase=ExecutionPhase.LLM,
+                        )
+                    else:
+                        has_upload = False
+                        llm_response.actions = [a for a in llm_response.actions if a.action != ActionType.UPLOAD]
+
+                ctx = page.context
+                pids_snap = {id(p) for p in ctx.pages}
+                url_snap = page.url
+                n_snap = len(ctx.pages)
                 results = executor.execute_actions(llm_response)
+                adopted = adopt_application_page_after_action(
+                    page,
+                    page_count_before=n_snap,
+                    url_before=url_snap,
+                    page_ids_before=pids_snap,
+                    logger=logger,
+                )
+                if id(adopted) != id(page):
+                    page = adopted
+                    state["page"] = page
+                    extractor = AccessibilityTreeExtractor(page)
+                    logger.info(
+                        "LLM opened a new tab; continuing automation on that page.",
+                        phase=ExecutionPhase.LLM,
+                        url_preview=(page.url or "")[:200],
+                    )
+                else:
+                    page = adopted
 
-                success = all(results.values())
-                
-                # Agentic Self-Learning: Automatically Store Locators on Success
-                if success:
+                if results.get("requires_human"):
+                    state["phase_results"]["llm"] = False
+                    logger.log_phase_end(ExecutionPhase.LLM, False)
+                    return state
+
+                bool_results = {k: v for k, v in results.items() if isinstance(v, bool)}
+                if bool_results:
+                    successes = sum(1 for v in bool_results.values() if v)
+                    if successes / len(bool_results) >= 0.5:
+                        overall_llm_success = True
+
+                if has_upload:
+                    wait_ms = 5000 if "ashby" in page.url.lower() else 3500
+                    page.wait_for_timeout(wait_ms)
+                    ax_tree = extractor.extract()
+                    continue
+
+                for i, action in enumerate(llm_response.actions):
+                    if agent_memory and action.field_label and action.value:
+                        key = f"action_{i}_{action.action.value}"
+                        ok = results.get(key, False) is True
+                        if action.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT) and ok:
+                            agent_memory.save_field_answer(
+                                action.field_label,
+                                str(action.value),
+                                ats_type,
+                                success=True,
+                                source="llm",
+                            )
+
+                all_ok = bool(bool_results) and all(bool_results.values())
+                if all_ok:
                     locator_repo = state["locator_repo"]
-                    ats_type = state["ats_type"]
                     for action in llm_response.actions:
                         if action.selector:
                             loc = LearnedLocator(
@@ -201,14 +389,46 @@ class ApplicationStateMachine:
                                 created_by="llm",
                             )
                             locator_repo.create(loc)
-                            logger.info(f"Learned memory saved autonomously: {action.selector}", phase=ExecutionPhase.LLM)
+                            logger.info(
+                                f"Learned memory saved autonomously: {action.selector}",
+                                phase=ExecutionPhase.LLM,
+                            )
 
-                state["phase_results"]["llm"] = success
-                logger.log_phase_end(ExecutionPhase.LLM, success)
-                return state
+                page.wait_for_timeout(3000)
+                new_ax_tree = extractor.extract()
+
+                url_changed = new_ax_tree.url != ax_tree.url
+                fields_changed = False
+                if len(new_ax_tree.form_fields) != len(ax_tree.form_fields):
+                    fields_changed = True
+                else:
+                    for i, field in enumerate(new_ax_tree.form_fields):
+                        old_field = ax_tree.form_fields[i]
+                        if (
+                            str(field.get("value", "")).strip()
+                            != str(old_field.get("value", "")).strip()
+                        ) or bool(field.get("checked")) != bool(old_field.get("checked")):
+                            fields_changed = True
+                            break
+
+                button_clicked = any(a.action == ActionType.CLICK for a in llm_response.actions)
+
+                if not url_changed and not fields_changed and not button_clicked:
+                    logger.info(
+                        "No URL or form snapshot change after actions; ending multi-page LLM loop.",
+                        phase=ExecutionPhase.LLM,
+                    )
+                    break
+
+                ax_tree = new_ax_tree
+
+            state["phase_results"]["llm"] = overall_llm_success
+            logger.log_phase_end(ExecutionPhase.LLM, overall_llm_success)
+            return state
 
         except Exception as e:
             import traceback
+
             traceback.print_exc()
             logger.error(f"Phase 2 failed: {e}", phase=ExecutionPhase.LLM)
 
@@ -233,7 +453,23 @@ class ApplicationStateMachine:
             if handler:
                 logger.info(f"Using {ats_type.value} fallback handler", phase=ExecutionPhase.RULES)
 
+                n0 = len(page.context.pages)
+                u0 = page.url
+                pids0 = {id(p) for p in page.context.pages}
                 if handler.find_apply_button():
+                    page = adopt_application_page_after_action(
+                        page,
+                        page_count_before=n0,
+                        url_before=u0,
+                        logger=logger,
+                        page_ids_before=pids0,
+                    )
+                    state["page"] = page
+                    handler = ATSHandlerFactory.create_handler(ats_type, page, resume, logger)
+                    if not handler:
+                        state["phase_results"]["rules"] = False
+                        logger.log_phase_end(ExecutionPhase.RULES, False)
+                        return state
                     handler.fill_form(resume_pdf_path)
                     success = handler.submit_application()
 
@@ -242,7 +478,9 @@ class ApplicationStateMachine:
                     return state
 
             apply_locator = ApplyButtonLocator(page, logger)
-            if apply_locator.click_apply_button():
+            clicked, page = apply_locator.click_apply_button()
+            if clicked:
+                state["page"] = page
                 form_filler = FormFiller(page, resume, logger)
                 fill_results = form_filler.fill_all(resume_pdf_path)
 
@@ -364,6 +602,11 @@ class ApplicationStateMachine:
         resume_pdf_path: str,
         locator_repo: LearnedLocatorRepository,
         llm_client: LLMClient | None = None,
+        agent_memory: AgentMemory | None = None,
+        job_id: int | None = None,
+        job_repo: JobRepository | None = None,
+        job_board_url: str | None = None,
+        infer_location_country: bool = True,
     ) -> ApplicationStatus:
         """Run the state machine."""
         initial_state: ApplicationGraphState = {
@@ -376,8 +619,13 @@ class ApplicationStateMachine:
             "locator_repo": locator_repo,
             "llm_client": llm_client,
             "phase_results": {},
-            "current_phase": ExecutionPhase.LLM,
+            "current_phase": ExecutionPhase.RULES,
             "final_status": ApplicationStatus.PENDING,
+            "job_id": job_id,
+            "job_repo": job_repo,
+            "agent_memory": agent_memory,
+            "job_board_url": job_board_url,
+            "infer_location_country": infer_location_country,
         }
 
         final_state = self.graph.invoke(initial_state)

@@ -2,6 +2,7 @@
 
 import asyncio
 import random
+import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -23,7 +24,7 @@ from jobcli.human.interface import HumanInterface
 from jobcli.llm.ax_tree_extractor import AccessibilityTreeExtractor
 from jobcli.llm.client import LLMClient
 from jobcli.core.tool_executor import ToolExecutor
-from jobcli.locators.apply_button import ApplyButtonLocator
+from jobcli.locators.apply_button import ApplyButtonLocator, adopt_application_page_after_action
 from jobcli.locators.ats.handler_factory import ATSHandlerFactory
 from jobcli.locators.ats_detector import ATSDetector
 from jobcli.locators.form_fields import FormFiller
@@ -96,13 +97,13 @@ class AsyncApplicationEngine:
 
     async def _rate_limit(self) -> None:
         """Apply rate limiting between requests."""
-        current_time = asyncio.get_event_loop().time()
+        current_time = time.monotonic()
         time_since_last = current_time - self._last_request_time
 
         if time_since_last < self._min_delay:
             await asyncio.sleep(self._min_delay - time_since_last)
 
-        self._last_request_time = asyncio.get_event_loop().time()
+        self._last_request_time = time.monotonic()
 
     @asynccontextmanager
     async def _get_browser_page(self):
@@ -223,7 +224,7 @@ class AsyncApplicationEngine:
 
         for attempt in range(self.config.max_retries):
             try:
-                success = await self._phase_rules(page, ats_type, logger)
+                success, page = await self._phase_rules(page, ats_type, logger)
                 if success:
                     logger.log_phase_end(ExecutionPhase.RULES, True)
                     if progress_tracker:
@@ -266,9 +267,9 @@ class AsyncApplicationEngine:
         if progress_tracker:
             progress_tracker.start_phase(ExecutionPhase.HUMAN)
 
+        success = False
         try:
-            # Note: Human interface is synchronous, kept as-is
-            success = self._phase_human(page, ats_type, logger, locator_repo)
+            success = await self._phase_human(page, ats_type, logger, locator_repo)
             status = ApplicationStatus.SUBMITTED if success else ApplicationStatus.FAILED
         except Exception as e:
             logger.error(f"Phase 3 failed: {e}")
@@ -282,29 +283,41 @@ class AsyncApplicationEngine:
 
     async def _phase_rules(
         self, page: Page, ats_type: ATSType, logger: JobLogger
-    ) -> bool:
-        """Phase 1: Rule-based locators."""
-        # Try ATS-specific handler
+    ) -> tuple[bool, Page]:
+        """Phase 1: Rule-based locators; may switch ``page`` to a new tab after Apply."""
         handler = ATSHandlerFactory.create_handler(ats_type, page, self.resume, logger)
 
         if handler:
             logger.info(f"Using {ats_type.value} handler", phase=ExecutionPhase.RULES)
 
+            n0 = len(page.context.pages)
+            u0 = page.url
+            pids0 = {id(p) for p in page.context.pages}
             if handler.find_apply_button():
+                page = adopt_application_page_after_action(
+                    page,
+                    page_count_before=n0,
+                    url_before=u0,
+                    logger=logger,
+                    page_ids_before=pids0,
+                )
                 await asyncio.sleep(random.uniform(1, 2))
+                handler = ATSHandlerFactory.create_handler(ats_type, page, self.resume, logger)
+                if not handler:
+                    return False, page
                 handler.fill_form(self.config.resume_pdf_path)
                 await asyncio.sleep(random.uniform(1, 2))
-                return handler.submit_application()
+                return handler.submit_application(), page
 
-        # Fallback to generic locators
         apply_locator = ApplyButtonLocator(page, logger)
-        if apply_locator.click_apply_button():
+        ok, page = apply_locator.click_apply_button()
+        if ok:
             await asyncio.sleep(random.uniform(1, 2))
             form_filler = FormFiller(page, self.resume, logger)
             form_filler.fill_all(self.config.resume_pdf_path)
-            return True
+            return True, page
 
-        return False
+        return False, page
 
     async def _phase_llm(self, page: Page, logger: JobLogger) -> bool:
         """Phase 2: LLM reasoning."""
@@ -331,18 +344,19 @@ class AsyncApplicationEngine:
         if llm_response and not llm_response.requires_human:
             executor = ToolExecutor(page, logger)
             results = executor.execute_actions(llm_response)
-            return all(results.values())
+            bool_results = {k: v for k, v in results.items() if isinstance(v, bool)}
+            return bool(bool_results) and all(bool_results.values())
 
         return False
 
-    def _phase_human(
+    async def _phase_human(
         self,
         page: Page,
         ats_type: ATSType,
         logger: JobLogger,
         locator_repo: LearnedLocatorRepository,
     ) -> bool:
-        """Phase 3: Human-in-the-loop (synchronous)."""
+        """Phase 3: Human-in-the-loop."""
         human = HumanInterface(page, locator_repo, logger)
 
         success, selector, selector_type = human.request_help(
@@ -351,11 +365,11 @@ class AsyncApplicationEngine:
         )
 
         if success and selector:
-            # Click and fill
+            # Click the located apply button
             if selector_type and selector_type.value == "css":
-                page.click(selector)
+                await page.click(selector)
             elif selector_type and selector_type.value == "xpath":
-                page.click(f"xpath={selector}")
+                await page.click(f"xpath={selector}")
 
             form_filler = FormFiller(page, self.resume, logger)
             form_filler.fill_all(self.config.resume_pdf_path)
@@ -368,11 +382,11 @@ class AsyncApplicationEngine:
                     "button:has-text('Submit')",
                 ]
 
-                for selector in submit_selectors:
+                for sel in submit_selectors:
                     try:
-                        page.click(selector)
+                        await page.click(sel)
                         return True
-                    except:
+                    except Exception:
                         continue
 
         return False

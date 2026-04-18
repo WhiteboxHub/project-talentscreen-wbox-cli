@@ -121,6 +121,9 @@ class PhenomHandler(GenericATSHandler):
     def submit_application(self) -> bool:
         for selector in [
             "button:has-text('Submit Application')",
+            "button:has-text('Submit application')",
+            "button:has-text('Send application')",
+            "button:has-text('Finish')",
             "button[type='submit']",
             "input[type='submit']",
         ]:

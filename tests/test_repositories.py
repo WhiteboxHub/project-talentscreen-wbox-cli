@@ -34,6 +34,20 @@ def test_job_create(test_database):
         assert created.status == ApplicationStatus.PENDING
 
 
+def test_job_create_strips_tracking_query_params(test_database):
+    """URLs are normalized on insert (dedupe-friendly)."""
+    job = Job(
+        url="https://example.com/job/2?utm_source=linkedin",
+        title="Tracked",
+    )
+    with get_db_session(test_database) as session:
+        repo = JobRepository(session)
+        created = repo.create(job)
+    assert "utm_" not in created.url
+    assert created.url == "https://example.com/job/2"
+    assert created.title == job.title
+
+
 def test_job_get_by_id(test_database):
     """Test retrieving job by ID."""
     job = Job(url="https://example.com/job/1")

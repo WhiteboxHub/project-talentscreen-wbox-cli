@@ -97,6 +97,16 @@ async def test_concurrent_job_processing(test_config, test_resume, test_database
 @pytest.mark.asyncio
 async def test_browser_cleanup(test_config, test_resume, test_database):
     """Test that browser resources are cleaned up."""
+    try:
+        from playwright.async_api import async_playwright
+
+        async with async_playwright() as p:
+            await p.chromium.launch(headless=True)
+    except Exception:
+        import pytest
+
+        pytest.skip("Playwright browsers not installed (run: playwright install chromium)")
+
     engine = AsyncApplicationEngine(test_config, test_resume, test_database)
 
     # Use browser page context manager

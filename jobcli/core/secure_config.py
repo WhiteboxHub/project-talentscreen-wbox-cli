@@ -26,21 +26,26 @@ class SecureConfig(BaseModel):
 
     # Job board credentials (prefer env vars)
     job_board_username: Optional[str] = Field(
-        default_factory=lambda: os.getenv("JOBCLI_USERNAME")
+        default_factory=lambda: os.getenv("JOBCLI_USERNAME"),
+        repr=False,
     )
     job_board_password: Optional[str] = Field(
-        default_factory=lambda: os.getenv("JOBCLI_PASSWORD")
+        default_factory=lambda: os.getenv("JOBCLI_PASSWORD"),
+        repr=False,
     )
 
     # LLM API keys (prefer env vars)
     openai_api_key: Optional[str] = Field(
-        default_factory=lambda: os.getenv("OPENAI_API_KEY")
+        default_factory=lambda: os.getenv("OPENAI_API_KEY"),
+        repr=False,
     )
     anthropic_api_key: Optional[str] = Field(
-        default_factory=lambda: os.getenv("ANTHROPIC_API_KEY")
+        default_factory=lambda: os.getenv("ANTHROPIC_API_KEY"),
+        repr=False,
     )
     gemini_api_key: Optional[str] = Field(
-        default_factory=lambda: os.getenv("GEMINI_API_KEY")
+        default_factory=lambda: os.getenv("GEMINI_API_KEY"),
+        repr=False,
     )
 
     # Application settings

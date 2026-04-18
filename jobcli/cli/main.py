@@ -358,14 +358,12 @@ def apply(
     jobs = []
 
     if url:
-        # Single job
-        existing = job_repo.get_by_url(url)
-        if existing:
-            job = existing
-        else:
-            job = job_repo.get_by_url(url)
+        # Single job (URL normalized on create/lookup for deduplication)
+        job = job_repo.get_by_url(url)
         if not job:
-            job = job_repo.create(Job(title="Manual Entry", url=url, status=ApplicationStatus.PENDING))
+            job = job_repo.create(
+                Job(title="Manual Entry", url=url, status=ApplicationStatus.PENDING)
+            )
         
         # In case the user is retrying a previously failed/completed job, reset it to pending
         if job.status != ApplicationStatus.PENDING:
@@ -535,6 +533,20 @@ def scan(
             
     session.close()
     console.print(f"\n[bold green]Scan complete. Added {total_added} new jobs to database.[/bold green]")
+
+
+@app.command("doctor")
+def doctor_cmd(
+    wbox_smoke: bool = typer.Option(
+        False,
+        "--wbox-smoke",
+        help="Load Whitebox login page with Playwright (needs JOBCLI_USERNAME / JOBCLI_PASSWORD)",
+    ),
+) -> None:
+    """Validate Playwright, SQLite, config, and resume JSON."""
+    from jobcli.cli.doctor import run_doctor
+
+    raise typer.Exit(run_doctor(console, wbox_smoke=wbox_smoke))
 
 
 if __name__ == "__main__":

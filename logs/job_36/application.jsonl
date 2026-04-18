@@ -1,0 +1,174 @@
+{"job_id": 36, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-16T17:22:22.297843Z"}
+{"job_id": 36, "phase": "rules", "event": "Dismissed cookie consent via: button:has-text('Accept')", "level": "info", "timestamp": "2026-04-16T17:22:25.888220Z"}
+{"job_id": 36, "phase": "rules", "screenshot_path": "logs/job_36/screenshots/001_20260416_102226_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T17:22:27.633841Z"}
+{"job_id": 36, "phase": "rules", "url": "https://jobs.bms.com/careers/job/137480115167?...=", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-16T17:22:27.635693Z"}
+{"job_id": 36, "phase": "rules", "signature": "px-", "event": "Detected phenom_people from DOM", "level": "info", "timestamp": "2026-04-16T17:22:28.142072Z"}
+{"job_id": 36, "phase": "rules", "event": "Detected ATS: phenom_people", "level": "info", "timestamp": "2026-04-16T17:22:28.171226Z"}
+{"job_id": 36, "phase": "rules", "event": "Using phenom_people handler", "level": "info", "timestamp": "2026-04-16T17:22:28.173313Z"}
+{"job_id": 36, "phase": "rules", "event": "Looking for Phenom apply button", "level": "info", "timestamp": "2026-04-16T17:22:28.174165Z"}
+{"job_id": 36, "phase": "rules", "selector": "button:has-text('Apply Now')", "event": "Clicked Phenom apply button", "level": "info", "timestamp": "2026-04-16T17:22:30.045226Z"}
+{"job_id": 36, "phase": "rules", "screenshot_path": "logs/job_36/screenshots/002_20260416_102249_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T17:22:50.289513Z"}
+{"job_id": 36, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-16T17:22:52.301868Z"}
+{"job_id": 36, "phase": "llm", "dom_path": "logs/job_36/dom_snapshots/001_20260416_102254_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T17:22:54.729652Z"}
+{"job_id": 36, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T17:22:55.147298Z"}
+{"job_id": 36, "phase": "llm", "tokens": 7313, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T17:22:58.073869Z"}
+{"job_id": 36, "phase": "llm", "action_count": 1, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T17:22:58.075095Z"}
+{"job_id": 36, "phase": "llm", "selector": "Apply Now", "field_label": "Apply Now Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T17:22:58.075475Z"}
+{"job_id": 36, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T17:22:58.648013Z"}
+{"job_id": 36, "phase": "llm", "event": "LLM page 1 result: 1/1 actions succeeded", "level": "info", "timestamp": "2026-04-16T17:22:58.649096Z"}
+{"job_id": 36, "phase": "llm", "event": "Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", "level": "info", "timestamp": "2026-04-16T17:23:11.923264Z"}
+{"job_id": 36, "phase": "llm", "event": "New form page detected (page 2). Running LLM again.", "level": "info", "timestamp": "2026-04-16T17:23:14.020701Z"}
+{"job_id": 36, "phase": "llm", "dom_path": "logs/job_36/dom_snapshots/002_20260416_102314_ax_tree_page_2.json", "name": "ax_tree_page_2", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T17:23:14.026099Z"}
+{"job_id": 36, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T17:23:14.042180Z"}
+{"job_id": 36, "phase": "llm", "tokens": 7433, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T17:23:29.323639Z"}
+{"job_id": 36, "phase": "llm", "action_count": 2, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T17:23:29.326151Z"}
+{"job_id": 36, "phase": "llm", "selector": "Apply Now", "field_label": "Apply Now Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T17:23:29.326874Z"}
+{"job_id": 36, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T17:23:29.789323Z"}
+{"job_id": 36, "phase": "llm", "selector": "Upload your resume", "field_label": "Resume Upload", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-16T17:23:29.789698Z"}
+{"job_id": 36, "phase": "llm", "event": "LLM page 2 result: 2/2 actions succeeded", "level": "info", "timestamp": "2026-04-16T17:23:29.993239Z"}
+{"job_id": 36, "phase": "rules", "event": "Dismissed cookie consent via: button:has-text('Agree')", "level": "info", "timestamp": "2026-04-16T17:23:41.119706Z"}
+{"job_id": 36, "phase": "llm", "event": "Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", "level": "info", "timestamp": "2026-04-16T17:23:43.780247Z"}
+{"job_id": 36, "phase": "llm", "event": "New form page detected (page 3). Running LLM again.", "level": "info", "timestamp": "2026-04-16T17:23:45.838885Z"}
+{"job_id": 36, "phase": "llm", "dom_path": "logs/job_36/dom_snapshots/003_20260416_102345_ax_tree_page_3.json", "name": "ax_tree_page_3", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T17:23:45.841795Z"}
+{"job_id": 36, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T17:23:45.847460Z"}
+{"job_id": 36, "phase": "llm", "tokens": 4641, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T17:23:50.172761Z"}
+{"job_id": 36, "phase": "llm", "action_count": 0, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T17:23:50.175412Z"}
+{"job_id": 36, "phase": "llm", "event": "LLM page 3 result: 0/0 actions succeeded", "level": "info", "timestamp": "2026-04-16T17:23:50.177495Z"}
+{"job_id": 36, "phase": "llm", "event": "Phase 2 failed: Locator.count: Target page, context or browser has been closed", "level": "error", "timestamp": "2026-04-16T17:23:50.204708Z"}
+{"job_id": 36, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-16T17:23:50.205279Z"}
+{"job_id": 36, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-16T17:23:50.206768Z"}
+{"job_id": 36, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-16T17:23:50.207042Z"}
+{"job_id": 36, "phase": "rules", "event": "Filling Phenom form", "level": "info", "timestamp": "2026-04-16T17:23:50.207360Z"}
+{"job_id": 36, "phase": "rules", "event": "Phenom fill failed 'first_name': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.211810Z"}
+{"job_id": 36, "phase": "rules", "event": "Phenom fill failed 'last_name': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.217839Z"}
+{"job_id": 36, "phase": "rules", "event": "Phenom fill failed 'email': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.221965Z"}
+{"job_id": 36, "phase": "rules", "event": "Phenom fill failed 'phone': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.225188Z"}
+{"job_id": 36, "phase": "rules", "event": "Phenom fill failed 'linkedin': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.227952Z"}
+{"job_id": 36, "phase": "rules", "event": "Phenom resume upload failed: Page.set_input_files: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.230826Z"}
+{"job_id": 36, "phase": "rules", "event": "Generic fallback triggered for 6 failed field(s): ['first_name', 'last_name', 'email', 'phone', 'linkedin', 'resume']", "level": "info", "timestamp": "2026-04-16T17:23:50.231479Z"}
+{"job_id": 36, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.237943Z"}
+{"job_id": 36, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T17:23:50.238442Z"}
+{"job_id": 36, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.265506Z"}
+{"job_id": 36, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T17:23:50.265866Z"}
+{"job_id": 36, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.294126Z"}
+{"job_id": 36, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T17:23:50.294578Z"}
+{"job_id": 36, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.315933Z"}
+{"job_id": 36, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T17:23:50.316324Z"}
+{"job_id": 36, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.347518Z"}
+{"job_id": 36, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T17:23:50.348535Z"}
+{"job_id": 36, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.381483Z"}
+{"job_id": 36, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T17:23:50.381865Z"}
+{"job_id": 36, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.397960Z"}
+{"job_id": 36, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T17:23:50.398319Z"}
+{"job_id": 36, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.406413Z"}
+{"job_id": 36, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T17:23:50.406770Z"}
+{"job_id": 36, "phase": "rules", "results": {"first_name": false, "last_name": false, "email": false, "phone": false, "linkedin": false, "resume": false}, "event": "Phenom form fill complete", "level": "info", "timestamp": "2026-04-16T17:23:50.421351Z"}
+{"job_id": 36, "phase": "rules", "event": "Phenom submit failed 'button:has-text('Submit Application')': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.428313Z"}
+{"job_id": 36, "phase": "rules", "event": "Phenom submit failed 'button[type='submit']': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.431483Z"}
+{"job_id": 36, "phase": "rules", "event": "Phenom submit failed 'input[type='submit']': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.434420Z"}
+{"job_id": 36, "phase": "rules", "event": "Submitting application (generic)", "level": "info", "timestamp": "2026-04-16T17:23:50.434781Z"}
+{"job_id": 36, "phase": "rules", "event": "Submit selector failed 'button[type='submit']': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.440131Z"}
+{"job_id": 36, "phase": "rules", "event": "Submit selector failed 'input[type='submit']': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.445218Z"}
+{"job_id": 36, "phase": "rules", "event": "Submit selector failed 'button:has-text('Submit Application')': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.452280Z"}
+{"job_id": 36, "phase": "rules", "event": "Submit selector failed 'button:has-text('Submit application')': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.455770Z"}
+{"job_id": 36, "phase": "rules", "event": "Submit selector failed 'button:has-text('Submit')': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.458360Z"}
+{"job_id": 36, "phase": "rules", "event": "Submit selector failed 'button:has-text('Apply')': Page.query_selector: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-16T17:23:50.460774Z"}
+{"job_id": 36, "phase": "rules", "event": "No submit button found (generic)", "level": "warning", "timestamp": "2026-04-16T17:23:50.461095Z"}
+{"job_id": 36, "phase": "rules", "success": false, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-16T17:23:50.461287Z"}
+{"job_id": 36, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-16T17:23:50.461509Z"}
+{"job_id": 36, "phase": null, "event": "Application failed", "level": "error", "timestamp": "2026-04-16T17:24:21.116064Z"}
+{"job_id": 36, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-16T17:24:25.481434Z"}
+{"job_id": 36, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-16T17:29:58.148853Z"}
+{"job_id": 36, "phase": "rules", "event": "Dismissed cookie consent via: button:has-text('Accept')", "level": "info", "timestamp": "2026-04-16T17:30:00.825981Z"}
+{"job_id": 36, "phase": "rules", "screenshot_path": "logs/job_36/screenshots/001_20260416_103001_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T17:30:02.584906Z"}
+{"job_id": 36, "phase": "rules", "url": "https://jobs.bms.com/careers/job/137480115167?...=", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-16T17:30:02.588165Z"}
+{"job_id": 36, "phase": "rules", "signature": "px-", "event": "Detected phenom_people from DOM", "level": "info", "timestamp": "2026-04-16T17:30:02.838945Z"}
+{"job_id": 36, "phase": "rules", "event": "Detected ATS: phenom_people", "level": "info", "timestamp": "2026-04-16T17:30:02.858618Z"}
+{"job_id": 36, "phase": "rules", "event": "Using phenom_people handler", "level": "info", "timestamp": "2026-04-16T17:30:02.859036Z"}
+{"job_id": 36, "phase": "rules", "event": "Looking for Phenom apply button", "level": "info", "timestamp": "2026-04-16T17:30:02.859237Z"}
+{"job_id": 36, "phase": "rules", "selector": "button:has-text('Apply Now')", "event": "Clicked Phenom apply button", "level": "info", "timestamp": "2026-04-16T17:30:03.090947Z"}
+{"job_id": 36, "phase": "rules", "screenshot_path": "logs/job_36/screenshots/002_20260416_103028_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T17:30:29.067782Z"}
+{"job_id": 36, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-16T17:30:31.084097Z"}
+{"job_id": 36, "phase": "llm", "dom_path": "logs/job_36/dom_snapshots/001_20260416_103033_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T17:30:33.282264Z"}
+{"job_id": 36, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T17:30:33.441093Z"}
+{"job_id": 36, "phase": "llm", "tokens": 7333, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T17:30:36.155169Z"}
+{"job_id": 36, "phase": "llm", "action_count": 1, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T17:30:36.159062Z"}
+{"job_id": 36, "phase": "llm", "event": "LLM page 1 result: 0/0 actions succeeded", "level": "info", "timestamp": "2026-04-16T17:30:58.177456Z"}
+{"job_id": 36, "phase": "llm", "success": false, "event": "Application submission could not be verified.", "level": "error", "timestamp": "2026-04-16T17:30:58.308617Z"}
+{"job_id": 36, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-16T17:30:58.310747Z"}
+{"job_id": 36, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-16T17:30:58.311241Z"}
+{"job_id": 36, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-16T17:30:58.311468Z"}
+{"job_id": 36, "phase": "rules", "event": "Filling Phenom form", "level": "info", "timestamp": "2026-04-16T17:30:58.311686Z"}
+{"job_id": 36, "phase": "rules", "results": {"resume": true}, "event": "Phenom form fill complete", "level": "info", "timestamp": "2026-04-16T17:30:58.401304Z"}
+{"job_id": 36, "phase": "rules", "event": "Submitting application (generic)", "level": "info", "timestamp": "2026-04-16T17:30:58.476999Z"}
+{"job_id": 36, "phase": "rules", "event": "Submit selector failed 'button:has-text('Apply')': ElementHandle.click: Timeout 3000ms exceeded.\nCall log:\n  - attempting click action\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div oktext=\"OK\" role=\"dialog\" aria-modal=\"true\" locale=\"[object Object]\" aria-labelledby=\"dialog-label-1\" class=\"base-dialog-module_dialog-backdrop__GZb9L privacyAgreementDialogWrapper-KEU3j base-dialog-module_visible__K3tTj\">\u2026</div> intercepts pointer events\n    - retrying click action\n    - waiting 20ms\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div oktext=\"OK\" role=\"dialog\" aria-modal=\"true\" locale=\"[object Object]\" aria-labelledby=\"dialog-label-1\" class=\"base-dialog-module_dialog-backdrop__GZb9L privacyAgreementDialogWrapper-KEU3j base-dialog-module_visible__K3tTj\">\u2026</div> intercepts pointer events\n    - retrying click action\n      - waiting 100ms\n    5 \u00d7 waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div oktext=\"OK\" role=\"dialog\" aria-modal=\"true\" locale=\"[object Object]\" aria-labelledby=\"dialog-label-1\" class=\"base-dialog-module_dialog-backdrop__GZb9L privacyAgreementDialogWrapper-KEU3j base-dialog-module_visible__K3tTj\">\u2026</div> intercepts pointer events\n    - retrying click action\n      - waiting 500ms\n", "level": "warning", "timestamp": "2026-04-16T17:31:01.574030Z"}
+{"job_id": 36, "phase": "rules", "event": "No submit button found (generic)", "level": "warning", "timestamp": "2026-04-16T17:31:01.581198Z"}
+{"job_id": 36, "phase": "rules", "success": false, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-16T17:31:01.581838Z"}
+{"job_id": 36, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-16T17:31:01.582597Z"}
+{"job_id": 36, "phase": null, "event": "Application failed", "level": "error", "timestamp": "2026-04-16T17:34:39.173401Z"}
+{"job_id": 36, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-16T17:35:44.279849Z"}
+{"job_id": 36, "phase": "rules", "selector": "button:has-text('Accept')", "event": "Dismissed blocking overlay", "level": "info", "timestamp": "2026-04-16T17:35:48.055250Z"}
+{"job_id": 36, "phase": "rules", "screenshot_path": "logs/job_36/screenshots/001_20260416_103548_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T17:35:50.748194Z"}
+{"job_id": 36, "phase": "rules", "url": "https://jobs.bms.com/careers/job/137480115167?...=", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-16T17:35:50.752149Z"}
+{"job_id": 36, "phase": "rules", "signature": "px-", "event": "Detected phenom_people from DOM", "level": "info", "timestamp": "2026-04-16T17:35:51.093651Z"}
+{"job_id": 36, "phase": "rules", "event": "Detected ATS: phenom_people", "level": "info", "timestamp": "2026-04-16T17:35:51.117098Z"}
+{"job_id": 36, "phase": "rules", "event": "Using phenom_people handler", "level": "info", "timestamp": "2026-04-16T17:35:51.118377Z"}
+{"job_id": 36, "phase": "rules", "event": "Looking for Phenom apply button", "level": "info", "timestamp": "2026-04-16T17:35:51.119118Z"}
+{"job_id": 36, "phase": "rules", "selector": "button:has-text('Apply Now')", "event": "Clicked Phenom apply button", "level": "info", "timestamp": "2026-04-16T17:35:51.575077Z"}
+{"job_id": 36, "phase": "rules", "screenshot_path": "logs/job_36/screenshots/002_20260416_103616_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T17:36:17.145806Z"}
+{"job_id": 36, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-16T17:36:19.162660Z"}
+{"job_id": 36, "phase": "llm", "dom_path": "logs/job_36/dom_snapshots/001_20260416_103621_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T17:36:21.357808Z"}
+{"job_id": 36, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T17:36:21.592735Z"}
+{"job_id": 36, "phase": "llm", "tokens": 7329, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T17:36:25.388679Z"}
+{"job_id": 36, "phase": "llm", "action_count": 1, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T17:36:25.393274Z"}
+{"job_id": 36, "phase": "llm", "event": "LLM page 1 result: 0/0 actions succeeded", "level": "info", "timestamp": "2026-04-16T17:36:47.402814Z"}
+{"job_id": 36, "phase": "llm", "success": false, "event": "Application submission could not be verified.", "level": "error", "timestamp": "2026-04-16T17:36:47.531912Z"}
+{"job_id": 36, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-16T17:36:47.536027Z"}
+{"job_id": 36, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-16T17:36:47.536422Z"}
+{"job_id": 36, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-16T17:36:47.536652Z"}
+{"job_id": 36, "phase": "rules", "event": "Filling Phenom form", "level": "info", "timestamp": "2026-04-16T17:36:47.536908Z"}
+{"job_id": 36, "phase": "rules", "results": {"resume": true}, "event": "Phenom form fill complete", "level": "info", "timestamp": "2026-04-16T17:36:47.607280Z"}
+{"job_id": 36, "phase": "rules", "event": "Submitting application (generic)", "level": "info", "timestamp": "2026-04-16T17:36:47.615251Z"}
+{"job_id": 36, "phase": "rules", "pattern": "^I Agree$", "event": "Dismissed modal dialog via primary button", "level": "info", "timestamp": "2026-04-16T17:36:48.110478Z"}
+{"job_id": 36, "phase": "rules", "pattern": "^I Agree$", "event": "Dismissed modal dialog via primary button", "level": "info", "timestamp": "2026-04-16T17:36:48.565938Z"}
+{"job_id": 36, "phase": "rules", "pattern": "^I Agree$", "event": "Dismissed modal dialog via primary button", "level": "info", "timestamp": "2026-04-16T17:36:49.005822Z"}
+{"job_id": 36, "phase": "rules", "pattern": "^I Agree$", "event": "Dismissed modal dialog via primary button", "level": "info", "timestamp": "2026-04-16T17:36:49.446460Z"}
+{"job_id": 36, "phase": "rules", "selector": "button:has-text('Apply')", "event": "Clicked submit button (generic)", "level": "info", "timestamp": "2026-04-16T17:36:51.508602Z"}
+{"job_id": 36, "phase": "rules", "success": true, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-16T17:36:51.514727Z"}
+{"job_id": 36, "phase": null, "event": "Application completed successfully", "level": "info", "timestamp": "2026-04-16T17:36:51.515079Z"}
+{"job_id": 36, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-16T17:44:59.079076Z"}
+{"job_id": 36, "phase": "rules", "selector": "button:has-text('Accept')", "event": "Dismissed blocking overlay", "level": "info", "timestamp": "2026-04-16T17:45:02.793079Z"}
+{"job_id": 36, "phase": "rules", "screenshot_path": "logs/job_36/screenshots/001_20260416_104502_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T17:45:04.141893Z"}
+{"job_id": 36, "phase": "rules", "url": "https://jobs.bms.com/careers/job/137480115167?...=", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-16T17:45:04.142782Z"}
+{"job_id": 36, "phase": "rules", "signature": "px-", "event": "Detected phenom_people from DOM", "level": "info", "timestamp": "2026-04-16T17:45:04.364085Z"}
+{"job_id": 36, "phase": "rules", "event": "Detected ATS: phenom_people", "level": "info", "timestamp": "2026-04-16T17:45:04.376833Z"}
+{"job_id": 36, "phase": "rules", "event": "Using phenom_people handler", "level": "info", "timestamp": "2026-04-16T17:45:04.377384Z"}
+{"job_id": 36, "phase": "rules", "event": "Looking for Phenom apply button", "level": "info", "timestamp": "2026-04-16T17:45:04.378030Z"}
+{"job_id": 36, "phase": "rules", "selector": "button:has-text('Apply Now')", "event": "Clicked Phenom apply button", "level": "info", "timestamp": "2026-04-16T17:45:05.131472Z"}
+{"job_id": 36, "phase": "rules", "screenshot_path": "logs/job_36/screenshots/002_20260416_104528_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T17:45:29.346034Z"}
+{"job_id": 36, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-16T17:45:31.362955Z"}
+{"job_id": 36, "phase": "llm", "dom_path": "logs/job_36/dom_snapshots/001_20260416_104533_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T17:45:33.565549Z"}
+{"job_id": 36, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T17:45:33.680658Z"}
+{"job_id": 36, "phase": "llm", "tokens": 7317, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T17:45:37.518444Z"}
+{"job_id": 36, "phase": "llm", "action_count": 1, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T17:45:37.519782Z"}
+{"job_id": 36, "phase": "llm", "event": "LLM page 1 result: 0/0 actions succeeded", "level": "info", "timestamp": "2026-04-16T17:45:59.718700Z"}
+{"job_id": 36, "phase": "llm", "success": false, "event": "Application submission could not be verified.", "level": "error", "timestamp": "2026-04-16T17:45:59.840379Z"}
+{"job_id": 36, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-16T17:45:59.843174Z"}
+{"job_id": 36, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-16T17:45:59.843455Z"}
+{"job_id": 36, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-16T17:45:59.843653Z"}
+{"job_id": 36, "phase": "rules", "event": "Filling Phenom form", "level": "info", "timestamp": "2026-04-16T17:45:59.843860Z"}
+{"job_id": 36, "phase": "rules", "results": {"resume": true}, "event": "Phenom form fill complete", "level": "info", "timestamp": "2026-04-16T17:45:59.915884Z"}
+{"job_id": 36, "phase": "rules", "event": "Handling step 1 (generic)", "level": "info", "timestamp": "2026-04-16T17:46:02.599731Z"}
+{"job_id": 36, "phase": "rules", "pattern": "^I Agree$", "event": "Dismissed modal dialog via primary button", "level": "info", "timestamp": "2026-04-16T17:46:03.142529Z"}
+{"job_id": 36, "phase": "rules", "pattern": "^I Agree$", "event": "Dismissed modal dialog via primary button", "level": "info", "timestamp": "2026-04-16T17:46:03.613028Z"}
+{"job_id": 36, "phase": "rules", "pattern": "^I Agree$", "event": "Dismissed modal dialog via primary button", "level": "info", "timestamp": "2026-04-16T17:46:04.062016Z"}
+{"job_id": 36, "phase": "rules", "pattern": "^I Agree$", "event": "Dismissed modal dialog via primary button", "level": "info", "timestamp": "2026-04-16T17:46:04.494279Z"}
+{"job_id": 36, "phase": "rules", "event": "Submitting application (generic)", "level": "info", "timestamp": "2026-04-16T17:46:04.585215Z"}
+{"job_id": 36, "phase": "rules", "pattern": "^I Agree$", "event": "Dismissed modal dialog via primary button", "level": "info", "timestamp": "2026-04-16T17:46:05.014944Z"}
+{"job_id": 36, "phase": "rules", "pattern": "^I Agree$", "event": "Dismissed modal dialog via primary button", "level": "info", "timestamp": "2026-04-16T17:46:05.460039Z"}
+{"job_id": 36, "phase": "rules", "pattern": "^I Agree$", "event": "Dismissed modal dialog via primary button", "level": "info", "timestamp": "2026-04-16T17:46:05.900329Z"}
+{"job_id": 36, "phase": "rules", "pattern": "^I Agree$", "event": "Dismissed modal dialog via primary button", "level": "info", "timestamp": "2026-04-16T17:46:06.340715Z"}
+{"job_id": 36, "phase": "rules", "event": "No submit button found (generic)", "level": "warning", "timestamp": "2026-04-16T17:46:06.893336Z"}
+{"job_id": 36, "phase": "rules", "success": false, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-16T17:46:06.893804Z"}
+{"job_id": 36, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-16T17:46:06.894082Z"}
+{"job_id": 36, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-16T17:46:44.351272Z"}

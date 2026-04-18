@@ -9,11 +9,16 @@ Handles cases like:
 import re
 from typing import Any, Optional
 
+from jobcli.core.derived_profile import derived_country_for_resume, derived_pronouns_for_resume
+from jobcli.core.resume_normalize import normalize_linkedin_url
 from jobcli.core.schemas import ResumeData
 
 
 class SynonymResolver:
     """Resolve field labels AND dropdown values to handle ATS site variations."""
+
+    def __init__(self, infer_location_country: bool = True) -> None:
+        self.infer_location_country = infer_location_country
 
     # ── Label Synonyms: map form labels → our internal keys ───────────────
     # Key = our internal field key
@@ -59,9 +64,16 @@ class SynonymResolver:
 
         # Demographics
         "gender": [
-            "gender", "sex", "pronouns", "gender identity",
+            "gender", "sex", "gender identity",
             "what is your gender", "gender (optional)",
-            "what are your pronouns",
+        ],
+        "pronouns": [
+            "pronouns", "preferred pronouns", "what are your pronouns",
+            "your pronouns", "pronoun",
+        ],
+        "sexual_orientation": [
+            "sexual orientation", "orientation", "lgbtq",
+            "are you a member of the lgbtq",
         ],
         "race": [
             "race", "ethnicity", "race/ethnicity",
@@ -137,16 +149,45 @@ class SynonymResolver:
 
         # Experience
         "experience_company": [
-            "company", "employer", "organization", "company name",
+            "company",
+            "employer",
+            "organization",
+            "company name",
+            "employer name",
+            "name of employer",
+            "organization name",
         ],
         "experience_title": [
-            "title", "job title", "role", "position", "position title",
+            "title",
+            "job title",
+            "role",
+            "position",
+            "position title",
+            "job role",
+            "your title",
+            "position/role",
         ],
         "experience_start": [
-            "start date", "from",
+            "start date",
+            "from",
+            "start",
+            "date started",
         ],
         "experience_end": [
-            "end date", "to",
+            "end date",
+            "to",
+            "end",
+            "date ended",
+        ],
+        "experience_description": [
+            "description",
+            "job description",
+            "responsibilities",
+            "duties",
+            "summary",
+            "roles and responsibilities",
+            "role description",
+            "work performed",
         ],
 
         # Resume/CV upload
@@ -250,6 +291,18 @@ class SynonymResolver:
         "prefer not to answer race": [
             "decline to self-identify", "prefer not to say",
             "prefer not to answer", "i don't wish to answer",
+        ],
+
+        # Sexual orientation (form wording → canonical bucket keys)
+        "heterosexual": [
+            "heterosexual", "straight", "hetero", "hetro sexual", "hetro",
+        ],
+        "straight": [
+            "straight", "heterosexual", "hetero", "hetro",
+        ],
+        "prefer not to answer orientation": [
+            "decline to self-identify", "prefer not to say",
+            "prefer not to answer orientation",
         ],
 
         # Remote preference
@@ -359,7 +412,7 @@ class SynonymResolver:
             "full_name": lambda r: f"{r.personal.first_name} {r.personal.last_name}",
             "email": lambda r: r.personal.email,
             "phone": lambda r: r.personal.phone,
-            "linkedin": lambda r: r.personal.linkedin,
+            "linkedin": lambda r: normalize_linkedin_url(r.personal.linkedin),
             "github": lambda r: r.personal.github,
             "portfolio": lambda r: r.personal.portfolio or r.personal.website,
             "address": lambda r: r.personal.address,
@@ -374,6 +427,10 @@ class SynonymResolver:
             ),
             # Demographics
             "gender": lambda r: r.demographics.gender if r.demographics else None,
+            "pronouns": lambda r: SynonymResolver._pronouns_value(r),
+            "sexual_orientation": lambda r: (
+                r.demographics.sexual_orientation if r.demographics else None
+            ),
             "race": lambda r: r.demographics.race if r.demographics else None,
             "veteran": lambda r: (
                 r.demographics.veteran_status if r.demographics else None
@@ -417,6 +474,11 @@ class SynonymResolver:
             "experience_end": lambda r: (
                 r.experience[0].end_date if r.experience else None
             ),
+            "experience_description": lambda r: (
+                (r.experience[0].description or "").strip()[:8000]
+                if r.experience and r.experience[0].description
+                else None
+            ),
             # Resume path (handled separately by upload action)
             "resume_upload": lambda r: None,
             "cover_letter": lambda r: None,
@@ -428,9 +490,24 @@ class SynonymResolver:
 
         try:
             value = getter(resume)
+            if field_key == "country" and (
+                value is None or not str(value).strip()
+            ) and self.infer_location_country:
+                inferred = derived_country_for_resume(resume)
+                if inferred:
+                    value = inferred
             return str(value) if value is not None else None
         except (IndexError, AttributeError):
             return None
+
+    @staticmethod
+    def _pronouns_value(resume: ResumeData) -> Optional[str]:
+        demo = resume.demographics
+        explicit = demo.pronouns if demo else None
+        if explicit and str(explicit).strip():
+            return explicit
+        derived = derived_pronouns_for_resume(resume)
+        return derived
 
 
 class ResumeAutoDetector:

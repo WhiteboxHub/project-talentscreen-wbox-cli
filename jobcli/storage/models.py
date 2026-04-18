@@ -3,18 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import (
-    JSON,
-    Boolean,
-    Column,
-    DateTime,
-    Enum,
-    Float,
-    Integer,
-    String,
-    Text,
-    create_engine,
-)
+from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, Float, Integer, String, Text, create_engine, inspect, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -30,6 +19,7 @@ class JobModel(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     url = Column(String(1000), nullable=False, unique=True)
+    resolved_url = Column(String(1000), nullable=True)
     title = Column(String(500))
     company = Column(String(500))
     location = Column(String(500))
@@ -166,6 +156,22 @@ class Database:
     def create_tables(self) -> None:
         """Create all tables."""
         Base.metadata.create_all(bind=self.engine)
+        self._migrate_sqlite_schema()
+
+    def _migrate_sqlite_schema(self) -> None:
+        """Lightweight additive migrations for SQLite (no Alembic)."""
+        if not str(self.engine.url).startswith("sqlite"):
+            return
+        try:
+            inspector = inspect(self.engine)
+            if "jobs" not in inspector.get_table_names():
+                return
+            cols = {c["name"] for c in inspector.get_columns("jobs")}
+            if "resolved_url" not in cols:
+                with self.engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE jobs ADD COLUMN resolved_url VARCHAR(1000)"))
+        except Exception:
+            pass
 
     def get_session(self) -> Session:
         """Get a new database session."""

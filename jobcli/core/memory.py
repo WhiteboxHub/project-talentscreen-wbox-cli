@@ -17,13 +17,19 @@ from jobcli.storage.repositories import (
 class AgentMemory:
     """3-layer persistent memory for the agent (Framework, Field, Interaction)."""
 
-    def __init__(self, database_session: Session) -> None:
+    def __init__(
+        self,
+        database_session: Session,
+        infer_location_country: bool = True,
+    ) -> None:
         """Initialize memory with database session."""
         self.session = database_session
         self.field_answer_repo = FieldAnswerRepository(self.session)
         self.interaction_repo = InteractionLogRepository(self.session)
         self.dropdown_strategy_repo = DropdownStrategyRepository(self.session)
-        self.synonym_resolver = SynonymResolver()
+        self.synonym_resolver = SynonymResolver(
+            infer_location_country=infer_location_country,
+        )
 
     def save_field_answer(
         self, field_label: str, value: str, ats_type: ATSType, success: bool = True, source: str = "human"
@@ -187,3 +193,46 @@ class AgentMemory:
             return "No previous memory available for this ATS type."
 
         return "\n".join(context_lines)
+
+    def build_resolved_fields_context(
+        self, resume: ResumeData, ats_type: ATSType
+    ) -> str:
+        """Human-readable lines: canonical field → value (resume first, then DB memory)."""
+        hints = [
+            "First Name",
+            "Last Name",
+            "Email",
+            "Phone",
+            "City",
+            "State",
+            "Country",
+            "Location",
+            "Gender",
+            "Pronouns",
+            "Sexual orientation",
+            "Race",
+            "Ethnicity",
+            "Veteran",
+            "Disability",
+            "authorized to work",
+            "sponsorship",
+            "visa",
+        ]
+        lines: list[str] = [
+            "## Resolved field values (priority: resume JSON → saved memory per ATS → universal memory):"
+        ]
+        any_line = False
+        for hint in hints:
+            val, src = self.get_best_answer(hint, ats_type, resume)
+            if val:
+                any_line = True
+                lines.append(f"- **{hint}**: {val} _(source: {src})_")
+        if not any_line:
+            return "## Resolved field values: _(none yet — use User Information JSON in prompt)_"
+        return "\n".join(lines)
+
+    def combined_llm_memory_block(self, resume: ResumeData, ats_type: ATSType) -> str:
+        """Full block for LLM prompts: structured resolutions + learned field answers."""
+        resolved = self.build_resolved_fields_context(resume, ats_type)
+        learned = self.build_llm_context(ats_type)
+        return f"{resolved}\n\n{learned}"

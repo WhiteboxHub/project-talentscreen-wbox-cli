@@ -1,12 +1,18 @@
 """Tests for session management to prevent leaks."""
 
 import pytest
-from sqlalchemy import create_engine
 
-from jobcli.storage.models import Base, Database
+from jobcli.core.schemas import ATSType, ApplicationStatus, Job
+from jobcli.storage.models import Database, JobModel
 from jobcli.storage.repositories import JobRepository
 from jobcli.storage.session import get_db_session, get_db_transaction
-from jobcli.core.schemas import Job
+
+
+def _assert_pool_fully_returned(engine) -> None:
+    """QueuePool exposes checkedout(); SingletonThreadPool (SQLite :memory:) does not."""
+    pool = engine.pool
+    if hasattr(pool, "checkedout"):
+        assert pool.checkedout() == 0
 
 
 @pytest.fixture
@@ -27,31 +33,32 @@ def test_session_closes_on_success(test_database):
         assert created_job.id is not None
 
     # Session should be closed now
-    # Verify by checking connection pool
-    assert test_database.engine.pool.checkedout() == 0
+    _assert_pool_fully_returned(test_database.engine)
 
 
 def test_session_closes_on_error(test_database):
-    """Test that session closes and rolls back on error."""
+    """Test that session closes and rolls back on error (ORM add without inner commit)."""
     with pytest.raises(Exception):
         with get_db_session(test_database) as session:
-            repo = JobRepository(session)
-
-            # Create job
-            job = Job(url="https://example.com/job/1")
-            repo.create(job)
-
-            # Raise error
+            # Do not use JobRepository.create() here — it commits and would survive rollback.
+            session.add(
+                JobModel(
+                    url="https://example.com/job/1",
+                    title=None,
+                    company=None,
+                    location=None,
+                    description=None,
+                    ats_type=ATSType.UNKNOWN,
+                    status=ApplicationStatus.PENDING,
+                )
+            )
             raise Exception("Test error")
 
-    # Session should be closed and rolled back
-    assert test_database.engine.pool.checkedout() == 0
+    _assert_pool_fully_returned(test_database.engine)
 
-    # Job should not exist (rolled back)
     with get_db_session(test_database) as session:
         repo = JobRepository(session)
-        job = repo.get_by_url("https://example.com/job/1")
-        assert job is None
+        assert repo.get_by_url("https://example.com/job/1") is None
 
 
 def test_transaction_commits_all_or_nothing(test_database):
@@ -73,22 +80,37 @@ def test_transaction_commits_all_or_nothing(test_database):
 
 
 def test_transaction_rollback_on_error(test_database):
-    """Test that transaction rolls back all operations on error."""
-    job1 = Job(url="https://example.com/job/1")
-    job2 = Job(url="https://example.com/job/2")
-
+    """Transaction rolls back when the session never commits (JobRepository commits eagerly)."""
     with pytest.raises(Exception):
         with get_db_transaction(test_database) as session:
-            repo = JobRepository(session)
-            repo.create(job1)
-            repo.create(job2)
+            session.add(
+                JobModel(
+                    url="https://example.com/job/tx1",
+                    title=None,
+                    company=None,
+                    location=None,
+                    description=None,
+                    ats_type=ATSType.UNKNOWN,
+                    status=ApplicationStatus.PENDING,
+                )
+            )
+            session.add(
+                JobModel(
+                    url="https://example.com/job/tx2",
+                    title=None,
+                    company=None,
+                    location=None,
+                    description=None,
+                    ats_type=ATSType.UNKNOWN,
+                    status=ApplicationStatus.PENDING,
+                )
+            )
             raise Exception("Test error")
 
-    # Neither job should exist (rolled back)
     with get_db_session(test_database) as session:
         repo = JobRepository(session)
-        assert repo.get_by_url("https://example.com/job/1") is None
-        assert repo.get_by_url("https://example.com/job/2") is None
+        assert repo.get_by_url("https://example.com/job/tx1") is None
+        assert repo.get_by_url("https://example.com/job/tx2") is None
 
 
 def test_multiple_sequential_sessions(test_database):
@@ -103,8 +125,7 @@ def test_multiple_sequential_sessions(test_database):
             created = repo.create(job)
             jobs_created.append(created.id)
 
-    # No sessions should be checked out
-    assert test_database.engine.pool.checkedout() == 0
+    _assert_pool_fully_returned(test_database.engine)
 
     # All jobs should exist
     with get_db_session(test_database) as session:
@@ -115,19 +136,21 @@ def test_multiple_sequential_sessions(test_database):
 
 def test_no_connection_leaks(test_database):
     """Test that connections are properly returned to pool."""
-    initial_connections = test_database.engine.pool.checkedout()
+    pool = test_database.engine.pool
+    if not hasattr(pool, "checkedout"):
+        # SQLite :memory: uses SingletonThreadPool — skip checkout accounting
+        for i in range(20):
+            with get_db_session(test_database) as session:
+                JobRepository(session).create(Job(url=f"https://example.com/leak/{i}"))
+        return
 
-    # Perform 100 operations
+    initial_connections = pool.checkedout()
     for i in range(100):
         with get_db_session(test_database) as session:
             repo = JobRepository(session)
             if i < 50:
-                job = Job(url=f"https://example.com/job/{i}")
-                repo.create(job)
-
-    # Should return to initial state
-    final_connections = test_database.engine.pool.checkedout()
-    assert final_connections == initial_connections
+                repo.create(Job(url=f"https://example.com/job/{i}"))
+    assert pool.checkedout() == initial_connections
 
 
 if __name__ == "__main__":

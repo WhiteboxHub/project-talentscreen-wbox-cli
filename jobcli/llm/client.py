@@ -9,6 +9,8 @@ import google.generativeai as genai
 import openai
 from pydantic import ValidationError
 
+from jobcli.core.derived_profile import derived_country_for_resume, derived_pronouns_for_resume
+from jobcli.core.resume_normalize import normalize_linkedin_url
 from jobcli.core.logger import JobLogger
 from jobcli.core.schemas import DOMSnapshot, ExecutionPhase, LLMActionResponse, ResumeData
 from jobcli.llm.ax_tree_extractor import AccessibilityTree
@@ -26,6 +28,11 @@ Your task: Parse the provided Accessibility Snapshot and output the correct sequ
 3. SEQUENCE: Fill ALL visible form fields first -> upload resume -> click submit/continue.
 4. FILL ACTION: Use action="fill" for text inputs, action="click" for buttons/links.
 5. MATCH FIELDS: Map user info to form fields by their accessible name (e.g. textbox "First Name" -> first_name).
+
+# Work authorization and legal (mandatory)
+- Use ONLY the structured User Information JSON and "Agent Memory Context" for work eligibility, visa/sponsorship, and right-to-work answers. Never contradict those sources.
+- If the JSON says the user is not authorized or requires sponsorship, reflect that exactly in the form.
+- Do not invent employers, degrees, or government statuses not present in the provided data.
 
 # Output Schema (Strict JSON)
 {
@@ -104,7 +111,8 @@ Your task: Parse the provided Accessibility Snapshot and output the correct sequ
                 if validated:
                     return validated
 
-                self.logger.warning(f"LLM validation failed on attempt {attempt + 1}", phase=ExecutionPhase.LLM)
+                if self.logger:
+                    self.logger.warning(f"LLM validation failed on attempt {attempt + 1}", phase=ExecutionPhase.LLM)
 
             except Exception as e:
                 if self.logger:
@@ -310,7 +318,8 @@ Remember to return valid JSON matching the schema in the system prompt.
                 if validated:
                     return validated
 
-                self.logger.warning(f"LLM validation failed on attempt {attempt + 1}", phase=ExecutionPhase.LLM)
+                if self.logger:
+                    self.logger.warning(f"LLM validation failed on attempt {attempt + 1}", phase=ExecutionPhase.LLM)
 
             except Exception as e:
                 if self.logger:
@@ -340,9 +349,25 @@ Remember to return valid JSON matching the schema in the system prompt.
         # Get the raw aria snapshot text if available — best for LLM reasoning
         raw_aria = getattr(ax_tree, "_raw_aria", "")
 
-        # Build user info summary using full resume
-        user_info = json.loads(resume.model_dump_json())
-        
+        # Build user info summary using full resume (+ explicit deterministic hints)
+        user_info: dict[str, Any] = json.loads(resume.model_dump_json())
+        personal = user_info.get("personal")
+        if isinstance(personal, dict):
+            li = normalize_linkedin_url(personal.get("linkedin"))
+            personal["linkedin"] = li
+        derived: dict[str, str] = {}
+        if not (resume.personal.country and str(resume.personal.country).strip()):
+            dc = derived_country_for_resume(resume)
+            if dc:
+                derived["inferred_country_from_location"] = dc
+        demo = resume.demographics
+        if not (demo and demo.pronouns and str(demo.pronouns).strip()):
+            pr = derived_pronouns_for_resume(resume)
+            if pr:
+                derived["inferred_pronouns_from_gender"] = pr
+        if derived:
+            user_info["_derived_hints"] = derived
+
         if resume_pdf_path:
             user_info["resume_file_path"] = resume_pdf_path
 
@@ -367,6 +392,18 @@ Remember to return valid JSON matching the schema in the system prompt.
             "11. **REQUIRED FIELDS**: Look for 'required' or asterisk (*) markers. You MUST fill ALL required fields.\n"
             "12. After filling all fields, click 'Next', 'Continue', 'Submit', or 'Apply' button if visible.\n"
             "13. Complete all fields and submit the application if on the final page.\n"
+            "14. **EDUCATION / SCHOOLING**: Map from `education` array in User Information. "
+            "Use `education[0]` for the first Schooling block (school, degree, field_of_study, gpa, graduation_year). "
+            "For 'From' / 'To' year fields, use graduation_year or reasonable dates from the JSON; never leave degree, field of study, and GPA empty when JSON has values.\n"
+            "15. **WORK EXPERIENCE**: Map from `experience[]` (company, title, start_date, end_date, description). "
+            "If the section is empty, click **Add** first, then fill from `experience[0]`; use **Add** again for `experience[1]`, etc. "
+            "Put `experience[n].description` into responsibilities / role description / summary fields when shown.\n"
+            "16. **LinkedIn (optional)**: Only fill if `personal.linkedin` is a full `https://www.linkedin.com/in/.../` URL in User Information. "
+            "If it is null or missing, leave the LinkedIn field **blank** — do not type placeholders or partial handles (ATS validation will fail).\n"
+            "17. **COMMON SENSE DEDUCTION**: Act as a human proxy using aggressive common sense. "
+            "If a form asks for a value that is NOT explicitly in the exact form in the JSON, intelligently deduce it. "
+            "For example: derive Country (United States) from City (San Francisco); logically deduce pronouns (he/him) & sexual orientation (heterosexual/straight) from Gender (Male); "
+            "map raw boolean work auth JSON to exact phrase requirements ('Yes, I am authorized', 'No, I do not need sponsorship'). Do NOT be overly strict.\n"
         )
         if task == "fill_form_fields_only":
             instructions = "IMPORTANT - Target the Form directly. DO NOT CLICK APPLY.\n" + instructions

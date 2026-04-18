@@ -9,9 +9,9 @@ Ported intelligence from genericStrategy.js (Chrome extension):
 """
 
 import re
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
-from playwright.sync_api import Page
+from playwright.sync_api import Frame, Page
 
 from jobcli.core.logger import JobLogger
 from jobcli.core.schemas import ExecutionPhase, ResumeData
@@ -325,8 +325,8 @@ class FormFieldLocator:
     CONFIDENCE_THRESHOLD = 70   # minimum score to auto-fill
     MIN_PROMPT_CONFIDENCE = 52  # below this: don't even try
 
-    def __init__(self, page: Page, logger: Optional[JobLogger] = None) -> None:
-        """Initialize field locator."""
+    def __init__(self, page: Union[Page, Frame], logger: Optional[JobLogger] = None) -> None:
+        """Initialize field locator (top-level page or embedded apply iframe)."""
         self.page = page
         self.logger = logger
         self._scorer = FieldConfidenceScorer()
@@ -651,9 +651,9 @@ class FormFiller:
     }
 
     def __init__(
-        self, page: Page, resume: ResumeData, logger: Optional[JobLogger] = None
+        self, page: Union[Page, Frame], resume: ResumeData, logger: Optional[JobLogger] = None
     ) -> None:
-        """Initialize form filler."""
+        """Initialize form filler (page or Workday candidate iframe)."""
         self.page = page
         self.resume = resume
         self.logger = logger

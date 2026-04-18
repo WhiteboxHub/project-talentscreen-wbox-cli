@@ -9,6 +9,7 @@ from playwright.sync_api import Page, sync_playwright
 
 from jobcli.core.logger import JobLogger, global_logger
 from jobcli.core.schemas import (
+    ActionType,
     ApplicationState,
     ApplicationStatus,
     ATSType,
@@ -21,7 +22,8 @@ from jobcli.core.tool_executor import ToolExecutor
 from jobcli.human.interface import HumanInterface
 from jobcli.llm.client import LLMClient
 from jobcli.llm.ax_tree_extractor import AccessibilityTreeExtractor
-from jobcli.locators.apply_button import ApplyButtonLocator
+from jobcli.core.anti_bot import AntiBotManager
+from jobcli.locators.apply_button import ApplyButtonLocator, adopt_application_page_after_action
 from jobcli.locators.ats.handler_factory import ATSHandlerFactory
 from jobcli.locators.ats_detector import ATSDetector
 from jobcli.locators.form_fields import FormFiller
@@ -31,7 +33,29 @@ from jobcli.storage.repositories import (
     JobRepository,
     LearnedLocatorRepository,
 )
-from jobcli.core.anti_bot import AntiBotManager
+
+
+def _strip_apply_clicks_when_filling_only(llm_response, task: str) -> None:
+    """Avoid LLM repeatedly clicking Apply on the JD tab after we already adopted to ATS."""
+    if task not in ("fill_form_fields_only", "fill_empty_fields_only"):
+        return
+    if not llm_response or not llm_response.actions:
+        return
+
+    pat = re.compile(r"(?i)(apply\s*now|submit\s*application|\bapply\b)")
+
+    def looks_like_apply(a) -> bool:
+        blob = " ".join(
+            str(x)
+            for x in (a.field_label, a.selector, a.value)
+            if x
+        )
+        return bool(pat.search(blob))
+
+    llm_response.actions = [
+        a for a in llm_response.actions
+        if not (a.action == ActionType.CLICK and looks_like_apply(a))
+    ]
 
 
 class ApplicationEngine:
@@ -110,8 +134,8 @@ class ApplicationEngine:
 
                 logger.info(f"Detected ATS: {ats_type.value}", phase=ExecutionPhase.RULES)
 
-                # Phase 1: Try rule-based approach
-                apply_clicked = self._click_apply_button(page, state, logger, ats_type)
+                # Phase 1: Try rule-based approach (may switch to new tab / external ATS)
+                apply_clicked, page = self._click_apply_button(page, state, logger, ats_type)
                 success = False
 
                 if apply_clicked:
@@ -198,21 +222,74 @@ class ApplicationEngine:
         state: ApplicationState,
         logger: JobLogger,
         ats_type: ATSType,
-    ) -> bool:
-        """Phase 1a: Click the apply button only."""
+    ) -> tuple[bool, Page]:
+        """Phase 1a: Click Apply and follow new tab / popup / redirect when needed."""
         try:
+            context = page.context
+            page_ids_before = {id(p) for p in context.pages}
+            page_count_before = len(context.pages)
+            url_before = page.url
+
             handler = ATSHandlerFactory.create_handler(ats_type, page, self.resume, logger)
             if handler:
                 logger.info(f"Using {ats_type.value} handler", phase=ExecutionPhase.RULES)
-                return handler.find_apply_button()
+                ok = handler.find_apply_button()
+                page = adopt_application_page_after_action(
+                    page,
+                    page_count_before=page_count_before,
+                    url_before=url_before,
+                    logger=logger,
+                    page_ids_before=page_ids_before,
+                )
+                if ok:
+                    self._random_delay()
+                    logger.capture_screenshot(page, "after_apply_click", ExecutionPhase.RULES)
+                return ok, page
 
             apply_locator = ApplyButtonLocator(page, logger)
-            if apply_locator.click_apply_button():
+            ok, page = apply_locator.click_apply_button()
+            if ok:
                 self._random_delay()
                 logger.capture_screenshot(page, "after_apply_click", ExecutionPhase.RULES)
-                return True
+            return ok, page
         except Exception as e:
             logger.error(f"Apply click failed: {e}", phase=ExecutionPhase.RULES)
+        return False, page
+
+    def _submission_looks_plausible(self, page: Page) -> bool:
+        """Heuristic: URL or page text suggests a completed application (not just a click)."""
+        try:
+            url = (page.url or "").lower()
+        except Exception:
+            return False
+        if any(
+            kw in url
+            for kw in (
+                "thank",
+                "success",
+                "confirm",
+                "submitted",
+                "complete",
+                "received",
+                "acknowledgement",
+            )
+        ):
+            return True
+        try:
+            blob = (page.content() or "")[:120000].lower()
+        except Exception:
+            return False
+
+        for pat in (
+            r"thank you for applying",
+            r"application received",
+            r"successfully submitted",
+            r"submission.{0,40}complete",
+            r"we.{0,60}received your application",
+            r"your application has been submitted",
+        ):
+            if re.search(pat, blob, re.I):
+                return True
         return False
 
     def _fill_form_rules(
@@ -232,7 +309,26 @@ class ApplicationEngine:
             handler = ATSHandlerFactory.create_handler(ats_type, page, self.resume, logger)
             if handler:
                 handler.fill_form(resume_path)
-                success = handler.submit_application()
+                self._random_delay()
+                # Same as legacy _phase_rules: wizard flows need Next/Continue before final submit.
+                max_steps = 5
+                for step in range(max_steps):
+                    state.step_count = step + 1
+                    if not handler.handle_multi_step(state):
+                        break
+                    self._random_delay()
+                clicked = handler.submit_application()
+                if not clicked:
+                    logger.log_phase_end(ExecutionPhase.RULES, False)
+                    return False
+                page.wait_for_timeout(2500)
+                success = self._submission_looks_plausible(page)
+                if not success:
+                    logger.warning(
+                        "A submit-style control was clicked, but no thank-you / confirmation "
+                        "signal was detected. The application may still be in progress.",
+                        phase=ExecutionPhase.RULES,
+                    )
                 logger.log_phase_end(ExecutionPhase.RULES, success)
                 return success
 
@@ -330,6 +426,10 @@ class ApplicationEngine:
             # Wait a moment for any dynamic content to fully render
             page.wait_for_timeout(1500)
 
+            # Dismiss any overlays / cookie banners BEFORE scanning — a blocking popup
+            # makes aria_snapshot() return a mostly-empty tree and blocks all clicks.
+            self._dismiss_cookie_consent(page, logger)
+
             # Scroll to form area if apply was already clicked
             if apply_was_clicked:
                 try:
@@ -352,12 +452,16 @@ class ApplicationEngine:
             # Initialize LLM client
             llm_client = LLMClient(provider, api_key, logger)
 
-            from jobcli.core.schemas import ActionType
             from jobcli.core.memory import AgentMemory
             from jobcli.core.synonym_resolver import SynonymResolver
 
-            memory = AgentMemory(self.session)
-            synonym_resolver = SynonymResolver()
+            memory = AgentMemory(
+                self.session,
+                infer_location_country=self.config.infer_location_country,
+            )
+            synonym_resolver = SynonymResolver(
+                infer_location_country=self.config.infer_location_country,
+            )
 
             # Tell LLM whether apply was already clicked
             task = "fill_form_fields_only" if apply_was_clicked else "find_apply_button_and_fill_form"
@@ -448,17 +552,54 @@ class ApplicationEngine:
                         llm_response.actions = [a for a in llm_response.actions if a.action != ActionType.UPLOAD]
                 
                 # Execute actions
+                _strip_apply_clicks_when_filling_only(llm_response, task)
                 llm_response.actions = [a for a in llm_response.actions if a.action != ActionType.ASK]
+                ctx = page.context
+                pids0 = {id(p) for p in ctx.pages}
+                url0 = page.url
+                n0 = len(ctx.pages)
                 results = executor.execute_actions(llm_response)
-                
+                adopted = adopt_application_page_after_action(
+                    page,
+                    page_count_before=n0,
+                    url_before=url0,
+                    page_ids_before=pids0,
+                    logger=logger,
+                )
+                if id(adopted) != id(page):
+                    page = adopted
+                    executor = ToolExecutor(
+                        page,
+                        logger,
+                        memory=memory,
+                        synonym_resolver=synonym_resolver,
+                        ats_type=state.detected_ats,
+                    )
+                    extractor = AccessibilityTreeExtractor(page)
+                    logger.info(
+                        "LLM actions opened a new tab; continuing automation there.",
+                        phase=ExecutionPhase.LLM,
+                        url_preview=(page.url or "")[:200],
+                    )
+                    # Dismiss overlays on the newly opened tab before any interaction
+                    self._dismiss_cookie_consent(page, logger)
+                else:
+                    page = adopted
+
                 # If we uploaded something, wait and then force the loop to continue (re-scan)
                 if has_upload:
                     wait_time = 5000 if "ashby" in page.url.lower() else 3500
                     logger.info(f"Upload executed. Waiting {wait_time/1000}s for site-native autofill...", phase=ExecutionPhase.LLM)
                     page.wait_for_timeout(wait_time)
+                    ax_tree = extractor.extract()
                     # We skip the rest of the loop and go to re-scan
                     continue
- 
+
+                # Refresh AX tree so the NEXT loop iteration sees the current filled state.
+                # Without this, the LLM re-reads a stale snapshot and tries to re-fill
+                # already-filled fields (or worse, targets the wrong elements).
+                ax_tree = extractor.extract()
+
                 # Save successful actions automatically
                 for action in llm_response.actions:
                     if action.field_label and action.value:
@@ -469,6 +610,9 @@ class ApplicationEngine:
                         memory.save_field_answer(label, action.value, state.detected_ats, success=True, source="llm")
                         if executor.last_successful_strategy:
                             memory.save_interaction(state.detected_ats, action.action.value, label, action.selector, executor.last_successful_strategy, True, page.url)
+                        # Mark that the LLM made real progress so the rules fallback won't
+                        # overwrite correctly-filled fields.
+                        state.step_count += 1
 
                 # --- Terminal fallback for failed actions ---
                 failed_actions = executor.get_failed_actions()
@@ -645,6 +789,14 @@ class ApplicationEngine:
                 
                 # New page detected — run another LLM cycle
                 page_count += 1
+                
+                if url_changed:
+                    logger.info(f"Agent successfully traversed to a new Node. URL changed from {ax_tree.url} to {new_ax_tree.url}.", phase=ExecutionPhase.LLM)
+                    # Dismiss overlays that may have appeared on the newly loaded page
+                    self._dismiss_cookie_consent(page, logger)
+                else:
+                    logger.info("Agent detected dynamic DOM updates or new fields on the same page.", phase=ExecutionPhase.LLM)
+
                 ax_tree = new_ax_tree
                 
                 # Verify if we are missing common bottom-of-page fields
@@ -658,7 +810,7 @@ class ApplicationEngine:
                     page.wait_for_timeout(2000)
                     ax_tree = extractor.extract()
                 
-                logger.info(f"New form page detected (page {page_count}). Running LLM again.", phase=ExecutionPhase.LLM)
+                logger.info(f"New form page/node detected (page {page_count}). Running LLM again with updated context.", phase=ExecutionPhase.LLM)
                 
                 logger.save_structured_dom(ax_tree.model_dump(), f"ax_tree_page_{page_count}", ExecutionPhase.LLM)
                 
@@ -674,9 +826,40 @@ class ApplicationEngine:
                 if not llm_response:
                     logger.warning("LLM returned no response for new page.", phase=ExecutionPhase.LLM)
                     break
-                
+
+                _strip_apply_clicks_when_filling_only(llm_response, "fill_empty_fields_only")
                 llm_response.actions = [a for a in llm_response.actions if a.action != ActionType.ASK]
+                ctx2 = page.context
+                pids1 = {id(p) for p in ctx2.pages}
+                url1 = page.url
+                n1 = len(ctx2.pages)
                 results = executor.execute_actions(llm_response)
+                adopted2 = adopt_application_page_after_action(
+                    page,
+                    page_count_before=n1,
+                    url_before=url1,
+                    page_ids_before=pids1,
+                    logger=logger,
+                )
+                if id(adopted2) != id(page):
+                    page = adopted2
+                    executor = ToolExecutor(
+                        page,
+                        logger,
+                        memory=memory,
+                        synonym_resolver=synonym_resolver,
+                        ats_type=state.detected_ats,
+                    )
+                    extractor = AccessibilityTreeExtractor(page)
+                    logger.info(
+                        "LLM actions opened a new tab (multi-page loop); continuing there.",
+                        phase=ExecutionPhase.LLM,
+                        url_preview=(page.url or "")[:200],
+                    )
+                    # Dismiss overlays on the newly opened tab
+                    self._dismiss_cookie_consent(page, logger)
+                else:
+                    page = adopted2
 
             # Final verification of mandatory fields before finishing Phase 2
             required_missing = []
@@ -700,8 +883,18 @@ class ApplicationEngine:
             successes = sum(1 for v in results.values() if v)
             
             # If we didn't fill many things, it might be a failure unless we are on a confirmation page
-            is_confirmation = any(term in page.url.lower() for term in ["success", "confirmation", "thank-you"]) or \
-                             page.locator("text=Thank you, Thank-you, application submitted, application is received").count() > 0
+            _confirmation_texts = [
+                "Thank you",
+                "application submitted",
+                "application is received",
+                "successfully submitted",
+                "application received",
+            ]
+            _text_confirmed = any(
+                page.locator(f"text={t}").count() > 0
+                for t in _confirmation_texts
+            )
+            is_confirmation = any(term in page.url.lower() for term in ["success", "confirmation", "thank-you"]) or _text_confirmed
             
             success = is_confirmation or (total > 0 and (successes / total) >= 0.5)
             
@@ -843,48 +1036,10 @@ class ApplicationEngine:
             return False
 
     def _dismiss_cookie_consent(self, page: Page, logger: JobLogger) -> None:
-        """Dismiss cookie consent modals that block interaction."""
-        cookie_selectors = [
-            # Oracle Cloud / generic patterns
-            "button:has-text('Accept')",
-            "button:has-text('Accept All')",
-            "button:has-text('Accept Cookies')",
-            "button:has-text('I Accept')",
-            "button:has-text('OK')",
-            "button:has-text('Got it')",
-            "button:has-text('Agree')",
-            "button:has-text('Close')",
-            # CSS class patterns
-            ".cookie-consent__action button",
-            "[data-testid='cookie-accept']",
-            ".onetrust-accept-btn-handler",
-            "#onetrust-accept-btn-handler",
-            ".cc-btn.cc-dismiss",
-        ]
+        """Dismiss cookie banners, privacy dialogs, and other overlays that block clicks."""
+        from jobcli.locators.overlay_dismiss import dismiss_blocking_overlays
 
-        for selector in cookie_selectors:
-            try:
-                loc = page.locator(selector).first
-                if loc.is_visible(timeout=1000):
-                    loc.click(timeout=2000, force=True)
-                    logger.info(
-                        f"Dismissed cookie consent via: {selector}",
-                        phase=ExecutionPhase.RULES,
-                    )
-                    page.wait_for_timeout(500)
-                    return
-            except Exception:
-                continue
-
-        # Fallback: try to close any modal overlay by pressing Escape
-        try:
-            modal = page.locator(".cookie-consent-modal, [class*='cookie-consent']").first
-            if modal.is_visible(timeout=500):
-                page.keyboard.press("Escape")
-                page.wait_for_timeout(500)
-                logger.info("Dismissed cookie modal via Escape key", phase=ExecutionPhase.RULES)
-        except Exception:
-            pass
+        dismiss_blocking_overlays(page, logger, phase=ExecutionPhase.RULES)
 
     def _random_delay(self) -> None:
         """Add random delay using the anti-bot manager."""

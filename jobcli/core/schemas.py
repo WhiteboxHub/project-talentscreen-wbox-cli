@@ -133,6 +133,7 @@ class Demographics(BaseModel):
 
     gender: Optional[str] = None
     pronouns: Optional[str] = None
+    sexual_orientation: Optional[str] = None
     race: Optional[str] = None
     veteran_status: Optional[str] = None
     disability_status: Optional[str] = None
@@ -179,6 +180,7 @@ class Job(BaseModel):
 
     id: Optional[int] = None
     url: str
+    resolved_url: Optional[str] = None
     title: Optional[str] = None
     company: Optional[str] = None
     location: Optional[str] = None
@@ -301,3 +303,6 @@ class Config(BaseModel):
     resume_json_path: Optional[str] = None
     log_directory: str = Field(default="logs")
     database_path: str = Field(default="~/.jobcli/jobcli.db")
+
+    # Derived profile: infer country from US city/state when country blank
+    infer_location_country: bool = True

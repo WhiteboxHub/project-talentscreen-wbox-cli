@@ -14,6 +14,7 @@ from typing import Any, Optional
 from jobcli.core.schemas import ApplicationState, ExecutionPhase, ResumeData
 from jobcli.locators.ats.base_handler import BaseATSHandler
 from jobcli.locators.form_fields import FormFiller
+from jobcli.locators.overlay_dismiss import dismiss_blocking_overlays
 
 
 class GenericATSHandler(BaseATSHandler):
@@ -91,6 +92,8 @@ class GenericATSHandler(BaseATSHandler):
                 "Looking for apply button (generic)", phase=ExecutionPhase.RULES
             )
 
+        dismiss_blocking_overlays(self.page, self.logger, phase=ExecutionPhase.RULES)
+
         selectors = [
             "button:has-text('Apply Now')",
             "a:has-text('Apply Now')",
@@ -109,25 +112,32 @@ class GenericATSHandler(BaseATSHandler):
         ]
 
         for selector in selectors:
-            try:
-                element = self.page.query_selector(selector)
-                if element and element.is_visible():
-                    element.click(timeout=3000)
-                    if self.logger:
-                        self.logger.info(
-                            "Clicked apply button (generic)",
-                            phase=ExecutionPhase.RULES,
-                            selector=selector,
+            for attempt in range(2):
+                try:
+                    element = self.page.query_selector(selector)
+                    if element and element.is_visible():
+                        element.click(timeout=3000)
+                        if self.logger:
+                            self.logger.info(
+                                "Clicked apply button (generic)",
+                                phase=ExecutionPhase.RULES,
+                                selector=selector,
+                            )
+                        self.wait_for_page_load()
+                        return True
+                except Exception as e:
+                    err = str(e).lower()
+                    if attempt == 0 and "intercepts pointer" in err:
+                        dismiss_blocking_overlays(
+                            self.page, self.logger, phase=ExecutionPhase.RULES
                         )
-                    self.wait_for_page_load()
-                    return True
-            except Exception as e:
-                if self.logger:
-                    self.logger.warning(
-                        f"Apply button selector failed '{selector}': {e}",
-                        phase=ExecutionPhase.RULES,
-                    )
-                continue
+                        continue
+                    if self.logger:
+                        self.logger.warning(
+                            f"Apply button selector failed '{selector}': {e}",
+                            phase=ExecutionPhase.RULES,
+                        )
+                    break
 
         if self.logger:
             self.logger.warning(
@@ -166,6 +176,8 @@ class GenericATSHandler(BaseATSHandler):
                 "Filling form (generic handler)", phase=ExecutionPhase.RULES
             )
 
+        dismiss_blocking_overlays(self.page, self.logger, phase=ExecutionPhase.RULES)
+
         filler = self._get_filler()
         results = filler.fill_all(resume_path)
 
@@ -185,35 +197,49 @@ class GenericATSHandler(BaseATSHandler):
                 "Submitting application (generic)", phase=ExecutionPhase.RULES
             )
 
+        dismiss_blocking_overlays(self.page, self.logger, phase=ExecutionPhase.RULES)
+
+        # Prefer explicit final-submit copy before generic type=submit (often "Next" in wizards).
         submit_selectors = [
-            "button[type='submit']",
-            "input[type='submit']",
             "button:has-text('Submit Application')",
             "button:has-text('Submit application')",
+            "button:has-text('Submit my application')",
+            "button:has-text('Send application')",
+            "button:has-text('Finish')",
+            "button:has-text('Complete application')",
+            "button[type='submit']",
+            "input[type='submit']",
             "button:has-text('Submit')",
             "button:has-text('Apply')",
         ]
 
         for selector in submit_selectors:
-            try:
-                element = self.page.query_selector(selector)
-                if element and element.is_visible() and not element.is_disabled():
-                    element.click(timeout=3000)
-                    if self.logger:
-                        self.logger.info(
-                            "Clicked submit button (generic)",
-                            phase=ExecutionPhase.RULES,
-                            selector=selector,
+            for attempt in range(2):
+                try:
+                    element = self.page.query_selector(selector)
+                    if element and element.is_visible() and not element.is_disabled():
+                        element.click(timeout=3000)
+                        if self.logger:
+                            self.logger.info(
+                                "Clicked submit button (generic)",
+                                phase=ExecutionPhase.RULES,
+                                selector=selector,
+                            )
+                        self.wait_for_page_load()
+                        return True
+                except Exception as e:
+                    err = str(e).lower()
+                    if attempt == 0 and "intercepts pointer" in err:
+                        dismiss_blocking_overlays(
+                            self.page, self.logger, phase=ExecutionPhase.RULES
                         )
-                    self.wait_for_page_load()
-                    return True
-            except Exception as e:
-                if self.logger:
-                    self.logger.warning(
-                        f"Submit selector failed '{selector}': {e}",
-                        phase=ExecutionPhase.RULES,
-                    )
-                continue
+                        continue
+                    if self.logger:
+                        self.logger.warning(
+                            f"Submit selector failed '{selector}': {e}",
+                            phase=ExecutionPhase.RULES,
+                        )
+                    break
 
         if self.logger:
             self.logger.warning(
@@ -265,6 +291,8 @@ class GenericATSHandler(BaseATSHandler):
                 continue
 
         # Try to advance multi-step form
+        dismiss_blocking_overlays(self.page, self.logger, phase=ExecutionPhase.RULES)
+
         next_selectors = [
             "button:has-text('Next')",
             "button:has-text('Continue')",
@@ -273,24 +301,31 @@ class GenericATSHandler(BaseATSHandler):
             "[data-automation-id='bottom-navigation-next-button']",
         ]
         for selector in next_selectors:
-            try:
-                element = self.page.query_selector(selector)
-                if element and element.is_visible() and not element.is_disabled():
-                    element.click(timeout=3000)
-                    self.wait_for_page_load()
-                    if self.logger:
-                        self.logger.info(
-                            "Clicked Next/Continue (generic)",
-                            phase=ExecutionPhase.RULES,
-                            selector=selector,
+            for attempt in range(2):
+                try:
+                    element = self.page.query_selector(selector)
+                    if element and element.is_visible() and not element.is_disabled():
+                        element.click(timeout=3000)
+                        self.wait_for_page_load()
+                        if self.logger:
+                            self.logger.info(
+                                "Clicked Next/Continue (generic)",
+                                phase=ExecutionPhase.RULES,
+                                selector=selector,
+                            )
+                        return True
+                except Exception as e:
+                    err = str(e).lower()
+                    if attempt == 0 and "intercepts pointer" in err:
+                        dismiss_blocking_overlays(
+                            self.page, self.logger, phase=ExecutionPhase.RULES
                         )
-                    return True
-            except Exception as e:
-                if self.logger:
-                    self.logger.warning(
-                        f"Next selector failed '{selector}': {e}",
-                        phase=ExecutionPhase.RULES,
-                    )
-                continue
+                        continue
+                    if self.logger:
+                        self.logger.warning(
+                            f"Next selector failed '{selector}': {e}",
+                            phase=ExecutionPhase.RULES,
+                        )
+                    break
 
         return False

@@ -4,6 +4,7 @@ from playwright.sync_api import sync_playwright
 from rich.console import Console
 
 from jobcli.core.logger import JobLogger, global_logger
+from jobcli.core.memory import AgentMemory
 from jobcli.core.progress import ApplicationProgressTracker, create_status_table
 from jobcli.core.schemas import (
     ApplicationState,
@@ -13,6 +14,7 @@ from jobcli.core.schemas import (
     ResumeData,
 )
 from jobcli.core.state_machine import ApplicationStateMachine
+from jobcli.core.url_normalize import normalize_job_url
 from jobcli.llm.client import LLMClient
 from jobcli.locators.ats_detector import ATSDetector
 from jobcli.storage.models import Database
@@ -115,6 +117,9 @@ class EnhancedApplicationEngine:
 
                 page.goto(job.url, timeout=30000)
 
+                if job.id and page.url and normalize_job_url(page.url) != normalize_job_url(job.url):
+                    self.job_repo.update_resolved_url(job.id, page.url)
+
                 # Capture initial screenshot
                 logger.capture_screenshot(page, "initial")
 
@@ -130,7 +135,10 @@ class EnhancedApplicationEngine:
                         "ATS Detected", ats_type.value.title()
                     )
 
-                # Run state machine
+                agent_memory = AgentMemory(
+                    self.session,
+                    infer_location_country=self.config.infer_location_country,
+                )
                 final_status = self.state_machine.run(
                     page=page,
                     state=state,
@@ -140,6 +148,11 @@ class EnhancedApplicationEngine:
                     resume_pdf_path=self.config.resume_pdf_path or "",
                     locator_repo=self.locator_repo,
                     llm_client=self.llm_client,
+                    agent_memory=agent_memory,
+                    job_id=job.id,
+                    job_repo=self.job_repo,
+                    job_board_url=job.url,
+                    infer_location_country=self.config.infer_location_country,
                 )
 
                 # Update job status

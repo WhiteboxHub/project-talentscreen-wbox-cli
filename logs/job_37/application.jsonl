@@ -1,0 +1,737 @@
+{"job_id": 37, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-16T17:48:05.409220Z"}
+{"job_id": 37, "phase": "rules", "selector": "button:has-text('Accept')", "event": "Dismissed blocking overlay", "level": "info", "timestamp": "2026-04-16T17:48:09.053313Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/001_20260416_104809_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T17:48:11.665435Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-16T17:48:11.667371Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "pattern": "myworkdayjobs\\.com", "event": "Detected workday from URL", "level": "info", "timestamp": "2026-04-16T17:48:11.674215Z"}
+{"job_id": 37, "phase": "rules", "event": "Detected ATS: workday", "level": "info", "timestamp": "2026-04-16T17:48:11.711055Z"}
+{"job_id": 37, "phase": "rules", "event": "Using workday handler", "level": "info", "timestamp": "2026-04-16T17:48:11.727992Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for Workday apply button", "level": "info", "timestamp": "2026-04-16T17:48:11.729458Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-16T17:48:11.811172Z"}
+{"job_id": 37, "phase": "rules", "selector": "a:has-text('Apply')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-16T17:48:12.318588Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/002_20260416_104835_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T17:48:37.603598Z"}
+{"job_id": 37, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-16T17:48:39.613205Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/001_20260416_104841_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T17:48:41.723710Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T17:48:41.825157Z"}
+{"job_id": 37, "phase": "llm", "tokens": 3626, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T17:48:45.233444Z"}
+{"job_id": 37, "phase": "llm", "action_count": 1, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T17:48:45.234808Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 1 result: 0/0 actions succeeded", "level": "info", "timestamp": "2026-04-16T17:49:07.252038Z"}
+{"job_id": 37, "phase": "llm", "success": false, "event": "Application submission could not be verified.", "level": "error", "timestamp": "2026-04-16T17:49:07.396057Z"}
+{"job_id": 37, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-16T17:49:07.400742Z"}
+{"job_id": 37, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-16T17:49:07.401145Z"}
+{"job_id": 37, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-16T17:49:07.401547Z"}
+{"job_id": 37, "phase": "rules", "event": "Filling Workday form", "level": "info", "timestamp": "2026-04-16T17:49:07.401786Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'first_name' (automation-id='firstName')", "level": "warning", "timestamp": "2026-04-16T17:49:07.409579Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'last_name' (automation-id='lastName')", "level": "warning", "timestamp": "2026-04-16T17:49:07.415015Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'email' (automation-id='email')", "level": "warning", "timestamp": "2026-04-16T17:49:07.420323Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'phone' (automation-id='phone')", "level": "warning", "timestamp": "2026-04-16T17:49:07.426053Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'city' (automation-id='city')", "level": "warning", "timestamp": "2026-04-16T17:49:07.433840Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday fill failed for 'linkedin': Page.fill: Timeout 3000ms exceeded.\nCall log:\n  - waiting for locator(\"input[data-automation-id='linkedInURL']\")\n", "level": "warning", "timestamp": "2026-04-16T17:49:10.460125Z"}
+{"job_id": 37, "phase": "rules", "event": "Generic fallback triggered for 9 failed field(s): ['first_name', 'last_name', 'email', 'phone', 'city', 'state', 'country', 'linkedin', 'resume']", "level": "info", "timestamp": "2026-04-16T17:49:10.483275Z"}
+{"job_id": 37, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T17:49:10.500851Z"}
+{"job_id": 37, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T17:49:10.609229Z"}
+{"job_id": 37, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T17:49:10.679926Z"}
+{"job_id": 37, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T17:49:10.732822Z"}
+{"job_id": 37, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T17:49:10.822166Z"}
+{"job_id": 37, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T17:49:10.858753Z"}
+{"job_id": 37, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T17:49:10.913449Z"}
+{"job_id": 37, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T17:49:10.934044Z"}
+{"job_id": 37, "phase": "rules", "results": {"first_name": false, "last_name": false, "email": false, "phone": false, "city": false, "state": false, "country": false, "linkedin": false, "resume": false}, "event": "Workday form fill complete", "level": "info", "timestamp": "2026-04-16T17:49:10.984763Z"}
+{"job_id": 37, "phase": "rules", "event": "Handling Workday step 1", "level": "info", "timestamp": "2026-04-16T17:49:12.757857Z"}
+{"job_id": 37, "phase": "rules", "event": "Handling Workday step 2", "level": "info", "timestamp": "2026-04-16T17:49:14.848503Z"}
+{"job_id": 37, "phase": "rules", "event": "Handling Workday step 3", "level": "info", "timestamp": "2026-04-16T17:49:17.836759Z"}
+{"job_id": 37, "phase": "rules", "event": "Handling Workday step 4", "level": "info", "timestamp": "2026-04-16T17:49:19.349023Z"}
+{"job_id": 37, "phase": "rules", "event": "Handling Workday step 5", "level": "info", "timestamp": "2026-04-16T17:49:20.866309Z"}
+{"job_id": 37, "phase": "rules", "event": "Submitting Workday application", "level": "info", "timestamp": "2026-04-16T17:49:22.746770Z"}
+{"job_id": 37, "phase": "rules", "event": "Submitting application (generic)", "level": "info", "timestamp": "2026-04-16T17:49:22.775006Z"}
+{"job_id": 37, "phase": "rules", "event": "No submit button found (generic)", "level": "warning", "timestamp": "2026-04-16T17:49:22.887859Z"}
+{"job_id": 37, "phase": "rules", "success": false, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-16T17:49:22.888210Z"}
+{"job_id": 37, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-16T17:49:22.888493Z"}
+{"job_id": 37, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-16T17:57:13.486647Z"}
+{"job_id": 37, "phase": "rules", "selector": "button:has-text('Accept')", "event": "Dismissed blocking overlay", "level": "info", "timestamp": "2026-04-16T17:57:17.259164Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/001_20260416_105717_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T17:57:20.022326Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-16T17:57:20.024351Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "pattern": "myworkdayjobs\\.com", "event": "Detected workday from URL", "level": "info", "timestamp": "2026-04-16T17:57:20.024928Z"}
+{"job_id": 37, "phase": "rules", "event": "Detected ATS: workday", "level": "info", "timestamp": "2026-04-16T17:57:20.038962Z"}
+{"job_id": 37, "phase": "rules", "event": "Using workday handler", "level": "info", "timestamp": "2026-04-16T17:57:20.042729Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for Workday apply button", "level": "info", "timestamp": "2026-04-16T17:57:20.043129Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-16T17:57:20.085429Z"}
+{"job_id": 37, "phase": "rules", "selector": "a:has-text('Apply')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-16T17:57:20.221454Z"}
+{"job_id": 37, "phase": "rules", "aria_modal_dialog": false, "event": "Blocking in-page modal detected (Workday application entry). Form automation cannot proceed until this dialog is cleared \u2014 attempting 'Apply Manually' (or Autofill fallback).", "level": "info", "timestamp": "2026-04-16T17:57:21.044591Z"}
+{"job_id": 37, "phase": "rules", "event": "Clicked 'Apply Manually' in Workday start modal (dialog-scoped)", "level": "info", "timestamp": "2026-04-16T17:57:21.756132Z"}
+{"job_id": 37, "phase": "rules", "url_preview": "https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply/applyManually", "event": "Apply navigated in the same tab.", "level": "info", "timestamp": "2026-04-16T17:57:21.757466Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/002_20260416_105722_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T17:57:23.154903Z"}
+{"job_id": 37, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-16T17:57:25.165797Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/001_20260416_105727_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T17:57:27.387924Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T17:57:27.471956Z"}
+{"job_id": 37, "phase": "llm", "tokens": 4310, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T17:57:31.626154Z"}
+{"job_id": 37, "phase": "llm", "action_count": 4, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T17:57:31.630214Z"}
+{"job_id": 37, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T17:57:31.631256Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T17:57:31.887065Z"}
+{"job_id": 37, "phase": "llm", "selector": "Password", "field_label": "Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T17:57:31.900012Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T17:57:31.965536Z"}
+{"job_id": 37, "phase": "llm", "selector": "Verify New Password", "field_label": "Verify New Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T17:57:31.966736Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T17:57:32.027427Z"}
+{"job_id": 37, "phase": "llm", "selector": "Create Account", "field_label": "Create Account Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T17:57:32.027849Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T17:57:33.001119Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 1 result: 4/4 actions succeeded", "level": "info", "timestamp": "2026-04-16T17:57:55.112165Z"}
+{"job_id": 37, "phase": "llm", "event": "Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", "level": "info", "timestamp": "2026-04-16T17:58:08.394187Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page detected (page 2). Running LLM again.", "level": "info", "timestamp": "2026-04-16T17:58:10.491088Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/002_20260416_105810_ax_tree_page_2.json", "name": "ax_tree_page_2", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T17:58:10.497362Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T17:58:10.501742Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5203, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T17:58:21.834435Z"}
+{"job_id": 37, "phase": "llm", "action_count": 10, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T17:58:21.838670Z"}
+{"job_id": 37, "phase": "llm", "selector": "How Did You Hear About Us?", "field_label": "How Did You Hear About Us?", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T17:58:21.839794Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T17:58:21.962504Z"}
+{"job_id": 37, "phase": "llm", "selector": "No", "field_label": "Have you previously worked for SS&C or any of its subsidiaries?", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T17:58:21.962867Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via label in frame", "level": "info", "timestamp": "2026-04-16T17:58:22.185164Z"}
+{"job_id": 37, "phase": "llm", "selector": "First Name", "field_label": "First Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T17:58:22.185521Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T17:58:22.215948Z"}
+{"job_id": 37, "phase": "llm", "selector": "Last Name", "field_label": "Last Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T17:58:22.216404Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T17:58:22.264045Z"}
+{"job_id": 37, "phase": "llm", "selector": "Address Line 1", "field_label": "Address Line 1", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T17:58:22.266683Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T17:58:22.311779Z"}
+{"job_id": 37, "phase": "llm", "selector": "City", "field_label": "City", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T17:58:22.312453Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T17:58:22.352427Z"}
+{"job_id": 37, "phase": "llm", "selector": "Postal Code", "field_label": "Postal Code", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T17:58:22.352824Z"}
+{"job_id": 37, "phase": "llm", "selector": "Phone Number", "field_label": "Phone Number", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T17:58:22.353037Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T17:58:22.400663Z"}
+{"job_id": 37, "phase": "llm", "selector": "Resume/CV", "field_label": "Resume", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-16T17:58:22.401123Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T17:58:22.442574Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T17:58:22.591904Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 2 result: 8/10 actions succeeded", "level": "info", "timestamp": "2026-04-16T17:58:44.615018Z"}
+{"job_id": 37, "phase": "llm", "event": "Learned answer for 'No' from browser manual input.", "level": "info", "timestamp": "2026-04-16T17:59:27.872699Z"}
+{"job_id": 37, "phase": "llm", "event": "Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", "level": "info", "timestamp": "2026-04-16T17:59:27.873755Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page detected (page 3). Running LLM again.", "level": "info", "timestamp": "2026-04-16T17:59:29.955300Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/003_20260416_105929_ax_tree_page_3.json", "name": "ax_tree_page_3", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T17:59:29.960961Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T17:59:29.962465Z"}
+{"job_id": 37, "phase": "llm", "tokens": 4999, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T17:59:37.729041Z"}
+{"job_id": 37, "phase": "llm", "action_count": 8, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T17:59:37.731007Z"}
+{"job_id": 37, "phase": "llm", "selector": "School or University", "field_label": "School or University", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T17:59:37.731772Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T17:59:37.800395Z"}
+{"job_id": 37, "phase": "llm", "selector": "Degree Select One Required", "field_label": "Degree", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T17:59:37.800758Z"}
+{"job_id": 37, "phase": "llm", "selector": "Field of Study", "field_label": "Field of Study", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T17:59:38.113213Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T17:59:38.153722Z"}
+{"job_id": 37, "phase": "llm", "selector": "Overall Result (GPA)", "field_label": "Overall Result (GPA)", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T17:59:38.154090Z"}
+{"job_id": 37, "phase": "llm", "selector": "Year", "field_label": "Graduation Year", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T17:59:38.160339Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T17:59:38.199013Z"}
+{"job_id": 37, "phase": "llm", "selector": "Select files", "field_label": "Resume/CV", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-16T17:59:38.199361Z"}
+{"job_id": 37, "phase": "llm", "selector": "Please provide your LinkedIn URL (Optional)", "field_label": "LinkedIn URL", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T17:59:38.294814Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T17:59:38.341520Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T17:59:38.341939Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T17:59:38.651996Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 3 result: 7/8 actions succeeded", "level": "info", "timestamp": "2026-04-16T18:00:00.671844Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page detected (page 4). Running LLM again.", "level": "info", "timestamp": "2026-04-16T18:00:14.098751Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/004_20260416_110014_ax_tree_page_4.json", "name": "ax_tree_page_4", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T18:00:14.103577Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T18:00:14.108037Z"}
+{"job_id": 37, "phase": "llm", "tokens": 4849, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T18:00:23.455144Z"}
+{"job_id": 37, "phase": "llm", "action_count": 4, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T18:00:23.456876Z"}
+{"job_id": 37, "phase": "llm", "selector": "Field of Study", "field_label": "Field of Study", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T18:00:23.457431Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T18:00:23.654927Z"}
+{"job_id": 37, "phase": "llm", "selector": "Overall Result (GPA)", "field_label": "Overall Result (GPA)", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T18:00:23.655295Z"}
+{"job_id": 37, "phase": "llm", "selector": "Year", "field_label": "To (Actual or Expected) Year", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T18:00:23.655486Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T18:00:23.708813Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T18:00:23.709503Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T18:00:23.979845Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 4 result: 3/4 actions succeeded", "level": "info", "timestamp": "2026-04-16T18:00:46.032354Z"}
+{"job_id": 37, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-16T18:07:44.282795Z"}
+{"job_id": 37, "phase": "rules", "selector": "button:has-text('Accept')", "event": "Dismissed blocking overlay", "level": "info", "timestamp": "2026-04-16T18:07:47.802844Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/001_20260416_110747_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T18:07:51.750369Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-16T18:07:51.751948Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "pattern": "myworkdayjobs\\.com", "event": "Detected workday from URL", "level": "info", "timestamp": "2026-04-16T18:07:51.753191Z"}
+{"job_id": 37, "phase": "rules", "event": "Detected ATS: workday", "level": "info", "timestamp": "2026-04-16T18:07:51.802466Z"}
+{"job_id": 37, "phase": "rules", "event": "Using workday handler", "level": "info", "timestamp": "2026-04-16T18:07:51.803551Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for Workday apply button", "level": "info", "timestamp": "2026-04-16T18:07:51.803864Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-16T18:07:51.887764Z"}
+{"job_id": 37, "phase": "rules", "selector": "a:has-text('Apply')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-16T18:07:52.137860Z"}
+{"job_id": 37, "phase": "rules", "aria_modal_dialog": false, "event": "Blocking in-page modal detected (Workday application entry). Form automation cannot proceed until this dialog is cleared \u2014 attempting 'Apply Manually' (or Autofill fallback).", "level": "info", "timestamp": "2026-04-16T18:07:52.975469Z"}
+{"job_id": 37, "phase": "rules", "event": "Clicked 'Apply Manually' in Workday start modal (dialog-scoped)", "level": "info", "timestamp": "2026-04-16T18:07:53.662181Z"}
+{"job_id": 37, "phase": "rules", "url_preview": "https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply/applyManually", "event": "Apply navigated in the same tab.", "level": "info", "timestamp": "2026-04-16T18:07:53.662992Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/002_20260416_110754_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T18:07:55.179256Z"}
+{"job_id": 37, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-16T18:07:57.188090Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/001_20260416_110759_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T18:07:59.413900Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T18:07:59.484467Z"}
+{"job_id": 37, "phase": "llm", "tokens": 4597, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T18:08:04.624891Z"}
+{"job_id": 37, "phase": "llm", "action_count": 4, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T18:08:04.628429Z"}
+{"job_id": 37, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T18:08:04.632507Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T18:08:04.882007Z"}
+{"job_id": 37, "phase": "llm", "selector": "Password", "field_label": "Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T18:08:04.899984Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T18:08:04.952702Z"}
+{"job_id": 37, "phase": "llm", "selector": "Verify New Password", "field_label": "Verify New Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T18:08:04.953864Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T18:08:04.996280Z"}
+{"job_id": 37, "phase": "llm", "selector": "Create Account", "field_label": "Create Account Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T18:08:04.996614Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T18:08:06.063123Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 1 result: 4/4 actions succeeded", "level": "info", "timestamp": "2026-04-16T18:08:28.141731Z"}
+{"job_id": 37, "phase": "llm", "event": "Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", "level": "info", "timestamp": "2026-04-16T18:08:41.577489Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page detected (page 2). Running LLM again.", "level": "info", "timestamp": "2026-04-16T18:08:43.705422Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/002_20260416_110843_ax_tree_page_2.json", "name": "ax_tree_page_2", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T18:08:43.708916Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T18:08:43.720007Z"}
+{"job_id": 37, "phase": "llm", "tokens": 4319, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T18:08:46.918386Z"}
+{"job_id": 37, "phase": "llm", "action_count": 3, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T18:08:46.926915Z"}
+{"job_id": 37, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T18:08:46.927999Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T18:08:47.087163Z"}
+{"job_id": 37, "phase": "llm", "selector": "Password", "field_label": "Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T18:08:47.087574Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T18:08:47.209180Z"}
+{"job_id": 37, "phase": "llm", "selector": "Sign In", "field_label": "Sign In Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T18:08:47.246617Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T18:08:47.437333Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 2 result: 3/3 actions succeeded", "level": "info", "timestamp": "2026-04-16T18:09:09.485047Z"}
+{"job_id": 37, "phase": "llm", "event": "Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", "level": "info", "timestamp": "2026-04-16T18:09:22.825433Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page detected (page 3). Running LLM again.", "level": "info", "timestamp": "2026-04-16T18:09:24.892557Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/003_20260416_110924_ax_tree_page_3.json", "name": "ax_tree_page_3", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T18:09:24.897420Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T18:09:24.898410Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5135, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T18:09:28.850137Z"}
+{"job_id": 37, "phase": "llm", "action_count": 4, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T18:09:28.853983Z"}
+{"job_id": 37, "phase": "llm", "selector": "How Did You Hear About Us?", "field_label": "How Did You Hear About Us?", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T18:09:28.855460Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T18:09:28.948202Z"}
+{"job_id": 37, "phase": "llm", "selector": "Phone Extension", "field_label": "Phone Extension", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T18:09:28.949255Z"}
+{"job_id": 37, "phase": "llm", "selector": "Resume/CV", "field_label": "Resume", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-16T18:09:28.949835Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T18:09:29.015867Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T18:09:29.106968Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 3 result: 2/4 actions succeeded", "level": "info", "timestamp": "2026-04-16T18:09:51.124236Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page detected (page 4). Running LLM again.", "level": "info", "timestamp": "2026-04-16T18:10:04.407316Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/004_20260416_111004_ax_tree_page_4.json", "name": "ax_tree_page_4", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T18:10:04.418908Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T18:10:04.427963Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5341, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T18:10:13.338871Z"}
+{"job_id": 37, "phase": "llm", "action_count": 6, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T18:10:13.342746Z"}
+{"job_id": 37, "phase": "llm", "selector": "Field of Study", "field_label": "Field of Study", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T18:10:13.348964Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T18:10:13.441778Z"}
+{"job_id": 37, "phase": "llm", "selector": "Overall Result (GPA)", "field_label": "Overall Result (GPA)", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T18:10:13.442109Z"}
+{"job_id": 37, "phase": "llm", "selector": "Year", "field_label": "To (Actual or Expected) Year", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T18:10:13.442308Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T18:10:13.498738Z"}
+{"job_id": 37, "phase": "llm", "selector": "Type to Add Skills", "field_label": "Skills", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T18:10:13.499235Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T18:10:13.564732Z"}
+{"job_id": 37, "phase": "llm", "selector": "Please provide your LinkedIn URL (Optional)", "field_label": "LinkedIn URL", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T18:10:13.565077Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T18:10:13.605357Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T18:10:13.605697Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T18:10:13.904249Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 4 result: 5/6 actions succeeded", "level": "info", "timestamp": "2026-04-16T18:10:35.931693Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page detected (page 5). Running LLM again.", "level": "info", "timestamp": "2026-04-16T18:10:49.312800Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/005_20260416_111049_ax_tree_page_5.json", "name": "ax_tree_page_5", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T18:10:49.317452Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T18:10:49.326487Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5121, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T18:10:54.337170Z"}
+{"job_id": 37, "phase": "llm", "action_count": 7, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T18:10:54.346758Z"}
+{"job_id": 37, "phase": "llm", "selector": "Are you currently authorized to work in the country where this position is located?*", "field_label": "Work Authorization", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T18:10:54.347576Z"}
+{"job_id": 37, "phase": "llm", "selector": "Do you now, or will you in the future, require employer-sponsored work authorization in order to be employed in the country where this position is located?*", "field_label": "Sponsorship Requirement", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T18:10:54.488481Z"}
+{"job_id": 37, "phase": "llm", "selector": "What is your highest level of education completed?*", "field_label": "Highest Education Level", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T18:10:54.574554Z"}
+{"job_id": 37, "phase": "llm", "selector": "Do you have any relatives currently working for SS&C Technologies, Inc. or any of its subsidiaries?*", "field_label": "Relatives at Company", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T18:10:54.644547Z"}
+{"job_id": 37, "phase": "llm", "selector": "Have you ever interviewed with SS&C Technologies, Inc or any of its subsidiaries in the past?*", "field_label": "Previous Interview", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T18:10:54.719011Z"}
+{"job_id": 37, "phase": "llm", "selector": "What work environment(s) or work models are you open to?*", "field_label": "Work Environment", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T18:10:54.808379Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T18:10:54.882949Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T18:10:55.085559Z"}
+{"job_id": 37, "phase": "llm", "event": "6 validation errors (red marks) detected on page. Application might not be submitted correctly.", "level": "warning", "timestamp": "2026-04-16T18:11:17.138721Z"}
+{"job_id": 37, "phase": "llm", "success": false, "event": "Application submission could not be verified.", "level": "error", "timestamp": "2026-04-16T18:11:19.162236Z"}
+{"job_id": 37, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-16T18:11:19.164954Z"}
+{"job_id": 37, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-16T18:11:19.165516Z"}
+{"job_id": 37, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-16T18:11:19.165931Z"}
+{"job_id": 37, "phase": "rules", "event": "Filling Workday form", "level": "info", "timestamp": "2026-04-16T18:11:19.166406Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'first_name' (automation-id='firstName')", "level": "warning", "timestamp": "2026-04-16T18:11:20.018117Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'last_name' (automation-id='lastName')", "level": "warning", "timestamp": "2026-04-16T18:11:20.030608Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'email' (automation-id='email')", "level": "warning", "timestamp": "2026-04-16T18:11:20.042320Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'phone' (automation-id='phone')", "level": "warning", "timestamp": "2026-04-16T18:11:20.053773Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'city' (automation-id='city')", "level": "warning", "timestamp": "2026-04-16T18:11:20.063080Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday fill failed for 'linkedin': Page.fill: Timeout 3000ms exceeded.\nCall log:\n  - waiting for locator(\"input[data-automation-id='linkedInURL']\")\n", "level": "warning", "timestamp": "2026-04-16T18:11:23.080360Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'experience_jobTitle' (automation-id='jobTitle')", "level": "warning", "timestamp": "2026-04-16T18:11:23.150217Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'experience_positionTitle' (automation-id='positionTitle')", "level": "warning", "timestamp": "2026-04-16T18:11:23.164249Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'experience_companyName' (automation-id='companyName')", "level": "warning", "timestamp": "2026-04-16T18:11:23.175748Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'experience_company' (automation-id='company')", "level": "warning", "timestamp": "2026-04-16T18:11:23.185378Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'experience_start' (automation-id='startDate')", "level": "warning", "timestamp": "2026-04-16T18:11:23.196219Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'experience_jobDescription' (automation-id='jobDescription')", "level": "warning", "timestamp": "2026-04-16T18:11:23.205074Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'experience_description' (automation-id='description')", "level": "warning", "timestamp": "2026-04-16T18:11:23.214854Z"}
+{"job_id": 37, "phase": "rules", "event": "Workday input not found for 'experience_roles' (automation-id='rolesAndResponsibilities')", "level": "warning", "timestamp": "2026-04-16T18:11:23.223522Z"}
+{"job_id": 37, "phase": "rules", "event": "Generic fallback triggered for 9 failed field(s): ['first_name', 'last_name', 'email', 'phone', 'city', 'state', 'country', 'linkedin', 'resume']", "level": "info", "timestamp": "2026-04-16T18:11:23.223901Z"}
+{"job_id": 37, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T18:11:23.232612Z"}
+{"job_id": 37, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T18:11:23.309153Z"}
+{"job_id": 37, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T18:11:23.377975Z"}
+{"job_id": 37, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T18:11:23.429408Z"}
+{"job_id": 37, "phase": "rules", "event": "No confident match for 'personal.city' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T18:11:23.516597Z"}
+{"job_id": 37, "phase": "rules", "event": "No confident match for 'personal.state' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T18:11:23.551699Z"}
+{"job_id": 37, "phase": "rules", "event": "No confident match for 'personal.country' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T18:11:23.605760Z"}
+{"job_id": 37, "phase": "rules", "event": "No confident match for 'personal.linkedin' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-16T18:11:23.627066Z"}
+{"job_id": 37, "phase": "rules", "results": {"first_name": false, "last_name": false, "email": false, "phone": false, "city": false, "state": false, "country": false, "linkedin": false, "resume": false}, "event": "Workday form fill complete", "level": "info", "timestamp": "2026-04-16T18:11:23.682573Z"}
+{"job_id": 37, "phase": "rules", "event": "Handling Workday step 1", "level": "info", "timestamp": "2026-04-16T18:11:25.351858Z"}
+{"job_id": 37, "phase": "rules", "event": "Handling Workday step 2", "level": "info", "timestamp": "2026-04-16T18:11:27.924198Z"}
+{"job_id": 37, "phase": "rules", "event": "Handling Workday step 3", "level": "info", "timestamp": "2026-04-16T18:11:30.752642Z"}
+{"job_id": 37, "phase": "rules", "event": "Handling Workday step 4", "level": "info", "timestamp": "2026-04-16T18:11:33.005588Z"}
+{"job_id": 37, "phase": "rules", "event": "Handling Workday step 5", "level": "info", "timestamp": "2026-04-16T18:11:35.922447Z"}
+{"job_id": 37, "phase": "rules", "event": "Submitting Workday application", "level": "info", "timestamp": "2026-04-16T18:11:39.462839Z"}
+{"job_id": 37, "phase": "rules", "event": "Submitting application (generic)", "level": "info", "timestamp": "2026-04-16T18:11:39.501528Z"}
+{"job_id": 37, "phase": "rules", "event": "No submit button found (generic)", "level": "warning", "timestamp": "2026-04-16T18:11:39.610530Z"}
+{"job_id": 37, "phase": "rules", "success": false, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-16T18:11:39.610901Z"}
+{"job_id": 37, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-16T18:11:39.611658Z"}
+{"job_id": 37, "phase": "human", "task": "find_submit_button", "event": "Requesting human assistance", "level": "info", "timestamp": "2026-04-16T18:11:39.631456Z"}
+{"job_id": 37, "phase": "human", "purpose": "find_submit_button", "selector": "#settingsSelectorButton", "event": "Learned locator saved", "level": "info", "timestamp": "2026-04-16T18:20:38.081897Z"}
+{"job_id": 37, "phase": "human", "success": true, "event": "Completed phase: human", "level": "info", "timestamp": "2026-04-16T18:20:38.220397Z"}
+{"job_id": 37, "phase": null, "event": "Application completed successfully", "level": "info", "timestamp": "2026-04-16T18:20:38.220762Z"}
+{"job_id": 37, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-16T19:50:36.744122Z"}
+{"job_id": 37, "phase": "rules", "selector": "button:has-text('Accept')", "event": "Dismissed blocking overlay", "level": "info", "timestamp": "2026-04-16T19:50:41.240883Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/001_20260416_125041_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T19:50:43.908116Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-16T19:50:43.909945Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "pattern": "myworkdayjobs\\.com", "event": "Detected workday from URL", "level": "info", "timestamp": "2026-04-16T19:50:43.910387Z"}
+{"job_id": 37, "phase": "rules", "event": "Detected ATS: workday", "level": "info", "timestamp": "2026-04-16T19:50:43.920208Z"}
+{"job_id": 37, "phase": "rules", "event": "Using workday handler", "level": "info", "timestamp": "2026-04-16T19:50:43.920609Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for Workday apply button", "level": "info", "timestamp": "2026-04-16T19:50:43.920782Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-16T19:50:43.943689Z"}
+{"job_id": 37, "phase": "rules", "selector": "a:has-text('Apply')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-16T19:50:44.052769Z"}
+{"job_id": 37, "phase": "rules", "aria_modal_dialog": false, "event": "Blocking in-page modal detected (Workday application entry). Form automation cannot proceed until this dialog is cleared \u2014 attempting 'Apply Manually' (or Autofill fallback).", "level": "info", "timestamp": "2026-04-16T19:50:44.871258Z"}
+{"job_id": 37, "phase": "rules", "event": "Clicked 'Apply Manually' in Workday start modal (dialog-scoped)", "level": "info", "timestamp": "2026-04-16T19:50:45.538348Z"}
+{"job_id": 37, "phase": "rules", "url_preview": "https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply/applyManually", "event": "Apply navigated in the same tab.", "level": "info", "timestamp": "2026-04-16T19:50:45.538792Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/002_20260416_125047_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T19:50:47.841758Z"}
+{"job_id": 37, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-16T19:50:49.849466Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/001_20260416_125051_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T19:50:51.998682Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T19:50:52.054849Z"}
+{"job_id": 37, "phase": "llm", "tokens": 4714, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T19:50:59.011533Z"}
+{"job_id": 37, "phase": "llm", "action_count": 4, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T19:50:59.013527Z"}
+{"job_id": 37, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T19:50:59.014598Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T19:51:00.145355Z"}
+{"job_id": 37, "phase": "llm", "selector": "Password", "field_label": "Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T19:51:00.145798Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T19:51:00.916567Z"}
+{"job_id": 37, "phase": "llm", "selector": "Verify New Password", "field_label": "Verify New Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T19:51:00.916904Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T19:51:01.674377Z"}
+{"job_id": 37, "phase": "llm", "selector": "Create Account", "field_label": "Create Account Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T19:51:01.674859Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T19:51:01.734298Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 1 result: 4/4 actions succeeded", "level": "info", "timestamp": "2026-04-16T19:51:23.937979Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent successfully traversed to a new Node. URL changed from https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply/applyManually to https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/login?redirect=%2Fen-US%2Fssctechnologies%2Fjob%2FWaltham-MA---10-CityPoint%2FSenior-ML-Engineer---Agentic-AI_R42088%2Fapply%2FapplyManually.", "level": "info", "timestamp": "2026-04-16T19:51:37.138479Z"}
+{"job_id": 37, "phase": "llm", "event": "Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", "level": "info", "timestamp": "2026-04-16T19:51:37.198819Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 2). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T19:51:39.278916Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/002_20260416_125139_ax_tree_page_2.json", "name": "ax_tree_page_2", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T19:51:39.280848Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T19:51:39.281963Z"}
+{"job_id": 37, "phase": "llm", "tokens": 4424, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T19:51:43.305561Z"}
+{"job_id": 37, "phase": "llm", "action_count": 3, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T19:51:43.307453Z"}
+{"job_id": 37, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T19:51:43.308128Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T19:51:44.382587Z"}
+{"job_id": 37, "phase": "llm", "selector": "Password", "field_label": "Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T19:51:44.383004Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T19:51:45.158270Z"}
+{"job_id": 37, "phase": "llm", "selector": "Sign In", "field_label": "Sign In Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T19:51:45.158681Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T19:51:45.235633Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 2 result: 3/3 actions succeeded", "level": "info", "timestamp": "2026-04-16T19:52:07.291919Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent successfully traversed to a new Node. URL changed from https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/login?redirect=%2Fen-US%2Fssctechnologies%2Fjob%2FWaltham-MA---10-CityPoint%2FSenior-ML-Engineer---Agentic-AI_R42088%2Fapply%2FapplyManually to https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply.", "level": "info", "timestamp": "2026-04-16T19:52:20.568631Z"}
+{"job_id": 37, "phase": "llm", "event": "Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", "level": "info", "timestamp": "2026-04-16T19:52:20.623542Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 3). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T19:52:22.693344Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/003_20260416_125222_ax_tree_page_3.json", "name": "ax_tree_page_3", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T19:52:22.698558Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T19:52:22.699370Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5257, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T19:52:28.498043Z"}
+{"job_id": 37, "phase": "llm", "action_count": 4, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T19:52:28.501082Z"}
+{"job_id": 37, "phase": "llm", "selector": "How Did You Hear About Us?", "field_label": "How Did You Hear About Us?", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T19:52:28.502532Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T19:52:29.590488Z"}
+{"job_id": 37, "phase": "llm", "selector": "Phone Extension", "field_label": "Phone Extension", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T19:52:29.591083Z"}
+{"job_id": 37, "phase": "llm", "selector": "Resume/CV", "field_label": "Resume", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-16T19:52:29.591365Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T19:52:29.636626Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T19:52:29.711920Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 3 result: 2/4 actions succeeded", "level": "info", "timestamp": "2026-04-16T19:52:51.722500Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent detected dynamic DOM updates or new fields on the same page.", "level": "info", "timestamp": "2026-04-16T19:53:04.947716Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 4). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T19:53:04.948327Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/004_20260416_125304_ax_tree_page_4.json", "name": "ax_tree_page_4", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T19:53:04.951201Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T19:53:04.952359Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5389, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T19:53:10.998226Z"}
+{"job_id": 37, "phase": "llm", "action_count": 5, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T19:53:11.001022Z"}
+{"job_id": 37, "phase": "llm", "selector": "Field of Study", "field_label": "Field of Study", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T19:53:11.001616Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T19:53:11.744846Z"}
+{"job_id": 37, "phase": "llm", "selector": "Overall Result (GPA)", "field_label": "Overall Result (GPA)", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T19:53:11.745303Z"}
+{"job_id": 37, "phase": "llm", "selector": "To (Actual or Expected)", "field_label": "To Year", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T19:53:11.745564Z"}
+{"job_id": 37, "phase": "llm", "selector": "Type to Add Skills", "field_label": "Skills", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T19:53:11.800872Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T19:53:16.956271Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T19:53:16.957216Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T19:53:17.029942Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 4 result: 3/5 actions succeeded", "level": "info", "timestamp": "2026-04-16T19:53:39.089245Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent detected dynamic DOM updates or new fields on the same page.", "level": "info", "timestamp": "2026-04-16T19:53:52.266789Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 5). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T19:53:52.268469Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/005_20260416_125352_ax_tree_page_5.json", "name": "ax_tree_page_5", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T19:53:52.271066Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T19:53:52.276887Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5239, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T19:53:58.950036Z"}
+{"job_id": 37, "phase": "llm", "action_count": 7, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T19:53:58.952376Z"}
+{"job_id": 37, "phase": "llm", "selector": "Are you currently authorized to work in the country where this position is located?*", "field_label": "Work Authorization", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T19:53:58.953125Z"}
+{"job_id": 37, "phase": "llm", "selector": "Do you now, or will you in the future, require employer-sponsored work authorization in order to be employed in the country where this position is located?*", "field_label": "Sponsorship Requirement", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T19:53:58.992660Z"}
+{"job_id": 37, "phase": "llm", "selector": "What is your highest level of education completed?*", "field_label": "Highest Education Level", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T19:53:59.016652Z"}
+{"job_id": 37, "phase": "llm", "selector": "Do you have any relatives currently working for SS&C Technologies, Inc. or any of its subsidiaries?*", "field_label": "Relatives at Company", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T19:53:59.037087Z"}
+{"job_id": 37, "phase": "llm", "selector": "Have you ever interviewed with SS&C Technologies, Inc or any of its subsidiaries in the past?*", "field_label": "Previous Interview", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T19:53:59.056893Z"}
+{"job_id": 37, "phase": "llm", "selector": "What work environment(s) or work models are you open to?*", "field_label": "Work Environment", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T19:53:59.076612Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T19:53:59.097806Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T19:53:59.150107Z"}
+{"job_id": 37, "phase": "llm", "event": "6 validation errors (red marks) detected on page. Application might not be submitted correctly.", "level": "warning", "timestamp": "2026-04-16T19:54:21.199931Z"}
+{"job_id": 37, "phase": "llm", "success": false, "event": "Application submission could not be verified.", "level": "error", "timestamp": "2026-04-16T19:54:23.251600Z"}
+{"job_id": 37, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-16T19:54:23.254724Z"}
+{"job_id": 37, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-16T19:54:23.255099Z"}
+{"job_id": 37, "phase": "human", "event": "Phase 3 failed: EOF when reading a line", "level": "error", "timestamp": "2026-04-16T19:54:23.256079Z"}
+{"job_id": 37, "phase": "human", "success": false, "event": "Completed phase: human", "level": "info", "timestamp": "2026-04-16T19:54:23.256383Z"}
+{"job_id": 37, "phase": null, "event": "Application failed", "level": "error", "timestamp": "2026-04-16T19:54:23.256671Z"}
+{"job_id": 37, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-16T19:54:23.453959Z"}
+{"job_id": 37, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-16T20:06:29.644392Z"}
+{"job_id": 37, "phase": "rules", "selector": "button:has-text('Accept')", "event": "Dismissed blocking overlay", "level": "info", "timestamp": "2026-04-16T20:06:34.047056Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/001_20260416_130634_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T20:06:36.913067Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-16T20:06:36.916076Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "pattern": "myworkdayjobs\\.com", "event": "Detected workday from URL", "level": "info", "timestamp": "2026-04-16T20:06:36.916617Z"}
+{"job_id": 37, "phase": "rules", "event": "Detected ATS: workday", "level": "info", "timestamp": "2026-04-16T20:06:36.930718Z"}
+{"job_id": 37, "phase": "rules", "event": "Using workday handler", "level": "info", "timestamp": "2026-04-16T20:06:36.931218Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for Workday apply button", "level": "info", "timestamp": "2026-04-16T20:06:36.931445Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-16T20:06:36.963465Z"}
+{"job_id": 37, "phase": "rules", "selector": "a:has-text('Apply')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-16T20:06:37.083371Z"}
+{"job_id": 37, "phase": "rules", "aria_modal_dialog": false, "event": "Blocking in-page modal detected (Workday application entry). Form automation cannot proceed until this dialog is cleared \u2014 attempting 'Apply Manually' (or Autofill fallback).", "level": "info", "timestamp": "2026-04-16T20:06:37.910928Z"}
+{"job_id": 37, "phase": "rules", "event": "Clicked 'Apply Manually' in Workday start modal (dialog-scoped)", "level": "info", "timestamp": "2026-04-16T20:06:38.563010Z"}
+{"job_id": 37, "phase": "rules", "url_preview": "https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply/applyManually", "event": "Apply navigated in the same tab.", "level": "info", "timestamp": "2026-04-16T20:06:38.564010Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/002_20260416_130639_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T20:06:39.850140Z"}
+{"job_id": 37, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-16T20:06:41.854153Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/001_20260416_130643_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:06:43.985935Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:06:44.045608Z"}
+{"job_id": 37, "phase": "llm", "tokens": 4713, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:06:55.538929Z"}
+{"job_id": 37, "phase": "llm", "action_count": 4, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:06:55.540539Z"}
+{"job_id": 37, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:06:55.541425Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:06:56.669897Z"}
+{"job_id": 37, "phase": "llm", "selector": "Password", "field_label": "Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:06:56.670258Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:06:57.458632Z"}
+{"job_id": 37, "phase": "llm", "selector": "Verify New Password", "field_label": "Verify New Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:06:57.458956Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:06:58.206184Z"}
+{"job_id": 37, "phase": "llm", "selector": "Create Account", "field_label": "Create Account Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:06:58.206485Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:06:58.261117Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 1 result: 4/4 actions succeeded", "level": "info", "timestamp": "2026-04-16T20:07:20.408560Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent successfully traversed to a new Node. URL changed from https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply/applyManually to https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/login?redirect=%2Fen-US%2Fssctechnologies%2Fjob%2FWaltham-MA---10-CityPoint%2FSenior-ML-Engineer---Agentic-AI_R42088%2Fapply%2FapplyManually.", "level": "info", "timestamp": "2026-04-16T20:07:33.629653Z"}
+{"job_id": 37, "phase": "llm", "event": "Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", "level": "info", "timestamp": "2026-04-16T20:07:33.689882Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 2). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T20:07:35.761275Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/002_20260416_130735_ax_tree_page_2.json", "name": "ax_tree_page_2", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:07:35.762908Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:07:35.765052Z"}
+{"job_id": 37, "phase": "llm", "tokens": 4434, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:07:39.715440Z"}
+{"job_id": 37, "phase": "llm", "action_count": 3, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:07:39.716294Z"}
+{"job_id": 37, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:07:39.716787Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:07:40.815891Z"}
+{"job_id": 37, "phase": "llm", "selector": "Password", "field_label": "Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:07:40.817079Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:07:41.638215Z"}
+{"job_id": 37, "phase": "llm", "selector": "Sign In", "field_label": "Sign In Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:07:41.638642Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:07:41.718607Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 2 result: 3/3 actions succeeded", "level": "info", "timestamp": "2026-04-16T20:08:03.727617Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent successfully traversed to a new Node. URL changed from https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/login?redirect=%2Fen-US%2Fssctechnologies%2Fjob%2FWaltham-MA---10-CityPoint%2FSenior-ML-Engineer---Agentic-AI_R42088%2Fapply%2FapplyManually to https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply.", "level": "info", "timestamp": "2026-04-16T20:08:16.986579Z"}
+{"job_id": 37, "phase": "llm", "event": "Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", "level": "info", "timestamp": "2026-04-16T20:08:17.041648Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 3). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T20:08:19.117892Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/003_20260416_130819_ax_tree_page_3.json", "name": "ax_tree_page_3", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:08:19.121443Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:08:19.122299Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5259, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:08:25.565366Z"}
+{"job_id": 37, "phase": "llm", "action_count": 4, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:08:25.567072Z"}
+{"job_id": 37, "phase": "llm", "selector": "How Did You Hear About Us?", "field_label": "How Did You Hear About Us?", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:08:25.567659Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:08:26.658101Z"}
+{"job_id": 37, "phase": "llm", "selector": "Phone Extension", "field_label": "Phone Extension", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:08:26.658706Z"}
+{"job_id": 37, "phase": "llm", "selector": "Resume/CV", "field_label": "Resume", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-16T20:08:26.658941Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:08:26.772068Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:08:26.864552Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 3 result: 2/4 actions succeeded", "level": "info", "timestamp": "2026-04-16T20:08:48.886868Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent detected dynamic DOM updates or new fields on the same page.", "level": "info", "timestamp": "2026-04-16T20:09:02.054799Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 4). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T20:09:02.055314Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/004_20260416_130902_ax_tree_page_4.json", "name": "ax_tree_page_4", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:09:02.057864Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:09:02.062836Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5388, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:09:09.042792Z"}
+{"job_id": 37, "phase": "llm", "action_count": 5, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:09:09.046175Z"}
+{"job_id": 37, "phase": "llm", "selector": "Field of Study", "field_label": "Field of Study", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:09:09.047141Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:09:09.797659Z"}
+{"job_id": 37, "phase": "llm", "selector": "Overall Result (GPA)", "field_label": "Overall Result (GPA)", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:09:09.798121Z"}
+{"job_id": 37, "phase": "llm", "selector": "To (Actual or Expected)", "field_label": "To Year", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:09:09.798357Z"}
+{"job_id": 37, "phase": "llm", "selector": "Type to Add Skills", "field_label": "Skills", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:09:09.894247Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:09:15.059263Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:09:15.060308Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:09:15.139411Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 4 result: 3/5 actions succeeded", "level": "info", "timestamp": "2026-04-16T20:09:37.345671Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent detected dynamic DOM updates or new fields on the same page.", "level": "info", "timestamp": "2026-04-16T20:09:50.535945Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 5). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T20:09:50.536692Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/005_20260416_130950_ax_tree_page_5.json", "name": "ax_tree_page_5", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:09:50.539391Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:09:50.543838Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5238, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:09:57.300077Z"}
+{"job_id": 37, "phase": "llm", "action_count": 7, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:09:57.303565Z"}
+{"job_id": 37, "phase": "llm", "selector": "Are you currently authorized to work in the country where this position is located?*", "field_label": "Work Authorization", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T20:09:57.304311Z"}
+{"job_id": 37, "phase": "llm", "action": "select", "selector": "Are you currently authorized to work in the country where this position is located?*", "event": "Action execution failed: 'ToolExecutor' object has no attribute '_normalize_fill_value'", "level": "error", "timestamp": "2026-04-16T20:09:57.304757Z"}
+{"job_id": 37, "phase": "llm", "selector": "Do you now, or will you in the future, require employer-sponsored work authorization in order to be employed in the country where this position is located?*", "field_label": "Sponsorship Requirement", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T20:09:57.305340Z"}
+{"job_id": 37, "phase": "llm", "action": "select", "selector": "Do you now, or will you in the future, require employer-sponsored work authorization in order to be employed in the country where this position is located?*", "event": "Action execution failed: 'ToolExecutor' object has no attribute '_normalize_fill_value'", "level": "error", "timestamp": "2026-04-16T20:09:57.305622Z"}
+{"job_id": 37, "phase": "llm", "selector": "What is your highest level of education completed?*", "field_label": "Highest Education Level", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T20:09:57.306041Z"}
+{"job_id": 37, "phase": "llm", "action": "select", "selector": "What is your highest level of education completed?*", "event": "Action execution failed: 'ToolExecutor' object has no attribute '_normalize_fill_value'", "level": "error", "timestamp": "2026-04-16T20:09:57.306231Z"}
+{"job_id": 37, "phase": "llm", "selector": "Do you have any relatives currently working for SS&C Technologies, Inc. or any of its subsidiaries?*", "field_label": "Relatives at Company", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T20:09:57.306589Z"}
+{"job_id": 37, "phase": "llm", "action": "select", "selector": "Do you have any relatives currently working for SS&C Technologies, Inc. or any of its subsidiaries?*", "event": "Action execution failed: 'ToolExecutor' object has no attribute '_normalize_fill_value'", "level": "error", "timestamp": "2026-04-16T20:09:57.306812Z"}
+{"job_id": 37, "phase": "llm", "selector": "Have you ever interviewed with SS&C Technologies, Inc or any of its subsidiaries in the past?*", "field_label": "Previous Interview", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T20:09:57.307148Z"}
+{"job_id": 37, "phase": "llm", "action": "select", "selector": "Have you ever interviewed with SS&C Technologies, Inc or any of its subsidiaries in the past?*", "event": "Action execution failed: 'ToolExecutor' object has no attribute '_normalize_fill_value'", "level": "error", "timestamp": "2026-04-16T20:09:57.307340Z"}
+{"job_id": 37, "phase": "llm", "selector": "What work environment(s) or work models are you open to?*", "field_label": "Work Environment", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T20:09:57.307713Z"}
+{"job_id": 37, "phase": "llm", "action": "select", "selector": "What work environment(s) or work models are you open to?*", "event": "Action execution failed: 'ToolExecutor' object has no attribute '_normalize_fill_value'", "level": "error", "timestamp": "2026-04-16T20:09:57.307969Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:09:57.308372Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:09:57.396515Z"}
+{"job_id": 37, "phase": "llm", "event": "6 validation errors (red marks) detected on page. Application might not be submitted correctly.", "level": "warning", "timestamp": "2026-04-16T20:10:19.637316Z"}
+{"job_id": 37, "phase": "llm", "success": false, "event": "Application submission could not be verified.", "level": "error", "timestamp": "2026-04-16T20:10:21.672022Z"}
+{"job_id": 37, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-16T20:10:21.674652Z"}
+{"job_id": 37, "phase": "human", "event": "Starting phase: human", "level": "info", "timestamp": "2026-04-16T20:10:21.674968Z"}
+{"job_id": 37, "phase": "human", "event": "Phase 3 failed: EOF when reading a line", "level": "error", "timestamp": "2026-04-16T20:10:21.675968Z"}
+{"job_id": 37, "phase": "human", "success": false, "event": "Completed phase: human", "level": "info", "timestamp": "2026-04-16T20:10:21.676239Z"}
+{"job_id": 37, "phase": null, "event": "Application failed", "level": "error", "timestamp": "2026-04-16T20:10:21.676482Z"}
+{"job_id": 37, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-16T20:10:21.948727Z"}
+{"job_id": 37, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-16T20:16:00.881099Z"}
+{"job_id": 37, "phase": "rules", "selector": "button:has-text('Accept')", "event": "Dismissed blocking overlay", "level": "info", "timestamp": "2026-04-16T20:16:04.157149Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/001_20260416_131604_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T20:16:06.427623Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-16T20:16:06.428204Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "pattern": "myworkdayjobs\\.com", "event": "Detected workday from URL", "level": "info", "timestamp": "2026-04-16T20:16:06.428739Z"}
+{"job_id": 37, "phase": "rules", "event": "Detected ATS: workday", "level": "info", "timestamp": "2026-04-16T20:16:06.440703Z"}
+{"job_id": 37, "phase": "rules", "event": "Using workday handler", "level": "info", "timestamp": "2026-04-16T20:16:06.441255Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for Workday apply button", "level": "info", "timestamp": "2026-04-16T20:16:06.441508Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-16T20:16:06.486285Z"}
+{"job_id": 37, "phase": "rules", "selector": "a:has-text('Apply')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-16T20:16:06.733454Z"}
+{"job_id": 37, "phase": "rules", "aria_modal_dialog": false, "event": "Blocking in-page modal detected (Workday application entry). Form automation cannot proceed until this dialog is cleared \u2014 attempting 'Apply Manually' (or Autofill fallback).", "level": "info", "timestamp": "2026-04-16T20:16:07.560959Z"}
+{"job_id": 37, "phase": "rules", "event": "Clicked 'Apply Manually' in Workday start modal (dialog-scoped)", "level": "info", "timestamp": "2026-04-16T20:16:08.207224Z"}
+{"job_id": 37, "phase": "rules", "url_preview": "https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply/applyManually", "event": "Apply navigated in the same tab.", "level": "info", "timestamp": "2026-04-16T20:16:08.208249Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/002_20260416_131610_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T20:16:10.901221Z"}
+{"job_id": 37, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-16T20:16:12.909543Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/001_20260416_131615_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:16:15.065217Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:16:15.115809Z"}
+{"job_id": 37, "phase": "llm", "tokens": 4714, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:16:20.161495Z"}
+{"job_id": 37, "phase": "llm", "action_count": 4, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:16:20.163077Z"}
+{"job_id": 37, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:16:20.164139Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:16:21.293831Z"}
+{"job_id": 37, "phase": "llm", "selector": "Password", "field_label": "Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:16:21.294490Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:16:22.049930Z"}
+{"job_id": 37, "phase": "llm", "selector": "Verify New Password", "field_label": "Verify New Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:16:22.050383Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:16:22.816229Z"}
+{"job_id": 37, "phase": "llm", "selector": "Create Account", "field_label": "Create Account Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:16:22.816598Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:16:22.881754Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 1 result: 4/4 actions succeeded", "level": "info", "timestamp": "2026-04-16T20:16:45.208299Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent successfully traversed to a new Node. URL changed from https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply/applyManually to https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/login?redirect=%2Fen-US%2Fssctechnologies%2Fjob%2FWaltham-MA---10-CityPoint%2FSenior-ML-Engineer---Agentic-AI_R42088%2Fapply%2FapplyManually.", "level": "info", "timestamp": "2026-04-16T20:16:58.413298Z"}
+{"job_id": 37, "phase": "llm", "event": "Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", "level": "info", "timestamp": "2026-04-16T20:16:58.476640Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 2). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T20:17:00.596676Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/002_20260416_131700_ax_tree_page_2.json", "name": "ax_tree_page_2", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:17:00.599637Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:17:00.604432Z"}
+{"job_id": 37, "phase": "llm", "tokens": 4438, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:17:04.290909Z"}
+{"job_id": 37, "phase": "llm", "action_count": 3, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:17:04.292075Z"}
+{"job_id": 37, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:17:04.292627Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:17:05.409864Z"}
+{"job_id": 37, "phase": "llm", "selector": "Password", "field_label": "Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:17:05.410252Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:17:06.190375Z"}
+{"job_id": 37, "phase": "llm", "selector": "Sign In", "field_label": "Sign In Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:17:06.190739Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:17:06.317328Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 2 result: 3/3 actions succeeded", "level": "info", "timestamp": "2026-04-16T20:17:28.346996Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent successfully traversed to a new Node. URL changed from https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/login?redirect=%2Fen-US%2Fssctechnologies%2Fjob%2FWaltham-MA---10-CityPoint%2FSenior-ML-Engineer---Agentic-AI_R42088%2Fapply%2FapplyManually to https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply.", "level": "info", "timestamp": "2026-04-16T20:17:41.625075Z"}
+{"job_id": 37, "phase": "llm", "event": "Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", "level": "info", "timestamp": "2026-04-16T20:17:41.681527Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 3). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T20:17:43.752548Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/003_20260416_131743_ax_tree_page_3.json", "name": "ax_tree_page_3", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:17:43.756399Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:17:43.757270Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5259, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:17:47.539111Z"}
+{"job_id": 37, "phase": "llm", "action_count": 4, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:17:47.540493Z"}
+{"job_id": 37, "phase": "llm", "selector": "How Did You Hear About Us?", "field_label": "How Did You Hear About Us?", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:17:47.541190Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:17:48.643484Z"}
+{"job_id": 37, "phase": "llm", "selector": "Phone Extension", "field_label": "Phone Extension", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:17:48.644283Z"}
+{"job_id": 37, "phase": "llm", "selector": "Resume/CV", "field_label": "Resume", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-16T20:17:48.644956Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:17:48.782399Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:17:48.859689Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 3 result: 2/4 actions succeeded", "level": "info", "timestamp": "2026-04-16T20:18:10.865793Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent detected dynamic DOM updates or new fields on the same page.", "level": "info", "timestamp": "2026-04-16T20:18:24.084093Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 4). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T20:18:24.086331Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/004_20260416_131824_ax_tree_page_4.json", "name": "ax_tree_page_4", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:18:24.090691Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:18:24.094939Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5390, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:18:31.656227Z"}
+{"job_id": 37, "phase": "llm", "action_count": 5, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:18:31.658896Z"}
+{"job_id": 37, "phase": "llm", "selector": "Field of Study", "field_label": "Field of Study", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:18:31.659824Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:18:32.401861Z"}
+{"job_id": 37, "phase": "llm", "selector": "Overall Result (GPA)", "field_label": "Overall Result (GPA)", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:18:32.403032Z"}
+{"job_id": 37, "phase": "llm", "selector": "To (Actual or Expected) Year", "field_label": "To Year", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:18:32.403329Z"}
+{"job_id": 37, "phase": "llm", "selector": "Type to Add Skills", "field_label": "Skills", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:18:32.467558Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:18:37.614165Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:18:37.615222Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:18:37.702169Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 4 result: 3/5 actions succeeded", "level": "info", "timestamp": "2026-04-16T20:18:59.904631Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent detected dynamic DOM updates or new fields on the same page.", "level": "info", "timestamp": "2026-04-16T20:19:13.089570Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 5). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T20:19:13.090957Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/005_20260416_131913_ax_tree_page_5.json", "name": "ax_tree_page_5", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:19:13.095003Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:19:13.098026Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5389, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:19:18.047924Z"}
+{"job_id": 37, "phase": "llm", "action_count": 5, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:19:18.050247Z"}
+{"job_id": 37, "phase": "llm", "selector": "Field of Study", "field_label": "Field of Study", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:19:18.050969Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:19:18.877528Z"}
+{"job_id": 37, "phase": "llm", "selector": "Overall Result (GPA)", "field_label": "Overall Result (GPA)", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:19:18.878078Z"}
+{"job_id": 37, "phase": "llm", "selector": "To (Actual or Expected)", "field_label": "To Year", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:19:18.878598Z"}
+{"job_id": 37, "phase": "llm", "selector": "Type to Add Skills", "field_label": "Skills", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:19:18.949715Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:19:24.118731Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:19:24.119877Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:19:24.218631Z"}
+{"job_id": 37, "phase": "llm", "success": true, "event": "Application appears successfully submitted!", "level": "info", "timestamp": "2026-04-16T20:19:46.306121Z"}
+{"job_id": 37, "phase": "llm", "success": true, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-16T20:19:46.308876Z"}
+{"job_id": 37, "phase": "llm", "screenshot_path": "logs/job_37/screenshots/003_20260416_131947_llm_success.png", "name": "llm_success", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T20:19:47.527056Z"}
+{"job_id": 37, "phase": null, "event": "Application completed successfully", "level": "info", "timestamp": "2026-04-16T20:19:47.527595Z"}
+{"job_id": 37, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-16T20:19:47.809845Z"}
+{"job_id": 37, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-16T20:28:28.284934Z"}
+{"job_id": 37, "phase": "rules", "selector": "button:has-text('Accept')", "event": "Dismissed blocking overlay", "level": "info", "timestamp": "2026-04-16T20:28:31.811144Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/001_20260416_132831_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T20:28:34.540213Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-16T20:28:34.541902Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "pattern": "myworkdayjobs\\.com", "event": "Detected workday from URL", "level": "info", "timestamp": "2026-04-16T20:28:34.542382Z"}
+{"job_id": 37, "phase": "rules", "event": "Detected ATS: workday", "level": "info", "timestamp": "2026-04-16T20:28:34.550742Z"}
+{"job_id": 37, "phase": "rules", "event": "Using workday handler", "level": "info", "timestamp": "2026-04-16T20:28:34.551106Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for Workday apply button", "level": "info", "timestamp": "2026-04-16T20:28:34.551278Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-16T20:28:34.573053Z"}
+{"job_id": 37, "phase": "rules", "selector": "a:has-text('Apply')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-16T20:28:34.704909Z"}
+{"job_id": 37, "phase": "rules", "aria_modal_dialog": false, "event": "Blocking in-page modal detected (Workday application entry). Form automation cannot proceed until this dialog is cleared \u2014 attempting 'Apply Manually' (or Autofill fallback).", "level": "info", "timestamp": "2026-04-16T20:28:35.523715Z"}
+{"job_id": 37, "phase": "rules", "event": "Clicked 'Apply Manually' in Workday start modal (dialog-scoped)", "level": "info", "timestamp": "2026-04-16T20:28:36.170776Z"}
+{"job_id": 37, "phase": "rules", "url_preview": "https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply/applyManually", "event": "Apply navigated in the same tab.", "level": "info", "timestamp": "2026-04-16T20:28:36.171550Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/002_20260416_132838_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T20:28:38.703654Z"}
+{"job_id": 37, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-16T20:28:40.709745Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/001_20260416_132842_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:28:42.856292Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:28:42.917490Z"}
+{"job_id": 37, "phase": "llm", "tokens": 4713, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:28:49.931554Z"}
+{"job_id": 37, "phase": "llm", "action_count": 4, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:28:49.932768Z"}
+{"job_id": 37, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:28:49.933341Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:28:51.069104Z"}
+{"job_id": 37, "phase": "llm", "selector": "Password", "field_label": "Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:28:51.070132Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:28:51.828578Z"}
+{"job_id": 37, "phase": "llm", "selector": "Verify New Password", "field_label": "Verify New Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:28:51.828905Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:28:52.588584Z"}
+{"job_id": 37, "phase": "llm", "selector": "Create Account", "field_label": "Create Account Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:28:52.588897Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:28:52.643757Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 1 result: 4/4 actions succeeded", "level": "info", "timestamp": "2026-04-16T20:29:14.997339Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent successfully traversed to a new Node. URL changed from https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply/applyManually to https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/login?redirect=%2Fen-US%2Fssctechnologies%2Fjob%2FWaltham-MA---10-CityPoint%2FSenior-ML-Engineer---Agentic-AI_R42088%2Fapply%2FapplyManually.", "level": "info", "timestamp": "2026-04-16T20:29:28.201887Z"}
+{"job_id": 37, "phase": "llm", "event": "Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", "level": "info", "timestamp": "2026-04-16T20:29:28.265391Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 2). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T20:29:30.377215Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/002_20260416_132930_ax_tree_page_2.json", "name": "ax_tree_page_2", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:29:30.380323Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:29:30.382679Z"}
+{"job_id": 37, "phase": "llm", "tokens": 4433, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:29:37.133853Z"}
+{"job_id": 37, "phase": "llm", "action_count": 3, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:29:37.135249Z"}
+{"job_id": 37, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:29:37.136118Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:29:38.255213Z"}
+{"job_id": 37, "phase": "llm", "selector": "Password", "field_label": "Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:29:38.255561Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:29:39.023228Z"}
+{"job_id": 37, "phase": "llm", "selector": "Sign In", "field_label": "Sign In Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:29:39.024373Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:29:39.122202Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 2 result: 3/3 actions succeeded", "level": "info", "timestamp": "2026-04-16T20:30:01.145037Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent successfully traversed to a new Node. URL changed from https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/login?redirect=%2Fen-US%2Fssctechnologies%2Fjob%2FWaltham-MA---10-CityPoint%2FSenior-ML-Engineer---Agentic-AI_R42088%2Fapply%2FapplyManually to https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply.", "level": "info", "timestamp": "2026-04-16T20:30:14.427513Z"}
+{"job_id": 37, "phase": "llm", "event": "Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", "level": "info", "timestamp": "2026-04-16T20:30:14.483312Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 3). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T20:30:16.561079Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/003_20260416_133016_ax_tree_page_3.json", "name": "ax_tree_page_3", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:30:16.566712Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:30:16.567655Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5257, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:30:21.987218Z"}
+{"job_id": 37, "phase": "llm", "action_count": 4, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:30:21.988610Z"}
+{"job_id": 37, "phase": "llm", "selector": "How Did You Hear About Us?", "field_label": "How Did You Hear About Us?", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:30:21.989049Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:30:23.105580Z"}
+{"job_id": 37, "phase": "llm", "selector": "Phone Extension", "field_label": "Phone Extension", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:30:23.106013Z"}
+{"job_id": 37, "phase": "llm", "selector": "Resume/CV", "field_label": "Resume", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-16T20:30:23.106213Z"}
+{"job_id": 37, "phase": "llm", "event": "Upload failed: no working upload method for 'Resume/CV'", "level": "warning", "timestamp": "2026-04-16T20:30:23.225913Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:30:23.226270Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:30:23.313418Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 3 result: 2/4 actions succeeded", "level": "info", "timestamp": "2026-04-16T20:30:45.316528Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent detected dynamic DOM updates or new fields on the same page.", "level": "info", "timestamp": "2026-04-16T20:30:58.537637Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 4). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T20:30:58.538648Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/004_20260416_133058_ax_tree_page_4.json", "name": "ax_tree_page_4", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:30:58.543007Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:30:58.551649Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5389, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:31:05.783853Z"}
+{"job_id": 37, "phase": "llm", "action_count": 5, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:31:05.785582Z"}
+{"job_id": 37, "phase": "llm", "selector": "Field of Study", "field_label": "Field of Study", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:31:05.786235Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:31:06.586735Z"}
+{"job_id": 37, "phase": "llm", "selector": "Overall Result (GPA)", "field_label": "Overall Result (GPA)", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:31:06.587138Z"}
+{"job_id": 37, "phase": "llm", "selector": "To (Actual or Expected)", "field_label": "To Year", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:31:06.587364Z"}
+{"job_id": 37, "phase": "llm", "selector": "Type to Add Skills", "field_label": "Skills", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:31:06.706774Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:31:11.883238Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:31:11.886574Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:31:12.022563Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 4 result: 3/5 actions succeeded", "level": "info", "timestamp": "2026-04-16T20:31:34.223180Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent detected dynamic DOM updates or new fields on the same page.", "level": "info", "timestamp": "2026-04-16T20:31:47.463884Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 5). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T20:31:47.464910Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/005_20260416_133147_ax_tree_page_5.json", "name": "ax_tree_page_5", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:31:47.468461Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:31:47.477057Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5248, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:31:57.564722Z"}
+{"job_id": 37, "phase": "llm", "action_count": 7, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:31:57.568694Z"}
+{"job_id": 37, "phase": "llm", "selector": "Are you currently authorized to work in the country where this position is located?*", "field_label": "Work Authorization", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T20:31:57.569421Z"}
+{"job_id": 37, "phase": "llm", "action": "select", "selector": "Are you currently authorized to work in the country where this position is located?*", "event": "Action execution failed: 'ToolExecutor' object has no attribute '_normalize_fill_value'", "level": "error", "timestamp": "2026-04-16T20:31:57.569891Z"}
+{"job_id": 37, "phase": "llm", "selector": "Do you now, or will you in the future, require employer-sponsored work authorization in order to be employed in the country where this position is located?*", "field_label": "Sponsorship Requirement", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T20:31:57.570426Z"}
+{"job_id": 37, "phase": "llm", "action": "select", "selector": "Do you now, or will you in the future, require employer-sponsored work authorization in order to be employed in the country where this position is located?*", "event": "Action execution failed: 'ToolExecutor' object has no attribute '_normalize_fill_value'", "level": "error", "timestamp": "2026-04-16T20:31:57.570690Z"}
+{"job_id": 37, "phase": "llm", "selector": "What is your highest level of education completed?*", "field_label": "Highest Education Level", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T20:31:57.571154Z"}
+{"job_id": 37, "phase": "llm", "action": "select", "selector": "What is your highest level of education completed?*", "event": "Action execution failed: 'ToolExecutor' object has no attribute '_normalize_fill_value'", "level": "error", "timestamp": "2026-04-16T20:31:57.571356Z"}
+{"job_id": 37, "phase": "llm", "selector": "Do you have any relatives currently working for SS&C Technologies, Inc. or any of its subsidiaries?*", "field_label": "Relatives at Company", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T20:31:57.571633Z"}
+{"job_id": 37, "phase": "llm", "action": "select", "selector": "Do you have any relatives currently working for SS&C Technologies, Inc. or any of its subsidiaries?*", "event": "Action execution failed: 'ToolExecutor' object has no attribute '_normalize_fill_value'", "level": "error", "timestamp": "2026-04-16T20:31:57.571847Z"}
+{"job_id": 37, "phase": "llm", "selector": "Have you ever interviewed with SS&C Technologies, Inc or any of its subsidiaries in the past?*", "field_label": "Previous Interview", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T20:31:57.572241Z"}
+{"job_id": 37, "phase": "llm", "action": "select", "selector": "Have you ever interviewed with SS&C Technologies, Inc or any of its subsidiaries in the past?*", "event": "Action execution failed: 'ToolExecutor' object has no attribute '_normalize_fill_value'", "level": "error", "timestamp": "2026-04-16T20:31:57.572465Z"}
+{"job_id": 37, "phase": "llm", "selector": "What work environment(s) or work models are you open to?*", "field_label": "Work Environment", "event": "Executing select action", "level": "info", "timestamp": "2026-04-16T20:31:57.572840Z"}
+{"job_id": 37, "phase": "llm", "action": "select", "selector": "What work environment(s) or work models are you open to?*", "event": "Action execution failed: 'ToolExecutor' object has no attribute '_normalize_fill_value'", "level": "error", "timestamp": "2026-04-16T20:31:57.573078Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:31:57.573442Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:31:57.729711Z"}
+{"job_id": 37, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-16T20:35:39.175645Z"}
+{"job_id": 37, "phase": "rules", "selector": "button:has-text('Accept')", "event": "Dismissed blocking overlay", "level": "info", "timestamp": "2026-04-16T20:35:43.084576Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/001_20260416_133543_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T20:35:45.833271Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-16T20:35:45.834002Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "pattern": "myworkdayjobs\\.com", "event": "Detected workday from URL", "level": "info", "timestamp": "2026-04-16T20:35:45.834514Z"}
+{"job_id": 37, "phase": "rules", "event": "Detected ATS: workday", "level": "info", "timestamp": "2026-04-16T20:35:45.852876Z"}
+{"job_id": 37, "phase": "rules", "event": "Using workday handler", "level": "info", "timestamp": "2026-04-16T20:35:45.853365Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for Workday apply button", "level": "info", "timestamp": "2026-04-16T20:35:45.853577Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-16T20:35:45.887890Z"}
+{"job_id": 37, "phase": "rules", "selector": "a:has-text('Apply')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-16T20:35:46.023589Z"}
+{"job_id": 37, "phase": "rules", "aria_modal_dialog": false, "event": "Blocking in-page modal detected (Workday application entry). Form automation cannot proceed until this dialog is cleared \u2014 attempting 'Apply Manually' (or Autofill fallback).", "level": "info", "timestamp": "2026-04-16T20:35:46.844674Z"}
+{"job_id": 37, "phase": "rules", "event": "Clicked 'Apply Manually' in Workday start modal (dialog-scoped)", "level": "info", "timestamp": "2026-04-16T20:35:47.474312Z"}
+{"job_id": 37, "phase": "rules", "url_preview": "https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply/applyManually", "event": "Apply navigated in the same tab.", "level": "info", "timestamp": "2026-04-16T20:35:47.477031Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/002_20260416_133548_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-16T20:35:48.797097Z"}
+{"job_id": 37, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-16T20:35:50.805452Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/001_20260416_133552_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:35:52.950910Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:35:53.005912Z"}
+{"job_id": 37, "phase": "llm", "tokens": 4714, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:35:57.351201Z"}
+{"job_id": 37, "phase": "llm", "action_count": 4, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:35:57.353360Z"}
+{"job_id": 37, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:35:57.354149Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:35:58.808163Z"}
+{"job_id": 37, "phase": "llm", "selector": "Password", "field_label": "Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:35:58.808616Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:35:59.568426Z"}
+{"job_id": 37, "phase": "llm", "selector": "Verify New Password", "field_label": "Verify New Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:35:59.568771Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:36:00.319303Z"}
+{"job_id": 37, "phase": "llm", "selector": "Create Account", "field_label": "Create Account Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:36:00.319721Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:36:00.377183Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 1 result: 4/4 actions succeeded", "level": "info", "timestamp": "2026-04-16T20:36:22.714131Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent successfully traversed to a new Node. URL changed from https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply/applyManually to https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/login?redirect=%2Fen-US%2Fssctechnologies%2Fjob%2FWaltham-MA---10-CityPoint%2FSenior-ML-Engineer---Agentic-AI_R42088%2Fapply%2FapplyManually.", "level": "info", "timestamp": "2026-04-16T20:36:35.933723Z"}
+{"job_id": 37, "phase": "llm", "event": "Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", "level": "info", "timestamp": "2026-04-16T20:36:35.996214Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 2). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T20:36:38.081186Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/002_20260416_133638_ax_tree_page_2.json", "name": "ax_tree_page_2", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:36:38.082765Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:36:38.084732Z"}
+{"job_id": 37, "phase": "llm", "tokens": 4427, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:36:40.771237Z"}
+{"job_id": 37, "phase": "llm", "action_count": 3, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:36:40.773838Z"}
+{"job_id": 37, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:36:40.776010Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:36:41.935441Z"}
+{"job_id": 37, "phase": "llm", "selector": "Password", "field_label": "Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:36:41.935919Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:36:42.754268Z"}
+{"job_id": 37, "phase": "llm", "selector": "Sign In", "field_label": "Sign In Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:36:42.755083Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:36:42.868827Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 2 result: 3/3 actions succeeded", "level": "info", "timestamp": "2026-04-16T20:37:04.879818Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent successfully traversed to a new Node. URL changed from https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/login?redirect=%2Fen-US%2Fssctechnologies%2Fjob%2FWaltham-MA---10-CityPoint%2FSenior-ML-Engineer---Agentic-AI_R42088%2Fapply%2FapplyManually to https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply.", "level": "info", "timestamp": "2026-04-16T20:37:18.181042Z"}
+{"job_id": 37, "phase": "llm", "event": "Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", "level": "info", "timestamp": "2026-04-16T20:37:18.241217Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 3). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T20:37:20.319409Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/003_20260416_133720_ax_tree_page_3.json", "name": "ax_tree_page_3", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:37:20.324075Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:37:20.324995Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5259, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:37:24.083775Z"}
+{"job_id": 37, "phase": "llm", "action_count": 4, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:37:24.085307Z"}
+{"job_id": 37, "phase": "llm", "selector": "How Did You Hear About Us?", "field_label": "How Did You Hear About Us?", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:37:24.085916Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:37:25.214952Z"}
+{"job_id": 37, "phase": "llm", "selector": "Phone Extension", "field_label": "Phone Extension", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:37:25.215775Z"}
+{"job_id": 37, "phase": "llm", "selector": "Resume/CV", "field_label": "Resume Upload", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-16T20:37:25.216081Z"}
+{"job_id": 37, "phase": "llm", "event": "Upload scan: file_inputs=0 wd_selectors=0 attach_buttons=0 selector='Resume/CV'", "level": "info", "timestamp": "2026-04-16T20:37:25.230572Z"}
+{"job_id": 37, "phase": "llm", "event": "Upload failed for 'Resume/CV': all strategies exhausted (file_chooser, set_input_files, scroll+retry)", "level": "warning", "timestamp": "2026-04-16T20:37:27.155226Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:37:27.155792Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:37:27.231382Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 3 result: 2/4 actions succeeded", "level": "info", "timestamp": "2026-04-16T20:37:49.285019Z"}
+{"job_id": 37, "phase": "llm", "event": "Agent detected dynamic DOM updates or new fields on the same page.", "level": "info", "timestamp": "2026-04-16T20:38:02.469257Z"}
+{"job_id": 37, "phase": "llm", "event": "New form page/node detected (page 4). Running LLM again with updated context.", "level": "info", "timestamp": "2026-04-16T20:38:02.470298Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/004_20260416_133802_ax_tree_page_4.json", "name": "ax_tree_page_4", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-16T20:38:02.474065Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-16T20:38:02.485712Z"}
+{"job_id": 37, "phase": "llm", "tokens": 5401, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-16T20:38:07.897588Z"}
+{"job_id": 37, "phase": "llm", "action_count": 5, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-16T20:38:07.898968Z"}
+{"job_id": 37, "phase": "llm", "selector": "Field of Study", "field_label": "Field of Study", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:38:07.899392Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:38:08.717340Z"}
+{"job_id": 37, "phase": "llm", "selector": "Overall Result (GPA)", "field_label": "Overall Result (GPA)", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:38:08.719329Z"}
+{"job_id": 37, "phase": "llm", "selector": "To (Actual or Expected) Year", "field_label": "To (Actual or Expected) Year", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:38:08.720002Z"}
+{"job_id": 37, "phase": "llm", "selector": "Type to Add Skills", "field_label": "Skills", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-16T20:38:08.797993Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-16T20:38:13.946222Z"}
+{"job_id": 37, "phase": "llm", "selector": "Save and Continue", "field_label": "Save and Continue", "event": "Executing click action", "level": "info", "timestamp": "2026-04-16T20:38:13.946913Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-16T20:38:14.025049Z"}
+{"job_id": 37, "phase": "rules", "event": "Navigating to job page", "level": "info", "timestamp": "2026-04-18T16:10:55.479333Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/001_20260418_091057_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-18T16:10:57.692064Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-18T16:10:57.692745Z"}
+{"job_id": 37, "phase": "rules", "url": "https://ssctech.wd1.myworkdayjobs.com/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088", "pattern": "myworkdayjobs\\.com", "event": "Detected workday from URL", "level": "info", "timestamp": "2026-04-18T16:10:57.693441Z"}
+{"job_id": 37, "phase": "rules", "event": "Detected ATS: workday", "level": "info", "timestamp": "2026-04-18T16:10:57.718599Z"}
+{"job_id": 37, "phase": "rules", "event": "Using workday handler", "level": "info", "timestamp": "2026-04-18T16:10:57.719119Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for Workday apply button", "level": "info", "timestamp": "2026-04-18T16:10:57.719613Z"}
+{"job_id": 37, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-18T16:10:57.737346Z"}
+{"job_id": 37, "phase": "rules", "selector": "button:has-text('Accept')", "event": "Dismissed blocking overlay", "level": "info", "timestamp": "2026-04-18T16:10:58.300958Z"}
+{"job_id": 37, "phase": "rules", "selector": "a:has-text('Apply')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-18T16:10:58.626204Z"}
+{"job_id": 37, "phase": "rules", "aria_modal_dialog": false, "event": "Blocking in-page modal detected (Workday application entry). Form automation cannot proceed until this dialog is cleared \u2014 attempting 'Apply Manually' (or Autofill fallback).", "level": "info", "timestamp": "2026-04-18T16:10:59.454118Z"}
+{"job_id": 37, "phase": "rules", "event": "Clicked 'Apply Manually' in Workday start modal (dialog-scoped)", "level": "info", "timestamp": "2026-04-18T16:11:00.506537Z"}
+{"job_id": 37, "phase": "rules", "url_preview": "https://ssctech.wd1.myworkdayjobs.com/en-US/ssctechnologies/job/Waltham-MA---10-CityPoint/Senior-ML-Engineer---Agentic-AI_R42088/apply/applyManually", "event": "Apply navigated in the same tab.", "level": "info", "timestamp": "2026-04-18T16:11:00.507349Z"}
+{"job_id": 37, "phase": "rules", "screenshot_path": "logs/job_37/screenshots/002_20260418_091102_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-18T16:11:02.967259Z"}
+{"job_id": 37, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-18T16:11:04.981007Z"}
+{"job_id": 37, "phase": "llm", "dom_path": "logs/job_37/dom_snapshots/001_20260418_091107_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-18T16:11:07.316012Z"}
+{"job_id": 37, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-18T16:11:07.401687Z"}
+{"job_id": 37, "phase": "llm", "tokens": 4714, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-18T16:11:23.570489Z"}
+{"job_id": 37, "phase": "llm", "action_count": 4, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-18T16:11:23.572552Z"}
+{"job_id": 37, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-18T16:11:23.573600Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-18T16:11:24.840422Z"}
+{"job_id": 37, "phase": "llm", "selector": "Password", "field_label": "Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-18T16:11:24.840951Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-18T16:11:25.623096Z"}
+{"job_id": 37, "phase": "llm", "selector": "Verify New Password", "field_label": "Verify New Password", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-18T16:11:25.623505Z"}
+{"job_id": 37, "phase": "llm", "event": "Fill executed via label in frame", "level": "info", "timestamp": "2026-04-18T16:11:26.435249Z"}
+{"job_id": 37, "phase": "llm", "selector": "Create Account", "field_label": "Create Account Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-18T16:11:26.435688Z"}
+{"job_id": 37, "phase": "llm", "event": "Click executed via role button in frame", "level": "info", "timestamp": "2026-04-18T16:11:26.535525Z"}
+{"job_id": 37, "phase": "llm", "event": "LLM page 1 result: 4/4 actions succeeded", "level": "info", "timestamp": "2026-04-18T16:11:48.910052Z"}
