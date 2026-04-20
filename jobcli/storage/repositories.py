@@ -277,6 +277,126 @@ class LearnedLocatorRepository:
             for loc in locators
         ]
 
+    def upsert_for_field(
+        self,
+        ats_type: ATSType,
+        domain: Optional[str],
+        purpose: str,
+        selector: str,
+        selector_type,
+        success: bool = True,
+        notes: Optional[str] = None,
+        job_id: Optional[int] = None,
+    ) -> None:
+        """Insert-or-update a learned locator keyed by (ats_type, domain, purpose, selector).
+
+        The row is keyed by ``(ats_type, domain, purpose, selector)`` so that
+        the selector we learned on this job can be *reused on the next job
+        that lands on the same ATS*.  We additionally record ``first_job_id``
+        (the job that originally taught us the selector) and ``last_job_id``
+        (the most recent job that confirmed it), so the row has an audit
+        trail without compromising cross-job reuse.
+        """
+        if not selector or not purpose:
+            return
+        domain_pat = (domain or "").lower().strip() or None
+
+        existing = (
+            self.session.query(LearnedLocatorModel)
+            .filter(LearnedLocatorModel.ats_type == ats_type)
+            .filter(LearnedLocatorModel.purpose == purpose)
+            .filter(LearnedLocatorModel.selector == selector)
+            .filter(LearnedLocatorModel.domain_pattern == domain_pat)
+            .first()
+        )
+        if existing:
+            if success:
+                existing.success_count += 1
+            else:
+                existing.failure_count += 1
+            total = existing.success_count + existing.failure_count
+            if total > 0:
+                existing.confidence_score = existing.success_count / total
+            existing.updated_at = datetime.now()
+            if notes:
+                existing.notes = notes
+            if job_id is not None:
+                if getattr(existing, "first_job_id", None) is None:
+                    existing.first_job_id = job_id
+                existing.last_job_id = job_id
+        else:
+            self.session.add(
+                LearnedLocatorModel(
+                    ats_type=ats_type,
+                    selector=selector,
+                    selector_type=selector_type,
+                    purpose=purpose,
+                    success_count=1 if success else 0,
+                    failure_count=0 if success else 1,
+                    confidence_score=1.0 if success else 0.0,
+                    domain_pattern=domain_pat,
+                    notes=notes,
+                    created_by="auto",
+                    first_job_id=job_id,
+                    last_job_id=job_id,
+                )
+            )
+        self.session.commit()
+
+    def get_best_for_field(
+        self,
+        purpose: str,
+        ats_type: ATSType,
+        domain: Optional[str] = None,
+    ) -> Optional[LearnedLocator]:
+        """Look up the best learned locator for a (purpose) on this ATS / domain.
+
+        Search order:
+          1. Same ATS  +  same domain  (most specific)
+          2. Same ATS  (any domain)    (cross-employer reuse on same ATS)
+          3. Same domain (any ATS)     (handles re-skinned/embedded portals)
+        Returns the highest-confidence row from the first non-empty bucket.
+        """
+        if not purpose:
+            return None
+        domain_pat = (domain or "").lower().strip() or None
+
+        def _q():
+            return (
+                self.session.query(LearnedLocatorModel)
+                .filter(LearnedLocatorModel.purpose == purpose)
+                .order_by(
+                    LearnedLocatorModel.confidence_score.desc(),
+                    LearnedLocatorModel.success_count.desc(),
+                )
+            )
+
+        row = None
+        if domain_pat:
+            row = _q().filter(LearnedLocatorModel.ats_type == ats_type).filter(LearnedLocatorModel.domain_pattern == domain_pat).first()
+        if not row:
+            row = _q().filter(LearnedLocatorModel.ats_type == ats_type).first()
+        if not row and domain_pat:
+            row = _q().filter(LearnedLocatorModel.domain_pattern == domain_pat).first()
+        if not row:
+            return None
+        return LearnedLocator(
+            id=row.id,
+            ats_type=row.ats_type,
+            selector=row.selector,
+            selector_type=row.selector_type,
+            purpose=row.purpose,
+            success_count=row.success_count,
+            failure_count=row.failure_count,
+            confidence_score=row.confidence_score,
+            domain_pattern=row.domain_pattern,
+            url_pattern=row.url_pattern,
+            notes=row.notes,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            created_by=row.created_by,
+        )
+
     def update_feedback(self, locator_id: int, success: bool) -> None:
         """Update locator based on feedback."""
         locator = (
@@ -454,8 +574,16 @@ class FieldAnswerRepository:
         ats_type: ATSType,
         success: bool = True,
         source: str = "human",
+        job_id: Optional[int] = None,
     ) -> None:
-        """Save or update an answer with success tracking."""
+        """Save or update an answer with success tracking.
+
+        The answer is stored keyed by ``(normalized_label, ats_type)`` so the
+        *next* job on the same ATS can reuse it automatically.  We also
+        stamp the originating ``first_job_id`` and the latest ``last_job_id``
+        so it's possible to trace (or purge) answers learned on a specific
+        job without breaking cross-job reuse.
+        """
         existing = (
             self.session.query(FieldAnswerModel)
             .filter(
@@ -472,6 +600,10 @@ class FieldAnswerRepository:
                 existing.success_count += 1
             else:
                 existing.failure_count += 1
+            if job_id is not None:
+                if getattr(existing, "first_job_id", None) is None:
+                    existing.first_job_id = job_id
+                existing.last_job_id = job_id
         else:
             new_answer = FieldAnswerModel(
                 field_label=field_label,
@@ -481,6 +613,8 @@ class FieldAnswerRepository:
                 success_count=1 if success else 0,
                 failure_count=0 if success else 1,
                 source=source,
+                first_job_id=job_id,
+                last_job_id=job_id,
             )
             self.session.add(new_answer)
 
@@ -524,8 +658,9 @@ class InteractionLogRepository:
         strategy_name: str,
         success: bool,
         page_url_pattern: str,
+        job_id: Optional[int] = None,
     ) -> None:
-        """Save interaction attempt."""
+        """Save interaction attempt (append-only — each row keeps its ``job_id``)."""
         log_entry = InteractionLogModel(
             ats_type=ats_type,
             action_type=action_type,
@@ -534,6 +669,7 @@ class InteractionLogRepository:
             strategy_name=strategy_name,
             success=success,
             page_url_pattern=page_url_pattern,
+            job_id=job_id,
         )
         self.session.add(log_entry)
         self.session.commit()
@@ -573,8 +709,11 @@ class DropdownStrategyRepository:
         strategy_name: str,
         options_json: Optional[list[str]],
         success: bool = True,
+        job_id: Optional[int] = None,
     ) -> None:
-        """Save or update dropdown strategy."""
+        """Save or update dropdown strategy, keyed to ``(ats_type, field_label)``
+        so the *next* job on this ATS reuses the winning strategy.  Tracks
+        ``first_job_id`` / ``last_job_id`` for audit only."""
         existing = (
             self.session.query(DropdownStrategyModel)
             .filter(
@@ -592,6 +731,10 @@ class DropdownStrategyRepository:
                 existing.success_count += 1
             else:
                 existing.failure_count += 1
+            if job_id is not None:
+                if getattr(existing, "first_job_id", None) is None:
+                    existing.first_job_id = job_id
+                existing.last_job_id = job_id
         else:
             new_strategy = DropdownStrategyModel(
                 ats_type=ats_type,
@@ -600,6 +743,8 @@ class DropdownStrategyRepository:
                 options_json=options_json,
                 success_count=1 if success else 0,
                 failure_count=0 if success else 1,
+                first_job_id=job_id,
+                last_job_id=job_id,
             )
             self.session.add(new_strategy)
 

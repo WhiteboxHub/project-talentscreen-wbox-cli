@@ -21,15 +21,27 @@ class AgentMemory:
         self,
         database_session: Session,
         infer_location_country: bool = True,
+        job_id: Optional[int] = None,
     ) -> None:
-        """Initialize memory with database session."""
+        """Initialize memory with database session.
+
+        ``job_id`` is stamped on every write so we have an audit trail
+        linking each answer / locator / interaction back to the originating
+        job.  Lookups still key on ``(normalized_label, ats_type)`` etc. so
+        reuse across jobs keeps working.
+        """
         self.session = database_session
+        self.job_id = job_id
         self.field_answer_repo = FieldAnswerRepository(self.session)
         self.interaction_repo = InteractionLogRepository(self.session)
         self.dropdown_strategy_repo = DropdownStrategyRepository(self.session)
         self.synonym_resolver = SynonymResolver(
             infer_location_country=infer_location_country,
         )
+
+    def set_job_id(self, job_id: Optional[int]) -> None:
+        """Update the current job id (called once the job row is created)."""
+        self.job_id = job_id
 
     def save_field_answer(
         self, field_label: str, value: str, ats_type: ATSType, success: bool = True, source: str = "human"
@@ -55,6 +67,7 @@ class AgentMemory:
             ats_type=ats_type,
             success=success,
             source=source,
+            job_id=self.job_id,
         )
         return True
 
@@ -115,6 +128,7 @@ class AgentMemory:
             strategy_name=strategy_name,
             options_json=options_json,
             success=success,
+            job_id=self.job_id,
         )
 
     def get_dropdown_strategy(
@@ -145,6 +159,7 @@ class AgentMemory:
             strategy_name=strategy_name,
             success=success,
             page_url_pattern=url_pattern,
+            job_id=self.job_id,
         )
 
     def build_llm_context(self, ats_type: ATSType) -> str:

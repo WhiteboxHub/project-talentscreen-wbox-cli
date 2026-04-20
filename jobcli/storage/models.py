@@ -66,6 +66,11 @@ class LearnedLocatorModel(Base):
     domain_pattern = Column(String(500))
     url_pattern = Column(String(500))
     notes = Column(Text)
+    # First job this locator was learned/seen on (oldest originator). Nullable
+    # so cross-job reuse still works on rows created before this column existed.
+    first_job_id = Column(Integer, nullable=True)
+    # Most recent job that reinforced this locator (last writer wins).
+    last_job_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     created_by = Column(String(50), default="human")
@@ -109,6 +114,10 @@ class FieldAnswerModel(Base):
     success_count = Column(Integer, default=0)
     failure_count = Column(Integer, default=0)
     source = Column(String(50), default="human")
+    # The job the answer was first learned on, and the most recent job that
+    # reused/updated it.  Both nullable so the row is still valid across jobs.
+    first_job_id = Column(Integer, nullable=True)
+    last_job_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -120,12 +129,15 @@ class InteractionLogModel(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     ats_type = Column(Enum(ATSType), default=ATSType.UNKNOWN)
-    action_type = Column(String(50), nullable=False) 
+    action_type = Column(String(50), nullable=False)
     field_label = Column(String(500))
     selector = Column(String(1000))
     strategy_name = Column(String(100))
     success = Column(Boolean, default=False)
     page_url_pattern = Column(String(500))
+    # Which job this interaction happened on.  Append-only — never rewritten
+    # so the full per-job attempt history survives.
+    job_id = Column(Integer, nullable=True)
     timestamp = Column(DateTime, default=datetime.now)
 
 
@@ -142,6 +154,8 @@ class DropdownStrategyModel(Base):
     selected_value = Column(String(500), nullable=True)
     success_count = Column(Integer, default=0)
     failure_count = Column(Integer, default=0)
+    first_job_id = Column(Integer, nullable=True)
+    last_job_id = Column(Integer, nullable=True)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
@@ -164,12 +178,41 @@ class Database:
             return
         try:
             inspector = inspect(self.engine)
-            if "jobs" not in inspector.get_table_names():
-                return
-            cols = {c["name"] for c in inspector.get_columns("jobs")}
-            if "resolved_url" not in cols:
+            table_names = set(inspector.get_table_names())
+            if "jobs" in table_names:
+                cols = {c["name"] for c in inspector.get_columns("jobs")}
+                if "resolved_url" not in cols:
+                    with self.engine.begin() as conn:
+                        conn.execute(text("ALTER TABLE jobs ADD COLUMN resolved_url VARCHAR(1000)"))
+
+            # Back-fill job_id linkage columns on the memory tables so that
+            # rows written from now on carry the originating job, while older
+            # rows simply have NULL and remain valid for cross-job reuse.
+            additive: dict[str, list[tuple[str, str]]] = {
+                "field_answers": [
+                    ("first_job_id", "INTEGER"),
+                    ("last_job_id", "INTEGER"),
+                ],
+                "learned_locators": [
+                    ("first_job_id", "INTEGER"),
+                    ("last_job_id", "INTEGER"),
+                ],
+                "interaction_log": [
+                    ("job_id", "INTEGER"),
+                ],
+                "dropdown_strategies": [
+                    ("first_job_id", "INTEGER"),
+                    ("last_job_id", "INTEGER"),
+                ],
+            }
+            for table, pending in additive.items():
+                if table not in table_names:
+                    continue
+                existing = {c["name"] for c in inspector.get_columns(table)}
                 with self.engine.begin() as conn:
-                    conn.execute(text("ALTER TABLE jobs ADD COLUMN resolved_url VARCHAR(1000)"))
+                    for col_name, col_type in pending:
+                        if col_name not in existing:
+                            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_type}"))
         except Exception:
             pass
 

@@ -57,6 +57,21 @@ class ExecutionPhase(str, Enum):
     HUMAN = "human"
 
 
+class InteractionMode(str, Enum):
+    """Controls how tightly the human is integrated into the agent loop.
+
+    AUTO      – fully autonomous; only pauses for CAPTCHA or fatal errors.
+    SUPERVISED – (default, Claude-Code-style) runs autonomously but pauses
+                 for submission confirmation, missing mandatory fields, and
+                 low-confidence actions.
+    MANUAL    – pauses before every major browser action for approval.
+    """
+
+    AUTO = "auto"
+    SUPERVISED = "supervised"
+    MANUAL = "manual"
+
+
 class SelectorType(str, Enum):
     """Selector types for browser automation."""
 
@@ -290,6 +305,7 @@ class Config(BaseModel):
 
     # Preferences
     default_llm_provider: Literal["openai", "anthropic", "gemini"] = "openai"
+    interaction_mode: InteractionMode = InteractionMode.SUPERVISED
     headless: bool = True
     max_retries: int = 3
     screenshot_on_error: bool = True

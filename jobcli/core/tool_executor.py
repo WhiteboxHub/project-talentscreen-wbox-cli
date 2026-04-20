@@ -183,6 +183,44 @@ class ToolExecutor:
         
         return False
 
+    def _looks_like_dropdown(self, loc) -> bool:
+        """Return True if the matched element is a dropdown / combobox / select.
+
+        Generic detector — works on every ATS:
+        * native ``<select>`` element
+        * ARIA ``role="combobox"`` / ``"listbox"`` / ``"menu"``
+        * any element with ``aria-haspopup="listbox"|"menu"|"true"``
+        * any element with ``aria-autocomplete="list"|"both"`` (typeahead)
+        * read-only / button-like inputs that act as dropdown triggers
+          (e.g. Workday, Greenhouse Demographics)
+        """
+        try:
+            return bool(loc.evaluate(
+                """(el) => {
+                    if (!el) return false;
+                    const tag = (el.tagName || '').toLowerCase();
+                    if (tag === 'select') return true;
+                    const role = (el.getAttribute('role') || '').toLowerCase();
+                    if (['combobox','listbox','menu'].includes(role)) return true;
+                    const hp = (el.getAttribute('aria-haspopup') || '').toLowerCase();
+                    if (['listbox','menu','tree','dialog','true'].includes(hp)) return true;
+                    const ac = (el.getAttribute('aria-autocomplete') || '').toLowerCase();
+                    if (['list','both'].includes(ac)) return true;
+                    // Common pattern: <button> wrapped in a [role=combobox] container
+                    const parentRole = (el.closest('[role="combobox"],[role="listbox"]')?.getAttribute('role') || '').toLowerCase();
+                    if (['combobox','listbox'].includes(parentRole)) return true;
+                    // A "select"-shaped readonly input that opens a popup
+                    if (tag === 'input') {
+                        const t = (el.getAttribute('type') || 'text').toLowerCase();
+                        if (t !== 'text' && t !== 'search') return false;
+                        if (el.readOnly && (el.getAttribute('aria-haspopup') || el.getAttribute('aria-controls'))) return true;
+                    }
+                    return false;
+                }"""
+            ))
+        except Exception:
+            return False
+
     def _execute_type(self, action: BrowserAction) -> bool:
         if not action.value: return False
         name = action.selector
@@ -200,6 +238,30 @@ class ToolExecutor:
                 try:
                     loc = get_loc()
                     if loc.is_visible(timeout=1000):
+                        # Last-mile dropdown guard: if the matched element is
+                        # actually a dropdown/combobox/select, do NOT type into
+                        # it — redirect to the SELECT path which opens the
+                        # widget and picks the matching option.  This catches
+                        # the case where the LLM emitted `fill` on a dropdown
+                        # AND the engine-side coerce missed (e.g. unlabeled
+                        # custom widget).
+                        if self._looks_like_dropdown(loc):
+                            if self.logger:
+                                self.logger.warning(
+                                    f"Element for '{name}' is a dropdown — redirecting FILL to SELECT.",
+                                    phase=ExecutionPhase.LLM,
+                                )
+                            select_action = BrowserAction(
+                                action=ActionType.SELECT,
+                                selector=name,
+                                selector_type=action.selector_type,
+                                value=action.value,
+                                field_label=action.field_label,
+                                confidence=action.confidence,
+                                timeout=action.timeout,
+                            )
+                            return self._execute_select(select_action)
+
                         loc.highlight()
                         try:
                             loc.click(timeout=1000)

@@ -11,7 +11,7 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from jobcli.core.engine import ApplicationEngine
-from jobcli.core.schemas import ApplicationStatus, CommonQuestions, Config, Job, ResumeData
+from jobcli.core.schemas import ApplicationStatus, CommonQuestions, Config, InteractionMode, Job, ResumeData
 from jobcli.storage.models import Database
 from jobcli.core.wbox_discoverer import WboxDiscoverer
 from jobcli.storage.repositories import (
@@ -47,10 +47,20 @@ def get_database() -> Database:
 
 
 def get_config() -> Config:
-    """Load configuration, respecting .env overrides."""
+    """Load configuration, with ``.env`` always winning over the SQLite DB.
+
+    Order of precedence (highest first):
+      1. Environment variables loaded from ``.env`` (or the real shell env).
+      2. Values previously persisted to the SQLite ``config`` table.
+      3. Schema defaults.
+
+    This means rotating an API key in ``.env`` takes effect on the very next
+    run — no need to re-run ``jobcli login`` or hand-edit the DB.
+    """
     from dotenv import load_dotenv
-    load_dotenv()
-    
+    # override=True so a freshly-edited .env beats stale shell env vars too.
+    load_dotenv(override=True)
+
     db = get_database()
     session = db.get_session()
     config_repo = ConfigRepository(session)
@@ -60,7 +70,30 @@ def get_config() -> Config:
     except Exception:
         config = Config()
 
-    # Override headless if set in .env
+    # ── .env overrides ──────────────────────────────────────────────
+    # Anything present and non-empty in the environment wins.
+    env_overrides: list[tuple[str, str]] = [
+        ("OPENAI_API_KEY", "openai_api_key"),
+        ("ANTHROPIC_API_KEY", "anthropic_api_key"),
+        ("GEMINI_API_KEY", "gemini_api_key"),
+        ("DEFAULT_LLM_PROVIDER", "default_llm_provider"),
+        ("RESUME_PDF_PATH", "resume_pdf_path"),
+        ("RESUME_JSON_PATH", "resume_json_path"),
+        ("DATABASE_PATH", "database_path"),
+        ("LOG_DIRECTORY", "log_directory"),
+        ("JOBCLI_USERNAME", "job_board_username"),
+        ("JOBCLI_PASSWORD", "job_board_password"),
+        ("LINKEDIN_USERNAME", "linkedin_username"),
+        ("LINKEDIN_PASSWORD", "linkedin_password"),
+    ]
+    for env_key, attr in env_overrides:
+        val = os.getenv(env_key)
+        if val and hasattr(config, attr):
+            try:
+                setattr(config, attr, val)
+            except Exception:
+                pass
+
     env_headless = os.getenv("HEADLESS")
     if env_headless is not None:
         config.headless = env_headless.lower() == "true"
@@ -335,14 +368,35 @@ def questions() -> None:
 def apply(
     url: Optional[str] = typer.Option(None, help="Single job URL to apply"),
     batch: bool = typer.Option(False, help="Apply to all pending jobs"),
+    mode: str = typer.Option(
+        "supervised",
+        "--mode", "-m",
+        help="Interaction mode: auto (fully autonomous), supervised (AI + human checkpoints, default), manual (pause at every step)",
+    ),
 ) -> None:
-    """Apply to jobs."""
+    """Apply to jobs.
+
+    The --mode flag controls how tightly you are integrated into the agent loop:
+
+      auto       – fully autonomous; only stops for CAPTCHA / fatal errors.
+      supervised – (default) AI drives, but pauses for submission confirmation,
+                   missing fields, and failed actions — like Claude Code.
+      manual     – pauses before every action batch for explicit approval.
+    """
     console.print("[bold cyan]Job Application[/bold cyan]\n")
 
-    # Load config and resume
     config = get_config()
     ensure_configured(config)
-    
+
+    # Apply interaction mode
+    try:
+        config.interaction_mode = InteractionMode(mode)
+    except ValueError:
+        console.print(f"[red]Invalid mode '{mode}'. Choose from: auto, supervised, manual[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"Mode: [cyan]{config.interaction_mode.value}[/cyan]\n")
+
     db = get_database()
     session = db.get_session()
 
@@ -354,25 +408,19 @@ def apply(
         console.print("[red]No resume uploaded. Run 'jobcli resume upload' first.[/red]")
         raise typer.Exit(1)
 
-    # Create jobs list
     jobs = []
 
     if url:
-        # Single job (URL normalized on create/lookup for deduplication)
         job = job_repo.get_by_url(url)
         if not job:
             job = job_repo.create(
                 Job(title="Manual Entry", url=url, status=ApplicationStatus.PENDING)
             )
-        
-        # In case the user is retrying a previously failed/completed job, reset it to pending
         if job.status != ApplicationStatus.PENDING:
             job_repo.update_status(job.id, ApplicationStatus.PENDING)
-            
         jobs = [job]
 
     elif batch:
-        # All pending jobs
         jobs = job_repo.list_pending()
         if not jobs:
             console.print("[yellow]No pending jobs found.[/yellow]")
@@ -384,17 +432,13 @@ def apply(
 
     console.print(f"Applying to {len(jobs)} job(s)...\n")
 
-    # Initialize engine
     engine = ApplicationEngine(config, resume, db)
 
-    # Apply to each job
     for i, job in enumerate(jobs, 1):
         console.print(f"[bold]Job {i}/{len(jobs)}[/bold]: {job.url}")
-
         try:
             status = engine.apply_to_job(job)
             console.print(f"Status: [green]{status.value}[/green]\n")
-
         except KeyboardInterrupt:
             console.print("\n[yellow]Interrupted by user[/yellow]")
             break

@@ -138,6 +138,7 @@ class EnhancedApplicationEngine:
                 agent_memory = AgentMemory(
                     self.session,
                     infer_location_country=self.config.infer_location_country,
+                    job_id=job.id,
                 )
                 final_status = self.state_machine.run(
                     page=page,

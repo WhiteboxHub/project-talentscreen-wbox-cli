@@ -1,4 +1,10 @@
-"""Core execution engine with three-phase strategy."""
+"""Core execution engine — unified agent loop with integrated human checkpoints.
+
+Instead of a three-phase waterfall (LLM → Rules → Human), the engine runs a
+single agent loop.  Human interaction is woven inline via ``AgentInterface``,
+whose behaviour adapts to the configured ``InteractionMode`` (auto / supervised
+/ manual) — similar to how Claude Code integrates approval into its tool loop.
+"""
 
 import random
 import time
@@ -15,11 +21,12 @@ from jobcli.core.schemas import (
     ATSType,
     Config,
     ExecutionPhase,
+    InteractionMode,
     Job,
     ResumeData,
 )
 from jobcli.core.tool_executor import ToolExecutor
-from jobcli.human.interface import HumanInterface
+from jobcli.human.agent_interface import AgentInterface
 from jobcli.llm.client import LLMClient
 from jobcli.llm.ax_tree_extractor import AccessibilityTreeExtractor
 from jobcli.core.anti_bot import AntiBotManager
@@ -58,6 +65,226 @@ def _strip_apply_clicks_when_filling_only(llm_response, task: str) -> None:
     ]
 
 
+# Reject third-party / federated apply variants no matter what task the
+# LLM was asked to do.  Belt-and-braces with the prompt rule + the
+# rule-based locator's third-party filter.
+_THIRD_PARTY_APPLY_RE = re.compile(
+    r"(?i)("
+    r"easy\s*apply|"
+    r"apply\s+(with|via|using|through|on)\s+|"
+    r"\blinkedin\b|\bindeed\b|\bglassdoor\b|\bziprecruiter\b|"
+    r"\bmonster\b|\bgoogle\b|\bfacebook\b|\bseek\b|\bnaukri\b|\bxing\b|"
+    r"\bsign\s*in\s+with\b|\bcontinue\s+with\b|\boauth\b|\bsso\b"
+    r")"
+)
+
+
+def _safe_domain(url: str) -> str:
+    """Extract the host (domain) from a URL, lowercased; safe on bad input."""
+    if not url:
+        return ""
+    try:
+        from urllib.parse import urlparse
+        host = (urlparse(url).hostname or "").lower()
+        return host
+    except Exception:
+        return ""
+
+
+def _normalize_label(s: str) -> str:
+    """Normalize a field label for comparison (strip *, whitespace, punctuation, case)."""
+    if not s:
+        return ""
+    s = s.replace("*", " ").replace(":", " ").replace("?", " ")
+    return re.sub(r"\s+", " ", s).strip().lower()
+
+
+def _build_dropdown_label_set(ax_tree) -> dict[str, dict]:
+    """Return ``{normalized_label: {options, type}}`` for every dropdown on the page.
+
+    Generic across ALL ATS / sites — works off the accessibility tree:
+
+    * Native ``<select>`` elements (``ax_tree.dropdown_fields[*].type == 'native_select'``).
+    * Custom ARIA combobox / listbox / menu (any ``role`` of ``combobox``, ``listbox``).
+    * Any form field whose role is ``combobox``, ``listbox``, or whose name matches a
+      known dropdown in ``dropdown_fields`` (custom button-style dropdowns).
+
+    The engine uses this to *coerce* LLM ``fill``/``type`` actions to ``select``
+    when they target one of these labels (which is the #1 cause of "agent
+    typing into a dropdown" failures across every ATS).
+    """
+    result: dict[str, dict] = {}
+
+    for dp in (getattr(ax_tree, "dropdown_fields", None) or []):
+        label = _normalize_label(dp.get("label", ""))
+        if label:
+            result[label] = {
+                "options": dp.get("options", []) or [],
+                "type": dp.get("type", "custom_dropdown"),
+            }
+
+    for f in (getattr(ax_tree, "form_fields", None) or []):
+        role = (f.get("role") or "").lower()
+        label = _normalize_label(f.get("name", "") or f.get("label", ""))
+        if not label:
+            continue
+        if role in ("combobox", "listbox", "menu"):
+            result.setdefault(label, {"options": [], "type": "aria_dropdown"})
+
+    return result
+
+
+def _coerce_dropdown_actions(llm_response, ax_tree, logger=None) -> int:
+    """Coerce ``fill``/``type`` actions that target a dropdown label into ``select``.
+
+    The LLM frequently emits ``action="fill"`` for fields that are actually
+    dropdowns/comboboxes — typing into a closed dropdown does nothing on most
+    sites and silently fails on Workday/Greenhouse/Ashby/etc.  This safety net
+    rewrites the action *before* execution so the executor takes the proper
+    open-dropdown-then-pick-option path.
+
+    Generic implementation — works on every ATS that exposes dropdowns via
+    ``<select>`` or ``role="combobox"``/``"listbox"``.
+
+    Returns the number of actions coerced.
+    """
+    if not llm_response or not llm_response.actions:
+        return 0
+
+    dropdown_labels = _build_dropdown_label_set(ax_tree)
+    if not dropdown_labels:
+        return 0
+
+    coerced = 0
+    for a in llm_response.actions:
+        if a.action not in (ActionType.FILL, ActionType.TYPE):
+            continue
+        candidates = [
+            _normalize_label(a.field_label or ""),
+            _normalize_label(a.selector or ""),
+        ]
+        match_label = None
+        for cand in candidates:
+            if not cand:
+                continue
+            if cand in dropdown_labels:
+                match_label = cand
+                break
+            for dl in dropdown_labels:
+                if cand and dl and (cand in dl or dl in cand):
+                    match_label = dl
+                    break
+            if match_label:
+                break
+        if not match_label:
+            continue
+
+        a.action = ActionType.SELECT
+        coerced += 1
+        if logger:
+            logger.warning(
+                f"Coerced FILL→SELECT for dropdown field '{a.field_label or a.selector}' "
+                f"(value='{a.value}', options_known={len(dropdown_labels[match_label]['options'])})",
+                phase=ExecutionPhase.LLM,
+            )
+
+    return coerced
+
+
+def _empty_required_fields(ax_tree) -> list[str]:
+    """Return labels of required fields that are still empty on the current page.
+
+    A field is considered required if ``required=True`` OR its name contains
+    an asterisk (``*``).  A field is considered empty if its value/checked
+    state is empty/false.
+
+    Generic across all ATS — uses ARIA properties and the asterisk convention.
+    """
+    if not ax_tree:
+        return []
+    empty: list[str] = []
+    for f in (getattr(ax_tree, "form_fields", None) or []):
+        label = (f.get("name") or f.get("label") or "").strip()
+        if not label:
+            continue
+        is_required = bool(f.get("required")) or "*" in label
+        if not is_required:
+            continue
+
+        role = (f.get("role") or "").lower()
+        val = str(f.get("value", "") or "").strip()
+        checked = f.get("checked")
+
+        if role in ("checkbox", "radio", "switch"):
+            if not (checked is True or (isinstance(checked, str) and checked.lower() in ("true", "on", "yes", "1"))):
+                empty.append(label)
+        else:
+            if not val or val.lower() in ("select", "select...", "select an option", "choose", "please choose", "--"):
+                empty.append(label)
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for lbl in empty:
+        norm = _normalize_label(lbl)
+        if norm in seen:
+            continue
+        seen.add(norm)
+        out.append(lbl)
+    return out
+
+
+_NEXT_BUTTON_RE = re.compile(
+    r"(?i)\b(next|continue|proceed|save\s*&?\s*continue|review|submit|submit\s+application|apply|finish|complete)\b"
+)
+
+
+def _split_off_advance_clicks(llm_response) -> tuple[list, list]:
+    """Split LLM actions into ``(non_advance, advance_clicks)``.
+
+    "Advance" clicks = Next / Continue / Submit / Apply / Review / Finish.
+    These are the buttons that move the user to the *next* page or submit
+    the application.  The engine holds them back when required fields are
+    still empty so the human can fill them first.
+    """
+    if not llm_response or not llm_response.actions:
+        return [], []
+
+    advance, rest = [], []
+    for a in llm_response.actions:
+        if a.action != ActionType.CLICK:
+            rest.append(a)
+            continue
+        blob = " ".join(str(x) for x in (a.field_label, a.selector, a.value) if x)
+        if _NEXT_BUTTON_RE.search(blob):
+            advance.append(a)
+        else:
+            rest.append(a)
+    return rest, advance
+
+
+def _strip_third_party_apply_clicks(llm_response, logger=None) -> None:
+    """Drop any CLICK action that targets a third-party apply / sign-in button.
+
+    The LLM is instructed not to emit these (see ``_build_axtree_prompt``)
+    but we filter again as a safety net.
+    """
+    if not llm_response or not llm_response.actions:
+        return
+    kept = []
+    for a in llm_response.actions:
+        if a.action == ActionType.CLICK:
+            blob = " ".join(str(x) for x in (a.field_label, a.selector, a.value) if x)
+            if _THIRD_PARTY_APPLY_RE.search(blob):
+                if logger:
+                    logger.warning(
+                        f"Dropping third-party apply click proposed by LLM: '{blob[:100]}'",
+                        phase=ExecutionPhase.LLM,
+                    )
+                continue
+        kept.append(a)
+    llm_response.actions = kept
+
+
 class ApplicationEngine:
     """Core engine for job application automation."""
 
@@ -81,114 +308,179 @@ class ApplicationEngine:
         self.anti_bot = AntiBotManager()
 
     def apply_to_job(self, job: Job) -> ApplicationStatus:
-        """Apply to a single job using three-phase strategy."""
+        """Apply to a single job using a unified agent loop with inline human checkpoints."""
         global_logger.info(f"Starting application for job {job.id}", job_url=job.url)
 
-        # Create job logger
         logger = JobLogger(
             job_id=job.id or 0,
             log_directory=self.config.log_directory,
             enable_screenshots=self.config.screenshot_on_error,
         )
 
-        # Initialize state
         state = ApplicationState(
             job_id=job.id or 0,
             current_url=job.url,
         )
 
-        # Launch browser
-        with sync_playwright() as p:
-            browser = p.chromium.launch(
-                headless=self.config.headless,
-            )
+        mode = self.config.interaction_mode
 
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=self.config.headless)
             context = browser.new_context(
                 user_agent=self.config.user_agent or self.anti_bot.get_random_user_agent(),
             )
-
             page = context.new_page()
             self.anti_bot.logger = logger
 
+            # AgentInterface is created once and used throughout the loop.
+            # Memory + ATS type are populated as soon as we know them so every
+            # human prompt can check the DB first.
+            agent = AgentInterface(
+                page,
+                self.locator_repo,
+                mode=mode,
+                logger=logger,
+                resume=self.resume,
+            )
+
             try:
-                # Navigate to job
-                logger.info("Navigating to job page", phase=ExecutionPhase.RULES)
+                # ── 1. Navigate ─────────────────────────────────────────
+                agent.show_phase_banner("Navigating to job page")
                 import playwright.sync_api
                 try:
                     page.goto(job.url, timeout=45000, wait_until="domcontentloaded")
                 except playwright.sync_api.TimeoutError:
                     logger.warning("Page load timed out after 45s. Continuing anyway.", phase=ExecutionPhase.RULES)
                 self._random_delay()
-
-                # Dismiss any cookie consent modals that may block clicks
                 self._dismiss_cookie_consent(page, logger)
-
-                # Capture initial screenshot
                 logger.capture_screenshot(page, "initial", ExecutionPhase.RULES)
 
-                # Detect ATS
+                # ── 2. Detect ATS ───────────────────────────────────────
                 detector = ATSDetector(page, logger)
                 ats_type = detector.detect(job.url)
                 state.detected_ats = ats_type
                 self.job_repo.update_ats_type(job.id or 0, ats_type)
+                agent.set_context(ats_type=ats_type)
+                agent.show_status(f"Detected ATS: {ats_type.value}", phase=ExecutionPhase.RULES)
 
-                logger.info(f"Detected ATS: {ats_type.value}", phase=ExecutionPhase.RULES)
-
-                # Phase 1: Try rule-based approach (may switch to new tab / external ATS)
+                # ── 3. Click Apply (auto, with inline human fallback) ───
+                agent.show_phase_banner("Finding and clicking Apply button")
                 apply_clicked, page = self._click_apply_button(page, state, logger, ats_type)
-                success = False
+                # Page may have changed (new tab) — update agent's reference
+                agent.page = page
+
+                if not apply_clicked:
+                    agent.show_warning("Could not find Apply button automatically.")
+                    # First try the lightweight "tell me the selector" path.
+                    ok, selector, stype = agent.request_help_finding_element("find_apply_button", ats_type)
+                    if ok and selector:
+                        try:
+                            if stype and stype.value == "xpath":
+                                page.click(f"xpath={selector}")
+                            else:
+                                page.click(selector)
+                            apply_clicked = True
+                            agent.show_success("Apply button clicked with your help.")
+                            self._random_delay()
+                            logger.capture_screenshot(page, "human_apply_click", ExecutionPhase.HUMAN)
+                        except Exception as e:
+                            agent.show_error(f"Click failed: {e}")
+
+                    # If still stuck, hand the browser to the human entirely
+                    # and resume from whatever page they end up on.
+                    if not apply_clicked:
+                        handoff = agent.handoff_to_human(
+                            reason="Could not find a native Apply button on this page.",
+                            hint="Click the correct Apply button yourself (avoid 'Apply with LinkedIn/Indeed'), "
+                                 "or navigate to the application form. Then press ENTER to hand control back.",
+                        )
+                        if handoff.cancelled:
+                            self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
+                            return ApplicationStatus.FAILED
+
+                        page = handoff.page
+                        agent.page = page
+
+                        # If the human navigated forward, treat the apply step
+                        # as already completed — do NOT go back. Re-detect ATS
+                        # in case they landed on an entirely different host
+                        # (e.g. company site -> Workday/Greenhouse).
+                        if handoff.advanced:
+                            apply_clicked = True
+                            try:
+                                new_ats = ATSDetector(page, logger).detect(page.url)
+                                if new_ats != ats_type:
+                                    ats_type = new_ats
+                                    state.detected_ats = ats_type
+                                    self.job_repo.update_ats_type(job.id or 0, ats_type)
+                                    agent.set_context(ats_type=ats_type)
+                                    agent.show_status(
+                                        f"Re-detected ATS after handoff: {ats_type.value}",
+                                        phase=ExecutionPhase.RULES,
+                                    )
+                            except Exception:
+                                pass
+                            logger.capture_screenshot(page, "human_apply_resume", ExecutionPhase.HUMAN)
+                else:
+                    agent.show_success("Apply button clicked.")
 
                 if apply_clicked:
-                    # Wait for form to load after clicking apply
                     page.wait_for_timeout(2000)
-                # --- Phase 1: AI Reasoning (LLM) ---
-                print("\n" + "="*60)
-                print("🧠 PHASE 1: AI REASONING (Autonomous Form Filling)")
-                print("="*60)
-                success = self._phase_llm(page, state, logger, apply_was_clicked=apply_clicked)
+
+                # ── 4. Fill form — unified agent loop ───────────────────
+                agent.show_phase_banner("Filling application form")
+                success = self._agent_fill_loop(page, state, logger, agent, apply_was_clicked=apply_clicked)
+
+                if not success and state.step_count == 0:
+                    # Rules-based fallback only if AI made zero progress
+                    agent.show_status("AI made no progress — trying rule-based fill...", phase=ExecutionPhase.RULES)
+                    success = self._fill_form_rules(page, state, logger, ats_type)
 
                 if not success:
-                    # SAFETY: If the LLM already successfully filled fields, but just failed to verify submission,
-                    # don't run the Rules phase. The Rules phase is dumber and will likely corrupt the form.
-                    # We check if 'answers were saved' or if any actions succeeded.
-                    # For now, if LLM is active and it 'failed', we prefer HUMAN over RULES fallback if it had a try.
-                    
-                    print("\n" + "="*60)
-                    print("⚠️  AI PHASE UNCERTAIN - Falling back to alternate strategy...")
-                    print("="*60)
-                    
-                    # Phase 2: Rules-based fallback (Only if no significant progress was made by AI)
-                    if state.step_count == 0: 
-                        print("\n🤖 PHASE 2: RULE-BASED FALLBACK")
-                        success = self._fill_form_rules(page, state, logger, ats_type)
+                    agent.show_warning("Automation could not complete the form.")
+                    handoff = agent.handoff_to_human(
+                        reason="The agent could not finish the form on its own.",
+                        hint="Fill any missing fields and submit (or click Next) yourself. "
+                             "When you're done, press ENTER and the agent will resume from "
+                             "the page you're currently on.",
+                    )
+                    if handoff.cancelled:
+                        self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
+                        return ApplicationStatus.FAILED
 
-                if not success:
-                    # Phase 3: Human in the loop
-                    print("\n" + "="*60)
-                    print("🖐️  PHASE 3: HUMAN IN THE LOOP (Manual Inspection)")
-                    print("="*60)
-                    success = self._phase_human(page, state, logger, ats_type, apply_was_clicked=apply_clicked)
+                    page = handoff.page
+                    agent.page = page
 
+                    # If the human advanced (e.g. clicked Next/Submit), give
+                    # the agent one more pass on the *new* page rather than
+                    # declaring success/failure based on the old one.
+                    if handoff.advanced:
+                        agent.show_status(
+                            "Continuing from where you left off...",
+                            phase=ExecutionPhase.HUMAN,
+                        )
+                        success = self._agent_fill_loop(
+                            page, state, logger, agent, apply_was_clicked=True
+                        )
+
+                    if not success:
+                        success = self._submission_looks_plausible(page)
+
+                # ── 5. Final status ─────────────────────────────────────
                 if success:
+                    agent.show_success("Application completed successfully!")
                     logger.info("Application completed successfully")
                     self.job_repo.update_status(job.id or 0, ApplicationStatus.SUBMITTED)
                     status = ApplicationStatus.SUBMITTED
                 else:
+                    agent.show_error("Application could not be verified as submitted.")
                     logger.error("Application failed")
                     self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
                     status = ApplicationStatus.FAILED
 
-                # Final inspection pause for headful mode
+                # ── 6. Final browser pause ──────────────────────────────
                 if not self.config.headless:
-                    print("\n" + "=" * 60)
-                    print("🏁 APPLICATION FLOW FINISHED")
-                    print("The browser will remain open so you can inspect the state.")
-                    print("Press ENTER to close the browser and finish.")
-                    print("=" * 60)
-                    try:
-                        input()
-                    except (EOFError, KeyboardInterrupt):
-                        pass
+                    agent.final_browser_pause()
 
                 return status
 
@@ -199,11 +491,9 @@ class ApplicationEngine:
                         logger.capture_screenshot(page, "error", state.current_phase)
                     except Exception:
                         pass
-                
                 self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
                 return ApplicationStatus.FAILED
             finally:
-                # Graceful browser closure
                 try:
                     if 'page' in locals() and page:
                         page.context.close()
@@ -395,21 +685,25 @@ class ApplicationEngine:
             logger.log_phase_end(ExecutionPhase.RULES, False)
         return False
 
-    def _phase_llm(
+    def _agent_fill_loop(
         self,
         page: Page,
         state: ApplicationState,
         logger: JobLogger,
+        agent: AgentInterface,
         apply_was_clicked: bool = False,
     ) -> bool:
-        """Phase 2: LLM reasoning."""
+        """Unified agent loop: LLM drives form-filling, human is integrated inline.
+
+        This replaces the old separate _phase_llm + _phase_human waterfall.
+        The ``agent`` (AgentInterface) handles every human-facing checkpoint;
+        its behaviour adapts automatically based on InteractionMode.
+        """
         logger.log_phase_start(ExecutionPhase.LLM)
         state.current_phase = ExecutionPhase.LLM
 
-        # Check if LLM is configured
         provider = self.config.default_llm_provider
         api_key = None
-
         if provider == "openai":
             api_key = self.config.openai_api_key
         elif provider == "anthropic":
@@ -418,19 +712,25 @@ class ApplicationEngine:
             api_key = self.config.gemini_api_key
 
         if not api_key:
-            logger.warning(f"No API key configured for {provider}")
-            logger.log_phase_end(ExecutionPhase.LLM, False)
-            return False
+            # Don't just bail — a missing/invalid LLM key is a routine
+            # situation (free tier exhausted, key rotated, network down).
+            # Hand the form to the human so they can finish it, then return
+            # success based on whether the resulting page looks plausible.
+            agent.show_warning(
+                f"No API key for {provider} — switching to human-driven mode."
+            )
+            handoff = agent.handoff_to_human(
+                reason=f"AI provider '{provider}' has no API key configured.",
+                hint="Fill and submit the form yourself in the browser. "
+                     "When you're done, press ENTER and JobCLI will record the result.",
+            )
+            logger.log_phase_end(ExecutionPhase.LLM, not handoff.cancelled)
+            return (not handoff.cancelled) and self._submission_looks_plausible(handoff.page)
 
         try:
-            # Wait a moment for any dynamic content to fully render
             page.wait_for_timeout(1500)
-
-            # Dismiss any overlays / cookie banners BEFORE scanning — a blocking popup
-            # makes aria_snapshot() return a mostly-empty tree and blocks all clicks.
             self._dismiss_cookie_consent(page, logger)
 
-            # Scroll to form area if apply was already clicked
             if apply_was_clicked:
                 try:
                     page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.4)")
@@ -438,18 +738,10 @@ class ApplicationEngine:
                 except Exception:
                     pass
 
-            # Extract Accessibility Tree (semantic, token-efficient)
             extractor = AccessibilityTreeExtractor(page)
             ax_tree = extractor.extract()
+            logger.save_structured_dom(ax_tree.model_dump(), "ax_tree_snapshot", ExecutionPhase.LLM)
 
-            # Save AX Tree snapshot
-            logger.save_structured_dom(
-                ax_tree.model_dump(),
-                "ax_tree_snapshot",
-                ExecutionPhase.LLM,
-            )
-
-            # Initialize LLM client
             llm_client = LLMClient(provider, api_key, logger)
 
             from jobcli.core.memory import AgentMemory
@@ -458,582 +750,454 @@ class ApplicationEngine:
             memory = AgentMemory(
                 self.session,
                 infer_location_country=self.config.infer_location_country,
+                job_id=state.job_id,
             )
-            synonym_resolver = SynonymResolver(
-                infer_location_country=self.config.infer_location_country,
-            )
+            synonym_resolver = SynonymResolver(infer_location_country=self.config.infer_location_country)
 
-            # Tell LLM whether apply was already clicked
+            # Give the AgentInterface DB access so every human prompt checks
+            # memory first and every human answer is auto-persisted.
+            agent.set_context(memory=memory)
+
             task = "fill_form_fields_only" if apply_was_clicked else "find_apply_button_and_fill_form"
 
             MAX_ASK_LOOPS = 3
             loop_count = 0
             executor = ToolExecutor(page, logger, memory=memory, synonym_resolver=synonym_resolver, ats_type=state.detected_ats)
-            results = {}
-            performed_uploads = set()  # Track what we've uploaded to avoid infinite loops
+            results: dict = {}
+            performed_uploads: set = set()
 
+            # ── Inner fill loop (handles ASK retries) ──────────────────
             while loop_count < MAX_ASK_LOOPS:
                 loop_count += 1
+                agent.show_status(f"AI iteration {loop_count}/{MAX_ASK_LOOPS}", phase=ExecutionPhase.LLM)
 
-                # Build Context from Memory
                 memory_context = memory.build_llm_context(state.detected_ats)
-
-                # Get actions from LLM using optimized AXTree
                 llm_response = llm_client.analyze_page_from_axtree(
-                    ax_tree,
-                    self.resume,
-                    task=task,
+                    ax_tree, self.resume, task=task,
                     memory_context=memory_context,
                     dropdown_options=ax_tree.dropdown_fields,
-                    resume_pdf_path=self.config.resume_pdf_path
+                    resume_pdf_path=self.config.resume_pdf_path,
                 )
 
                 if not llm_response:
-                    logger.error("LLM returned no response")
-                    logger.log_phase_end(ExecutionPhase.LLM, False)
-                    return False
+                    # Most common cause: 429 insufficient_quota, transient
+                    # network failure, or provider outage.  Don't drop the
+                    # user — hand them the browser with a clear visual cue
+                    # so they can finish the form themselves.
+                    agent.show_error(
+                        "AI is unavailable (no response) — handing the form to you."
+                    )
+                    handoff = agent.handoff_to_human(
+                        reason="The AI provider returned no response (likely API quota exhausted or network error).",
+                        hint="Finish the form yourself in the browser. When done, "
+                             "press ENTER and JobCLI will resume from your current page.",
+                    )
+                    logger.log_phase_end(ExecutionPhase.LLM, not handoff.cancelled)
+                    if handoff.cancelled:
+                        return False
+                    page = handoff.page
+                    agent.page = page
+                    # Trust the human: if they advanced the page, treat as success.
+                    return handoff.advanced or self._submission_looks_plausible(page)
 
                 if llm_response.requires_human:
-                    logger.warning("LLM flagged requires_human but proceeding with actions anyway")
+                    logger.warning("LLM flagged requires_human — proceeding with actions anyway")
 
+                # ── Handle ASK actions: STOP-AND-WAIT semantics ──────────
+                # When the AI requests info, we do NOT execute any other
+                # actions in this iteration.  We pause, gather every missing
+                # answer (DB-first via the agent), persist new answers to
+                # memory, then re-run the LLM so it sees the enriched memory
+                # context and proposes proper FILL actions next time.
                 ask_actions = [a for a in llm_response.actions if a.action == ActionType.ASK]
                 if ask_actions:
-                    if self.config.headless:
-                        logger.error("LLM requested missing mandatory information, but running headless.", phase=ExecutionPhase.LLM)
-                        return False
-                        
-                    print("\n" + "="*60)
-                    print("⚠️  MISSING MANDATORY FIELDS DETECTED ⚠️")
+                    agent.show_status(
+                        f"AI requested {len(ask_actions)} answer(s) — pausing all other actions.",
+                        phase=ExecutionPhase.HUMAN,
+                    )
+                    answered_any = False
                     for act in ask_actions:
-                        question = act.value or f"Please provide a value for {act.selector}"
                         label = act.field_label or act.selector
-                        
-                        # Show dropdown options if we have them
-                        options = []
+                        options = None
                         for dp in ax_tree.dropdown_fields:
                             if dp["label"].lower() == label.lower():
                                 options = dp["options"]
                                 break
-                                
-                        if options:
-                            print(f"\nAvailable options for '{label}':")
-                            for i, opt in enumerate(options, 1):
-                                print(f"  {i}. {opt}")
-                                
-                        answer = input(f"? {question} [{act.selector}]: ").strip()
+                        # request_field_input does DB-lookup-first and persists
+                        # any new human answer automatically.
+                        answer = agent.request_field_input(
+                            label, options=options, question_text=act.value,
+                        )
                         if answer:
-                            memory.save_field_answer(label, answer, state.detected_ats, success=True)
+                            answered_any = True
+                            # Mutate the action in-place so this iteration's
+                            # planned operations don't run; we'll re-loop with
+                            # the updated memory instead.
                             act.action = ActionType.FILL
                             act.value = answer
-                    print("="*60 + "\n")
-                    
-                    # LLM responses are updated with human answers, continue execution
-                    
-                # Sort actions: Prioritize UPLOAD actions (resume/cover letter) 
-                # This triggers ATS autofill early and expands hidden field sections.
+
+                    if answered_any:
+                        # Re-run the LLM cycle with the new memory context.
+                        # This guarantees the model considers all already-known
+                        # answers when planning the next batch of actions.
+                        agent.show_status(
+                            "Memory updated — re-running AI with new context.",
+                            phase=ExecutionPhase.LLM,
+                        )
+                        ax_tree = extractor.extract()
+                        continue
+                    # No answers gathered — fall through and execute whatever
+                    # non-ASK actions the model proposed.
+
+                # ── Upload prioritisation ─────────────────────────────────
                 has_upload = any(a.action == ActionType.UPLOAD for a in llm_response.actions)
                 if has_upload:
-                    # Filter out uploads we've already done to avoid infinite loops
                     new_uploads = []
                     for act in llm_response.actions:
                         if act.action == ActionType.UPLOAD:
-                            # Use only the filename as key to prevent redundant uploads via different selectors
                             upload_key = str(act.value).split('/')[-1].split('\\')[-1]
                             if upload_key not in performed_uploads:
                                 new_uploads.append(act)
                                 performed_uploads.add(upload_key)
-                    
                     if new_uploads:
                         llm_response.actions = new_uploads
-                        logger.info("Upload detected. Prioritizing upload and forcing re-scan to check for site autofill.", phase=ExecutionPhase.LLM)
+                        agent.show_status("Upload detected — prioritising and re-scanning for autofill.", phase=ExecutionPhase.LLM)
                     else:
-                        # We already did these uploads, ignore them this time
                         has_upload = False
                         llm_response.actions = [a for a in llm_response.actions if a.action != ActionType.UPLOAD]
-                
-                # Execute actions
+
+                # ── Show action plan / get approval ───────────────────────
                 _strip_apply_clicks_when_filling_only(llm_response, task)
+                _strip_third_party_apply_clicks(llm_response, logger)
+                # Generic dropdown safety net: any FILL/TYPE that targets a
+                # known dropdown label is rewritten to SELECT so the executor
+                # opens the dropdown instead of typing into the closed widget.
+                _coerce_dropdown_actions(llm_response, ax_tree, logger)
                 llm_response.actions = [a for a in llm_response.actions if a.action != ActionType.ASK]
+
+                # ── Required-fields-first gate ────────────────────────────
+                # If the LLM wants to click Next/Continue/Submit/Apply but
+                # required (*) fields are still empty, hold those clicks back,
+                # surface the missing labels, and ask the human to fill them
+                # via the modal (which itself checks DB-memory first).
+                non_advance, advance_clicks = _split_off_advance_clicks(llm_response)
+                empty_required = _empty_required_fields(ax_tree)
+                if advance_clicks and empty_required:
+                    agent.show_warning(
+                        f"Holding {len(advance_clicks)} Next/Submit click(s) — "
+                        f"{len(empty_required)} required field(s) still empty: "
+                        + ", ".join(empty_required[:6])
+                        + ("…" if len(empty_required) > 6 else "")
+                    )
+                    for label in empty_required:
+                        options = None
+                        for dp in (ax_tree.dropdown_fields or []):
+                            if _normalize_label(dp.get("label", "")) == _normalize_label(label):
+                                options = dp.get("options") or None
+                                break
+                        agent.request_field_input(
+                            label,
+                            options=options,
+                            question_text=f"Required field '{label}' is empty.",
+                        )
+                    # Drop the advance clicks for this iteration; only execute
+                    # the non-advance actions (fills/selects/uploads).  The
+                    # next loop iteration will re-extract the AX tree and the
+                    # LLM will re-plan, this time with the human's new answers.
+                    llm_response.actions = non_advance
+
+                if not agent.approve_action_plan(llm_response.actions):
+                    agent.show_warning("Action plan rejected — skipping this iteration.")
+                    break
+
+                # ── Execute actions ───────────────────────────────────────
                 ctx = page.context
                 pids0 = {id(p) for p in ctx.pages}
-                url0 = page.url
-                n0 = len(ctx.pages)
+                url0, n0 = page.url, len(ctx.pages)
                 results = executor.execute_actions(llm_response)
+
                 adopted = adopt_application_page_after_action(
-                    page,
-                    page_count_before=n0,
-                    url_before=url0,
-                    page_ids_before=pids0,
-                    logger=logger,
+                    page, page_count_before=n0, url_before=url0,
+                    page_ids_before=pids0, logger=logger,
                 )
                 if id(adopted) != id(page):
                     page = adopted
-                    executor = ToolExecutor(
-                        page,
-                        logger,
-                        memory=memory,
-                        synonym_resolver=synonym_resolver,
-                        ats_type=state.detected_ats,
-                    )
+                    agent.page = page
+                    executor = ToolExecutor(page, logger, memory=memory, synonym_resolver=synonym_resolver, ats_type=state.detected_ats)
                     extractor = AccessibilityTreeExtractor(page)
-                    logger.info(
-                        "LLM actions opened a new tab; continuing automation there.",
-                        phase=ExecutionPhase.LLM,
-                        url_preview=(page.url or "")[:200],
-                    )
-                    # Dismiss overlays on the newly opened tab before any interaction
+                    agent.show_status("Followed new tab.", phase=ExecutionPhase.LLM)
                     self._dismiss_cookie_consent(page, logger)
                 else:
                     page = adopted
 
-                # If we uploaded something, wait and then force the loop to continue (re-scan)
                 if has_upload:
                     wait_time = 5000 if "ashby" in page.url.lower() else 3500
-                    logger.info(f"Upload executed. Waiting {wait_time/1000}s for site-native autofill...", phase=ExecutionPhase.LLM)
+                    agent.show_status(f"Upload done — waiting {wait_time/1000}s for autofill...", phase=ExecutionPhase.LLM)
                     page.wait_for_timeout(wait_time)
                     ax_tree = extractor.extract()
-                    # We skip the rest of the loop and go to re-scan
                     continue
 
-                # Refresh AX tree so the NEXT loop iteration sees the current filled state.
-                # Without this, the LLM re-reads a stale snapshot and tries to re-fill
-                # already-filled fields (or worse, targets the wrong elements).
                 ax_tree = extractor.extract()
 
-                # Save successful actions automatically
+                # Save successful actions to memory + persist locators per
+                # ATS+domain so future runs (same site or sibling employer on
+                # the same ATS) can short-circuit element discovery.
+                page_domain = _safe_domain(page.url)
                 for action in llm_response.actions:
                     if action.field_label and action.value:
                         memory.save_field_answer(action.field_label, action.value, state.detected_ats)
-                    success = results.get(f"action_{llm_response.actions.index(action)}_{action.action.value}", False)
-                    if success and action.value and action.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT):
+                    action_success = results.get(f"action_{llm_response.actions.index(action)}_{action.action.value}", False)
+                    if action_success and action.value and action.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT):
                         label = action.field_label or action.selector
                         memory.save_field_answer(label, action.value, state.detected_ats, success=True, source="llm")
                         if executor.last_successful_strategy:
                             memory.save_interaction(state.detected_ats, action.action.value, label, action.selector, executor.last_successful_strategy, True, page.url)
-                        # Mark that the LLM made real progress so the rules fallback won't
-                        # overwrite correctly-filled fields.
+                        # Domain-aware learned locator (idempotent upsert).
+                        try:
+                            self.locator_repo.upsert_for_field(
+                                ats_type=state.detected_ats,
+                                domain=page_domain,
+                                purpose=f"{action.action.value}:{_normalize_label(label)}",
+                                selector=action.selector,
+                                selector_type=action.selector_type,
+                                success=True,
+                                job_id=state.job_id,
+                            )
+                        except Exception as e:
+                            logger.debug(f"locator persist skipped: {e}", phase=ExecutionPhase.LLM)
                         state.step_count += 1
+                    elif action.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT) and not action_success:
+                        # Track failures too so confidence scoring stays honest.
+                        try:
+                            self.locator_repo.upsert_for_field(
+                                ats_type=state.detected_ats,
+                                domain=page_domain,
+                                purpose=f"{action.action.value}:{_normalize_label(action.field_label or action.selector)}",
+                                selector=action.selector,
+                                selector_type=action.selector_type,
+                                success=False,
+                                job_id=state.job_id,
+                            )
+                        except Exception:
+                            pass
 
-                # --- Terminal fallback for failed actions ---
+                # ── Handle failed fields — inline human input ─────────────
+                # AgentInterface internally checks the DB first and persists
+                # any new answers, so we don't need to re-save here.
                 failed_actions = executor.get_failed_actions()
-                if failed_actions and not self.config.headless:
-                    # Filter to actionable failures (select/fill that could use user input)
-                    actionable_failures = [
-                        a for a in failed_actions
-                        if a.action in (ActionType.SELECT, ActionType.FILL, ActionType.TYPE)
-                    ]
-                    if actionable_failures:
-                        print("\n" + "=" * 60)
-                        print("⚠️  SOME FORM FIELDS COULD NOT BE FILLED AUTOMATICALLY ⚠️")
-                        print("Please provide values for the following fields.")
-                        print("Press Enter to skip a field.")
-                        print("These answers will be saved for future applications.")
-                        print("=" * 60)
+                if failed_actions:
+                    agent.show_failed_fields(
+                        failed_actions,
+                        dropdown_options_by_selector=getattr(executor, "last_dropdown_options", None),
+                    )
 
-                        for act in actionable_failures:
-                            label = act.field_label or act.selector
-                            current_val = act.value or ""
-                            
-                            # SAFETY: If we already have a value in resume/memory, DO NOT prompt.
-                            # The AI failed to mechanically click/type, so let the outer loop or rules phase try.
-                            if current_val and current_val.strip():
-                                continue
-
-                            if act.action == ActionType.SELECT:
-                                options = executor.last_dropdown_options.get(act.selector, [])
-                                if options:
-                                    print(f"\nAvailable options for '{label}':")
-                                    for i, opt in enumerate(options, 1):
-                                        print(f"  {i}. {opt}")
-                                        
-                            answer = input(f"\n? {label}: ").strip()
-                            if answer:
-                                memory.save_field_answer(label, answer, state.detected_ats, success=True)
-                                # Next loop will retry with the new memory context
-                
-                # Check for completion (Did we click apply, and did it navigate away or show success)
-                # Here we are simplifying the check. If "Apply" or "Submit" was executed and no more actions remain.
                 if not failed_actions and not ask_actions:
-                    print("\n✅ Answers saved for future applications.")
-                    print("=" * 60 + "\n")
+                    agent.show_success("All actions completed.")
                     break
 
-            # --- Multi-page form loop ---
-            # After the initial LLM pass, check if we navigated to a new page
-            # (e.g., user clicked Next). If so, repeat the LLM cycle.
+            # ── Multi-page form loop ──────────────────────────────────────
             MAX_PAGES = 5
             page_count = 1
-            
+
             while page_count < MAX_PAGES:
-                # Check overall success of this page
                 total = len(results)
                 successes = sum(1 for v in results.values() if v)
-                
+
                 if total == 0 or (successes / total) < 0.5:
-                    logger.info(f"LLM page {page_count} result: {successes}/{total} actions succeeded", phase=ExecutionPhase.LLM)
+                    logger.info(f"Page {page_count}: {successes}/{total} actions succeeded", phase=ExecutionPhase.LLM)
                     break
-                
-                logger.info(f"LLM page {page_count} result: {successes}/{total} actions succeeded", phase=ExecutionPhase.LLM)
-                
-                # Check for mandatory fields that are still empty
+
+                agent.show_status(f"Page {page_count}: {successes}/{total} actions succeeded.", phase=ExecutionPhase.LLM)
+
+                # Check for still-empty mandatory fields
                 required_but_empty = []
                 for field in ax_tree.form_fields:
                     is_required = field.get("required") or "*" in field.get("label", "")
-                    curr_val = field.get("value")
-                    if is_required and not curr_val:
-                        label = field.get("label") or field.get("name")
-                        required_but_empty.append(label)
-                
+                    if is_required and not field.get("value"):
+                        required_but_empty.append(field.get("label") or field.get("name"))
                 if required_but_empty:
-                    print("\n" + "!" * 40)
                     for lbl in required_but_empty:
-                        logger.warning(f"Mandatory field '{lbl}' is empty. No answer found in memory.", phase=ExecutionPhase.LLM)
-                    print("!" * 40 + "\n")
+                        agent.show_warning(f"Mandatory field '{lbl}' still empty.")
 
-                # Give user a chance to manually interact with the browser
-                if not self.config.headless:
-                    print(f"⏳ Page {page_count} partially filled. You have 8 seconds to manually fix any empty fields.")
-                    watched_names = [f.get("label") or f.get("name") for f in ax_tree.form_fields if (f.get("label") or f.get("name"))]
-                    if watched_names:
-                        unique_names = list(dict.fromkeys(watched_names))
-                        print(f"   (Watching: {', '.join(unique_names[:8])}{'...' if len(unique_names) > 8 else ''})")
-                    print("   Press ENTER to continue immediately, or wait for auto-continue.")
-                    
-                    try:
-                        # Non-blocking wait: auto-continue after 8 seconds
-                        import msvcrt
-                        import time as _time
-                        start = _time.time()
-                        while (_time.time() - start) < 8:
-                            if msvcrt.kbhit():
-                                msvcrt.getch()
-                                break
-                            _time.sleep(0.2)
-                    except (ImportError, Exception):
-                        # Fallback for non-Windows or if msvcrt fails
-                        page.wait_for_timeout(8000)
-                    print("   ▶ Continuing automation...")
-                
-                # Wait for potential page transition after Next/Continue click
+                # Checkpoint: let human review / manually fix in the browser
+                agent.pause_for_review(
+                    f"Page {page_count} filled. Review the browser and fix any empty fields.",
+                    timeout_seconds=8,
+                )
+
                 page.wait_for_timeout(3000)
-                
-                # Dismiss cookie consent on new page
                 self._dismiss_cookie_consent(page, logger)
-                
-                # Check for Captcha
-                from jobcli.core.anti_bot import AntiBotManager
+
+                # CAPTCHA check — handled through agent
                 anti_bot = AntiBotManager(logger)
                 if anti_bot.detect_captcha(page):
-                    logger.warning("CAPTCHA detected. Pausing for human intervention.", phase=ExecutionPhase.LLM)
-                    if not self.config.headless:
-                        print("\n" + "=" * 60)
-                        print("🤖 CAPTCHA OR VERIFICATION DETECTED 🤖")
-                        print("Please complete any CAPTCHAs in the browser.")
-                        print("Once done, press ENTER here to continue.")
-                        print("=" * 60 + "\n")
-                        input("Press ENTER to continue: ")
-                    else:
-                        logger.error("CAPTCHA detected in headless mode. Cannot solve.", phase=ExecutionPhase.LLM)
+                    if not agent.handle_captcha():
+                        logger.log_phase_end(ExecutionPhase.LLM, False)
                         return False
-                
-                # Wait for any SPA transitions or dynamic content loads
+
                 page.wait_for_timeout(2000)
-                
-                # Check if there's a new form to fill (re-extract AX tree)
                 new_ax_tree = extractor.extract()
-                
-                # Build list of already-filled fields to tell LLM to skip them
+
+                # Learn manually-filled fields from browser
                 filled_fields = []
                 placeholders = ["select", "choose", "please choose", "select...", "select an option"]
-                
                 for field in new_ax_tree.form_fields:
                     val = str(field.get("value", "")).strip()
                     label = field.get("name", "unknown")
-                    
-                    # Treat placeholders as empty
-                    is_placeholder = val.lower() in placeholders or val == ""
-                    
-                    if not is_placeholder:
+                    if val.lower() not in placeholders and val:
                         filled_fields.append(f"- {label}: already has value '{val}'")
-                        
-                        # PERSISTENCE: Save manually filled fields to memory for future use
                         if memory.save_field_answer(label, val, state.detected_ats, source="human"):
-                            logger.info(f"Learned answer for '{label}' from browser manual input.", phase=ExecutionPhase.LLM)
-                
-                # Compare: if URL unchanged AND form fields unchanged, we're done
+                            logger.info(f"Learned answer for '{label}' from browser.", phase=ExecutionPhase.LLM)
+
                 url_changed = new_ax_tree.url != ax_tree.url
-                
-                # Deep compare of fields (including values and checked state)
                 fields_changed = False
                 if len(new_ax_tree.form_fields) != len(ax_tree.form_fields):
                     fields_changed = True
                 else:
                     for i, field in enumerate(new_ax_tree.form_fields):
                         old_field = ax_tree.form_fields[i]
-                        # Compare normalized values to avoid trivial differences
                         if str(field.get("value", "")).strip() != str(old_field.get("value", "")).strip() or \
                            bool(field.get("checked")) != bool(old_field.get("checked")):
                             fields_changed = True
                             break
-                
-                # If a button was clicked (e.g. 'Next', 'Continue'), the page might have changed 
+
                 button_clicked = any(a.action == ActionType.CLICK for a in (llm_response.actions if 'llm_response' in locals() else []))
-                
                 if not url_changed and not fields_changed and not button_clicked:
-                    logger.info("No more actions needed or manual changes detected. Finish page fill loop.", phase=ExecutionPhase.LLM)
                     break
-                
-                filled_context = ""
-                if filled_fields:
-                    filled_context = "\n## ALREADY FILLED FIELDS (DO NOT re-fill these):\n" + "\n".join(filled_fields)
-                
-                # New page detected — run another LLM cycle
+
                 page_count += 1
-                
                 if url_changed:
-                    logger.info(f"Agent successfully traversed to a new Node. URL changed from {ax_tree.url} to {new_ax_tree.url}.", phase=ExecutionPhase.LLM)
-                    # Dismiss overlays that may have appeared on the newly loaded page
+                    agent.show_status("Navigated to new page.", phase=ExecutionPhase.LLM)
                     self._dismiss_cookie_consent(page, logger)
                 else:
-                    logger.info("Agent detected dynamic DOM updates or new fields on the same page.", phase=ExecutionPhase.LLM)
+                    agent.show_status("New fields detected on same page.", phase=ExecutionPhase.LLM)
 
                 ax_tree = new_ax_tree
-                
-                # Verify if we are missing common bottom-of-page fields
-                # Rippling/Workday/etc. often hide these until scrolled or later pages
+
                 mandatory_keywords = ["gender", "veteran", "disability", "authorization", "visa", "legal"]
                 found_in_tree = any(any(k in f.get("name", "").lower() for k in mandatory_keywords) for f in ax_tree.form_fields)
-                
                 if not found_in_tree and page_count < 4:
-                    logger.info("Bottom-of-page fields (Gender/Auth) missing. Scrolling down...", phase=ExecutionPhase.LLM)
                     page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                     page.wait_for_timeout(2000)
                     ax_tree = extractor.extract()
-                
-                logger.info(f"New form page/node detected (page {page_count}). Running LLM again with updated context.", phase=ExecutionPhase.LLM)
-                
+
+                agent.show_status(f"Running AI on page {page_count}...", phase=ExecutionPhase.LLM)
                 logger.save_structured_dom(ax_tree.model_dump(), f"ax_tree_page_{page_count}", ExecutionPhase.LLM)
-                
+
+                filled_context = ""
+                if filled_fields:
+                    filled_context = "\n## ALREADY FILLED FIELDS (DO NOT re-fill these):\n" + "\n".join(filled_fields)
                 memory_context = (memory.build_llm_context(state.detected_ats) or "") + filled_context
+
                 llm_response = llm_client.analyze_page_from_axtree(
-                    ax_tree, self.resume,
-                    task="fill_empty_fields_only",
+                    ax_tree, self.resume, task="fill_empty_fields_only",
                     memory_context=memory_context,
                     dropdown_options=ax_tree.dropdown_fields,
                     resume_pdf_path=self.config.resume_pdf_path,
                 )
-                
                 if not llm_response:
-                    logger.warning("LLM returned no response for new page.", phase=ExecutionPhase.LLM)
                     break
 
                 _strip_apply_clicks_when_filling_only(llm_response, "fill_empty_fields_only")
+                _strip_third_party_apply_clicks(llm_response, logger)
+                _coerce_dropdown_actions(llm_response, ax_tree, logger)
                 llm_response.actions = [a for a in llm_response.actions if a.action != ActionType.ASK]
+
+                # Required-fields-first gate (same as the inner loop).
+                non_advance2, advance2 = _split_off_advance_clicks(llm_response)
+                empty_req2 = _empty_required_fields(ax_tree)
+                if advance2 and empty_req2:
+                    agent.show_warning(
+                        f"Holding {len(advance2)} Next/Submit click(s) on page {page_count} — "
+                        f"{len(empty_req2)} required field(s) still empty."
+                    )
+                    for label in empty_req2:
+                        options = None
+                        for dp in (ax_tree.dropdown_fields or []):
+                            if _normalize_label(dp.get("label", "")) == _normalize_label(label):
+                                options = dp.get("options") or None
+                                break
+                        agent.request_field_input(
+                            label,
+                            options=options,
+                            question_text=f"Required field '{label}' is empty.",
+                        )
+                    llm_response.actions = non_advance2
+
+                if not agent.approve_action_plan(llm_response.actions):
+                    break
+
                 ctx2 = page.context
                 pids1 = {id(p) for p in ctx2.pages}
-                url1 = page.url
-                n1 = len(ctx2.pages)
+                url1, n1 = page.url, len(ctx2.pages)
                 results = executor.execute_actions(llm_response)
+
                 adopted2 = adopt_application_page_after_action(
-                    page,
-                    page_count_before=n1,
-                    url_before=url1,
-                    page_ids_before=pids1,
-                    logger=logger,
+                    page, page_count_before=n1, url_before=url1,
+                    page_ids_before=pids1, logger=logger,
                 )
                 if id(adopted2) != id(page):
                     page = adopted2
-                    executor = ToolExecutor(
-                        page,
-                        logger,
-                        memory=memory,
-                        synonym_resolver=synonym_resolver,
-                        ats_type=state.detected_ats,
-                    )
+                    agent.page = page
+                    executor = ToolExecutor(page, logger, memory=memory, synonym_resolver=synonym_resolver, ats_type=state.detected_ats)
                     extractor = AccessibilityTreeExtractor(page)
-                    logger.info(
-                        "LLM actions opened a new tab (multi-page loop); continuing there.",
-                        phase=ExecutionPhase.LLM,
-                        url_preview=(page.url or "")[:200],
-                    )
-                    # Dismiss overlays on the newly opened tab
                     self._dismiss_cookie_consent(page, logger)
                 else:
                     page = adopted2
 
-            # Final verification of mandatory fields before finishing Phase 2
+            # ── Pre-submission checkpoint ─────────────────────────────────
             required_missing = []
             for field in ax_tree.form_fields:
-               if field.get("required") or "*" in field.get("name", ""):
-                   if not field.get("value") or not str(field.get("value")).strip():
-                       required_missing.append(field.get("name", "unknown"))
-            
-            if required_missing and page_count < 5:
-                logger.warning(f"Mandatory fields still empty: {required_missing}. Attempting one more fill cycle.", phase=ExecutionPhase.LLM)
-                # This will naturally trigger a re-scan in the outer loop if we can structure it to continue
-            
-            # Final success evaluation: Check if we actually ended on a success page or have red marks
+                if field.get("required") or "*" in field.get("name", ""):
+                    if not field.get("value") or not str(field.get("value")).strip():
+                        required_missing.append(field.get("name", "unknown"))
+            if required_missing:
+                agent.show_warning(f"Mandatory fields still empty: {required_missing}")
+
             red_marks = page.locator(".error, .invalid, [aria-invalid='true'], .red-text").count()
             if red_marks > 0:
-                logger.warning(f"{red_marks} validation errors (red marks) detected on page. Application might not be submitted correctly.", phase=ExecutionPhase.LLM)
+                agent.show_warning(f"{red_marks} validation errors on page.")
                 if not self.config.headless:
-                     page.wait_for_timeout(2000)
+                    page.wait_for_timeout(2000)
 
+            # ── Confirm submission (integrated checkpoint) ────────────────
+            if not agent.confirm_submission():
+                agent.show_warning("Submission declined by user.")
+                logger.log_phase_end(ExecutionPhase.LLM, False)
+                return False
+
+            # ── Final success evaluation ──────────────────────────────────
             total = len(results)
             successes = sum(1 for v in results.values() if v)
-            
-            # If we didn't fill many things, it might be a failure unless we are on a confirmation page
             _confirmation_texts = [
-                "Thank you",
-                "application submitted",
-                "application is received",
-                "successfully submitted",
-                "application received",
+                "Thank you", "application submitted", "application is received",
+                "successfully submitted", "application received",
             ]
-            _text_confirmed = any(
-                page.locator(f"text={t}").count() > 0
-                for t in _confirmation_texts
-            )
+            _text_confirmed = any(page.locator(f"text={t}").count() > 0 for t in _confirmation_texts)
             is_confirmation = any(term in page.url.lower() for term in ["success", "confirmation", "thank-you"]) or _text_confirmed
-            
             success = is_confirmation or (total > 0 and (successes / total) >= 0.5)
-            
-            if success:
-                logger.info("Application appears successfully submitted!", phase=ExecutionPhase.LLM, success=True)
-            else:
-                logger.error("Application submission could not be verified.", phase=ExecutionPhase.LLM, success=False)
-
-            logger.log_phase_end(ExecutionPhase.LLM, success)
 
             if success:
+                agent.show_success("Application submitted!")
                 page.wait_for_timeout(1000)
                 logger.capture_screenshot(page, "llm_success", ExecutionPhase.LLM)
+            else:
+                agent.show_error("Submission could not be verified.")
 
+            logger.log_phase_end(ExecutionPhase.LLM, success)
             return success
 
         except Exception as e:
             import traceback
             traceback.print_exc()
-            logger.error(f"Phase 2 failed: {e}", phase=ExecutionPhase.LLM)
+            logger.error(f"Agent loop failed: {e}", phase=ExecutionPhase.LLM)
             logger.log_phase_end(ExecutionPhase.LLM, False)
             return False
 
-    def _phase_human(
-        self,
-        page: Page,
-        state: ApplicationState,
-        logger: JobLogger,
-        ats_type: ATSType,
-        apply_was_clicked: bool = False,
-    ) -> bool:
-        """Phase 3: Human in the loop."""
-        logger.log_phase_start(ExecutionPhase.HUMAN)
-        state.current_phase = ExecutionPhase.HUMAN
-
-        try:
-            # Initialize human interface
-            human = HumanInterface(page, self.locator_repo, logger)
-
-            if not apply_was_clicked:
-                # Only ask to find apply button if it hasn't been clicked yet
-                success, selector, selector_type = human.request_help(
-                    "find_apply_button",
-                    ats_type,
-                )
-
-                if not success or not selector:
-                    logger.warning("Human declined to help")
-                    logger.log_phase_end(ExecutionPhase.HUMAN, False)
-                    return False
-
-                # Click apply button
-                try:
-                    if selector_type and selector_type.value == "css":
-                        page.click(selector)
-                    elif selector_type and selector_type.value == "xpath":
-                        page.click(f"xpath={selector}")
-
-                    logger.info("Clicked apply button with human help")
-                    self._random_delay()
-                    logger.capture_screenshot(page, "human_apply_click", ExecutionPhase.HUMAN)
-
-                except Exception as e:
-                    human.show_error(f"Failed to click: {e}")
-                    return False
-
-                human.show_success("Apply button clicked successfully")
-            else:
-                human.show_success("Apply was already clicked. Form should be visible.")
-
-            # Show user the current state
-            print("\n" + "=" * 60)
-            print("🖐️  HUMAN-IN-THE-LOOP: Please review the browser window.")
-            print("The form should be visible. You can manually fill any")
-            print("remaining fields in the browser window now.")
-            print("=" * 60)
-
-            if not human.ask_continue():
-                return False
-
-            # Try to find and click submit
-            print("\nLooking for submit button...")
-
-            # Try multiple submit button patterns
-            content_root = page
-            # Check for iframe
-            for pattern in ["greenhouse.io", "lever.co", "workday.com"]:
-                try:
-                    if page.locator(f"iframe[src*='{pattern}']").count() > 0:
-                        content_root = page.frame_locator(f"iframe[src*='{pattern}']").first
-                        break
-                except Exception:
-                    pass
-
-            submit_patterns = [
-                lambda: content_root.get_by_role("button", name="Submit", exact=False).first,
-                lambda: content_root.get_by_role("button", name="Submit application", exact=False).first,
-                lambda: content_root.get_by_text("Submit", exact=False).first,
-                lambda: content_root.locator("button[type='submit']").first,
-                lambda: content_root.locator("input[type='submit']").first,
-            ]
-
-            for get_submit in submit_patterns:
-                try:
-                    btn = get_submit()
-                    if btn.is_visible(timeout=2000):
-                        btn.scroll_into_view_if_needed(timeout=1000)
-                        btn.click(timeout=3000)
-                        logger.info("Clicked submit button")
-                        human.show_success("Application submitted!")
-                        logger.log_phase_end(ExecutionPhase.HUMAN, True)
-                        return True
-                except Exception:
-                    continue
-
-            # If no submit button found automatically, ask human
-            print("\n⚠️  Could not find submit button automatically.")
-            success, selector, selector_type = human.request_help(
-                "find_submit_button",
-                ats_type,
-            )
-
-            if success and selector:
-                if selector_type and selector_type.value == "css":
-                    page.click(selector)
-                elif selector_type and selector_type.value == "xpath":
-                    page.click(f"xpath={selector}")
-
-                human.show_success("Application submitted!")
-                logger.log_phase_end(ExecutionPhase.HUMAN, True)
-                return True
-
-            logger.log_phase_end(ExecutionPhase.HUMAN, False)
-            return False
-
-        except Exception as e:
-            logger.error(f"Phase 3 failed: {e}", phase=ExecutionPhase.HUMAN)
-            logger.log_phase_end(ExecutionPhase.HUMAN, False)
-            return False
+    # NOTE: _phase_human has been removed.  Human interaction is now integrated
+    # inline via AgentInterface checkpoints throughout _agent_fill_loop and
+    # apply_to_job.  See request_help_finding_element(), request_field_input(),
+    # confirm_submission(), etc.
 
     def _dismiss_cookie_consent(self, page: Page, logger: JobLogger) -> None:
         """Dismiss cookie banners, privacy dialogs, and other overlays that block clicks."""
