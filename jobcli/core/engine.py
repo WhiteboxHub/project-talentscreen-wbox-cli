@@ -478,6 +478,15 @@ class ApplicationEngine:
                     self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
                     status = ApplicationStatus.FAILED
 
+                # Increment the local apps-since-sync counter regardless of
+                # outcome — the sync extractor will filter by confidence anyway.
+                try:
+                    from jobcli.core.memory import AgentMemory as _AM
+                    _mem = _AM(self.session, job_id=job.id)
+                    _mem.increment_apps_since_sync()
+                except Exception:
+                    pass
+
                 # ── 6. Final browser pause ──────────────────────────────
                 if not self.config.headless:
                     agent.final_browser_pause()
@@ -966,6 +975,18 @@ class ApplicationEngine:
                         except Exception as e:
                             logger.debug(f"locator persist skipped: {e}", phase=ExecutionPhase.LLM)
                         state.step_count += 1
+                        # Record successful execution back into memory so
+                        # confidence scores reflect real browser outcomes.
+                        if action.field_label and action.value:
+                            try:
+                                memory.record_field_outcome(
+                                    field_label=action.field_label,
+                                    value=action.value,
+                                    success=True,
+                                    ats_type=state.detected_ats,
+                                )
+                            except Exception:
+                                pass
                     elif action.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT) and not action_success:
                         # Track failures too so confidence scoring stays honest.
                         try:
@@ -980,6 +1001,17 @@ class ApplicationEngine:
                             )
                         except Exception:
                             pass
+                        # Record failed execution so confidence degrades correctly.
+                        if action.field_label and action.value:
+                            try:
+                                memory.record_field_outcome(
+                                    field_label=action.field_label,
+                                    value=action.value,
+                                    success=False,
+                                    ats_type=state.detected_ats,
+                                )
+                            except Exception:
+                                pass
 
                 # ── Handle failed fields — inline human input ─────────────
                 # AgentInterface internally checks the DB first and persists

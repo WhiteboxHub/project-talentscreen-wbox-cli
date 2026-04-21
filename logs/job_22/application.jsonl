@@ -255,3 +255,21 @@
 {"job_id": 22, "phase": "rules", "success": true, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-15T23:50:49.596386Z"}
 {"job_id": 22, "phase": null, "event": "Application completed successfully", "level": "info", "timestamp": "2026-04-15T23:50:49.597891Z"}
 {"job_id": 22, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-15T23:51:39.437867Z"}
+{"job_id": 22, "phase": "rules", "selector": "button:has-text('Accept')", "event": "Dismissed blocking overlay", "level": "info", "timestamp": "2026-04-21T17:19:23.172775Z"}
+{"job_id": 22, "phase": "rules", "screenshot_path": "logs\\job_22\\screenshots\\001_20260421_101923_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-21T17:19:23.472221Z"}
+{"job_id": 22, "phase": "rules", "url": "https://calix.wd1.myworkdayjobs.com/External/job/Remote---USA/Sr-AI-Ops-Engineer_R-10592", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-21T17:19:23.474132Z"}
+{"job_id": 22, "phase": "rules", "url": "https://calix.wd1.myworkdayjobs.com/External/job/Remote---USA/Sr-AI-Ops-Engineer_R-10592", "pattern": "myworkdayjobs\\.com", "event": "Detected workday from URL", "level": "info", "timestamp": "2026-04-21T17:19:23.475278Z"}
+{"job_id": 22, "phase": "rules", "event": "Using workday handler", "level": "info", "timestamp": "2026-04-21T17:19:23.486700Z"}
+{"job_id": 22, "phase": "rules", "event": "Looking for Workday apply button", "level": "info", "timestamp": "2026-04-21T17:19:23.487706Z"}
+{"job_id": 22, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-21T17:19:23.513225Z"}
+{"job_id": 22, "phase": "rules", "selector": "a:has-text('Apply')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-21T17:19:23.732055Z"}
+{"job_id": 22, "phase": "rules", "aria_modal_dialog": false, "event": "Blocking in-page modal detected (Workday application entry). Form automation cannot proceed until this dialog is cleared \u2014 attempting 'Apply Manually' (or Autofill fallback).", "level": "info", "timestamp": "2026-04-21T17:19:24.566215Z"}
+{"job_id": 22, "phase": "rules", "event": "Clicked 'Apply Manually' in Workday start modal (dialog-scoped)", "level": "info", "timestamp": "2026-04-21T17:19:25.492771Z"}
+{"job_id": 22, "phase": "rules", "url_preview": "https://calix.wd1.myworkdayjobs.com/en-US/External/job/Remote---USA/Sr-AI-Ops-Engineer_R-10592/apply/applyManually", "event": "Apply navigated in the same tab.", "level": "info", "timestamp": "2026-04-21T17:19:25.494796Z"}
+{"job_id": 22, "phase": "rules", "screenshot_path": "logs\\job_22\\screenshots\\002_20260421_101926_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-21T17:19:26.718198Z"}
+{"job_id": 22, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-21T17:19:28.724831Z"}
+{"job_id": 22, "phase": "llm", "dom_path": "logs\\job_22\\dom_snapshots\\001_20260421_101930_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-21T17:19:30.859045Z"}
+{"job_id": 22, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-21T17:19:31.093841Z"}
+{"job_id": 22, "phase": "llm", "tokens": 2685, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-21T17:19:35.547999Z"}
+{"job_id": 22, "phase": "llm", "action_count": 0, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-21T17:19:35.548999Z"}
+{"job_id": 22, "phase": "llm", "event": "Page 1: 0/0 actions succeeded", "level": "info", "timestamp": "2026-04-21T17:19:57.703955Z"}

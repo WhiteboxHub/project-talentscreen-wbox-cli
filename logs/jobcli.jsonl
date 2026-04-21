@@ -121,3 +121,13 @@
 {"job_url": "https://jobs.workable.com/view/rfHrtEEdMY39z5QpwY2Yoz/remote-ai-automations-product-engineer-in-orlando-at-ninetwothree-ai-studio", "event": "Starting application for job 39", "level": "info", "timestamp": "2026-04-20T17:27:20.063727Z"}
 {"job_url": "https://jobs.workable.com/view/rfHrtEEdMY39z5QpwY2Yoz/remote-ai-automations-product-engineer-in-orlando-at-ninetwothree-ai-studio", "event": "Starting application for job 39", "level": "info", "timestamp": "2026-04-20T18:01:26.522385Z"}
 {"status": "in_progress", "event": "Completed job 39", "level": "info", "timestamp": "2026-04-20T18:09:46.241413Z"}
+{"event": "Logging into https://whitebox-learning.com/login", "level": "info", "timestamp": "2026-04-20T20:26:45.065013Z"}
+{"event": "Successfully logged in, navigating to dashboard", "level": "info", "timestamp": "2026-04-20T20:26:51.335003Z"}
+{"event": "Extracting job links from grid", "level": "info", "timestamp": "2026-04-20T20:26:56.013020Z"}
+{"event": "Discovered 17 new jobs", "level": "info", "timestamp": "2026-04-20T20:27:01.398640Z"}
+{"job_url": "https://recruiting.paylocity.com/Recruiting/Jobs/Apply/4085913", "event": "Starting application for job 3", "level": "info", "timestamp": "2026-04-20T20:28:44.874509Z"}
+{"status": "in_progress", "event": "Completed job 3", "level": "info", "timestamp": "2026-04-20T20:32:04.531444Z"}
+{"job_url": "https://jobs.workable.com/view/rfHrtEEdMY39z5QpwY2Yoz/remote-ai-automations-product-engineer-in-orlando-at-ninetwothree-ai-studio", "event": "Starting application for job 5", "level": "info", "timestamp": "2026-04-20T20:32:04.544615Z"}
+{"status": "in_progress", "event": "Completed job 5", "level": "info", "timestamp": "2026-04-20T20:34:44.013349Z"}
+{"job_url": "https://qualys.wd5.myworkdayjobs.com/careers/job/Foster-City/Lead-Applied-AI---GenAI-Engineer_R0004633", "event": "Starting application for job 6", "level": "info", "timestamp": "2026-04-20T20:34:44.026912Z"}
+{"job_url": "https://calix.wd1.myworkdayjobs.com/External/job/Remote---USA/Sr-AI-Ops-Engineer_R-10592", "event": "Starting application for job 22", "level": "info", "timestamp": "2026-04-21T17:19:17.149858Z"}

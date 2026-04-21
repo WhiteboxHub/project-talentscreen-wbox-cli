@@ -113,6 +113,12 @@ class FieldAnswerModel(Base):
     field_type = Column(String(50), default="text")
     success_count = Column(Integer, default=0)
     failure_count = Column(Integer, default=0)
+    # confidence = success_count / (success_count + failure_count)
+    # Kept as a stored column so queries can filter without recomputing.
+    confidence = Column(Float, default=0.0)
+    # source tracks the origin of the answer for merge-protection logic.
+    # Valid values: "human", "user" (manual entry), "auto", "local" (LLM-learned).
+    # "human" and "user" are treated as high-trust; "auto" and "local" as low-trust.
     source = Column(String(50), default="human")
     # The job the answer was first learned on, and the most recent job that
     # reused/updated it.  Both nullable so the row is still valid across jobs.
@@ -159,6 +165,25 @@ class DropdownStrategyModel(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
+class SyncMetadataModel(Base):
+    """Tracks sync state for future Phase 2 server integration (local only).
+
+    Only one row ever exists (id=1).  Use SyncMetadataRepository to read/write it.
+    """
+
+    __tablename__ = "sync_metadata"
+
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+    # Set by Phase 2 sync client after a successful push; NULL until first sync.
+    last_sync_at    = Column(DateTime, nullable=True)
+    # Version string of the sync server schema this client last spoke to.
+    last_version    = Column(String(50), default="0.0.0")
+    # Incremented after every completed application.  Lets Phase 2 decide
+    # whether there is anything new to push without querying all records.
+    apps_since_sync = Column(Integer, default=0)
+    updated_at      = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 class Database:
     """Database connection manager."""
 
@@ -192,6 +217,8 @@ class Database:
                 "field_answers": [
                     ("first_job_id", "INTEGER"),
                     ("last_job_id", "INTEGER"),
+                    # Phase 1 — confidence column (stored ratio for fast filtering)
+                    ("confidence", "REAL DEFAULT 0.0"),
                 ],
                 "learned_locators": [
                     ("first_job_id", "INTEGER"),
