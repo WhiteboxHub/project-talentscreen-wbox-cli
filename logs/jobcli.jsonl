@@ -131,3 +131,4 @@
 {"status": "in_progress", "event": "Completed job 5", "level": "info", "timestamp": "2026-04-20T20:34:44.013349Z"}
 {"job_url": "https://qualys.wd5.myworkdayjobs.com/careers/job/Foster-City/Lead-Applied-AI---GenAI-Engineer_R0004633", "event": "Starting application for job 6", "level": "info", "timestamp": "2026-04-20T20:34:44.026912Z"}
 {"job_url": "https://calix.wd1.myworkdayjobs.com/External/job/Remote---USA/Sr-AI-Ops-Engineer_R-10592", "event": "Starting application for job 22", "level": "info", "timestamp": "2026-04-21T17:19:17.149858Z"}
+{"job_url": "https://job-boards.greenhouse.io/skildai-careers/jobs/5181823008", "event": "Starting application for job 23", "level": "info", "timestamp": "2026-04-21T20:11:13.714497Z"}
