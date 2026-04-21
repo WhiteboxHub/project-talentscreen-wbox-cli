@@ -74,39 +74,144 @@ class AntiBotManager:
         except Exception:
             return False
 
-    def detect_captcha(self, page: Page) -> bool:
-        """Detect if an actual visible CAPTCHA challenge is present on page."""
-        try:
-            # Check for visible CAPTCHA challenge iframes/elements
-            captcha_selectors = [
-                "iframe[src*='recaptcha']",
-                "iframe[src*='hcaptcha']",
-                ".g-recaptcha",
-                ".h-captcha",
-                "#cf-challenge-running",
-                "[data-callback='onCaptchaSuccess']",
-                "iframe[title*='challenge']",
-                "iframe[title*='recaptcha']",
-                "iframe[title*='hCaptcha']",
-            ]
+    #: Visible challenge widgets — reCAPTCHA v2, hCaptcha, Turnstile, etc.
+    #: IMPORTANT: we deliberately do NOT match bare ``iframe[src*='recaptcha']``
+    #: here because that matches Google's INVISIBLE reCAPTCHA v3 anchor
+    #: iframe (loaded silently on thousands of ATS pages, e.g. Greenhouse,
+    #: and producing no user-visible challenge).  Use the more specific
+    #: reCAPTCHA v2 bframe / challenge iframes instead, which are only
+    #: injected when a real puzzle is being shown to the user.
+    CAPTCHA_SELECTORS = [
+        # reCAPTCHA v2 — the `bframe` is the puzzle popup, NOT the always-
+        # present v3 score iframe.  It only exists on-screen when the user
+        # is actively being challenged.
+        "iframe[src*='recaptcha/api2/bframe']",
+        "iframe[src*='recaptcha/enterprise/bframe']",
+        "iframe[title*='recaptcha challenge' i]",
+        # hCaptcha challenge (not the invisible hcaptcha).
+        "iframe[src*='hcaptcha.com/captcha']",
+        "iframe[src*='hcaptcha'][src*='challenge']",
+        "iframe[title*='hCaptcha challenge' i]",
+        # Cloudflare Turnstile / managed challenge.
+        "iframe[src*='challenges.cloudflare.com/turnstile/v0/api']",
+        "iframe[src*='challenges.cloudflare.com'][src*='interactive']",
+        "iframe[title*='Cloudflare' i][title*='challenge' i]",
+        "#cf-challenge-running",
+        "#challenge-form",
+        "#challenge-running",
+        "#challenge-stage",
+        # ArkoseLabs / FunCaptcha — only matches when an actual challenge
+        # panel is rendered, not silent background checks.
+        "iframe[src*='arkoselabs'][src*='challenge']",
+        "iframe[src*='funcaptcha'][src*='challenge']",
+        # Generic "please verify" iframe titles (broad but safe).
+        "iframe[title='I am not a robot' i]",
+        "iframe[title*='security check' i]",
+        # Turnstile form input appears only when interactive challenge shows.
+        "input[name='cf-turnstile-response']:not([value=''])",
+    ]
 
-            for selector in captcha_selectors:
+    #: Page text indicators for bot / human-verification interstitials.
+    #: Matched against the *visible* body text on small (< 4000 char)
+    #: pages only — challenges are almost always sparse interstitial
+    #: pages with very little other content.  The patterns below are
+    #: deliberately specific phrases found on real CAPTCHA screens.
+    #: Generic words like "access denied" / "blocked" were removed
+    #: because they also appear in help articles and privacy boilerplate
+    #: on legitimate ATS pages.
+    CHALLENGE_TEXT_PATTERNS = [
+        "verify you are human",
+        "verify that you are human",
+        "verify you're human",
+        "verifying you are human",
+        "prove you're human",
+        "i'm not a robot",
+        "checking your browser before accessing",
+        "checking if the site connection is secure",
+        "please wait while we verify",
+        "please enable javascript and cookies",
+        "press & hold to confirm",
+        "complete the security check to access",
+        "ddos protection by cloudflare",
+        "performance & security by cloudflare",
+        "attention required! cloudflare",
+    ]
+
+    def detect_captcha(self, page: Page) -> bool:
+        """Detect a visible CAPTCHA / human-verification challenge on the page.
+
+        Covers three categories:
+          1. Widget iframes / elements (reCAPTCHA, hCaptcha, Cloudflare
+             Turnstile, ArkoseLabs/FunCaptcha).
+          2. Cloudflare / Akamai / PerimeterX interstitial challenge pages.
+          3. Body-text patterns such as "Verify you are human", "Just a
+             moment...", "I'm not a robot".
+
+        When *any* of them match we return True so the engine can freeze all
+        automation — any programmatic clicking/scrolling/AX-tree extraction
+        while a bot challenge is active tends to flag the session and break
+        the verification.
+        """
+        try:
+            for selector in self.CAPTCHA_SELECTORS:
                 try:
                     loc = page.locator(selector).first
-                    if loc.is_visible(timeout=1000):
-                        if self.logger:
-                            self.logger.warning(f"CAPTCHA detected: {selector}")
-                        return True
+                    if not loc.is_visible(timeout=800):
+                        continue
+                    # Additional sanity check: widgets like Google's
+                    # invisible reCAPTCHA badge (``.grecaptcha-badge``) and
+                    # the reCAPTCHA v3 score iframe are technically
+                    # "visible" in Playwright's sense (non-zero box, not
+                    # ``display: none``) but they're 256×60 score widgets
+                    # in a corner — NOT a user-facing challenge.  Only
+                    # treat an iframe as a real challenge when it's large
+                    # enough to be a puzzle (>= 200px on either axis) or
+                    # it's a non-iframe selector (a full-page interstitial).
+                    if selector.startswith("iframe"):
+                        try:
+                            box = loc.bounding_box()
+                        except Exception:
+                            box = None
+                        if box is not None:
+                            w = box.get("width") or 0
+                            h = box.get("height") or 0
+                            if w < 200 or h < 100:
+                                continue
+                    if self.logger:
+                        # Rich treats [...] as markup tags, so escape
+                        # brackets in the selector before logging or the
+                        # message renders as just "iframe".
+                        safe = (selector or "").replace("[", r"\[")
+                        self.logger.warning(f"CAPTCHA detected: {safe}")
+                    return True
                 except Exception:
                     continue
 
-            # Check for Cloudflare challenge page (not just CDN scripts)
+            # Title fast-path — Cloudflare's "Just a moment..." page sets this.
             try:
-                challenge = page.locator("#challenge-form, #challenge-running").first
-                if challenge.is_visible(timeout=500):
-                    if self.logger:
-                        self.logger.warning("CAPTCHA detected: cloudflare challenge page")
-                    return True
+                title = (page.title() or "").lower()
+                for needle in ("just a moment", "attention required", "access denied"):
+                    if needle in title:
+                        if self.logger:
+                            self.logger.warning(
+                                f"CAPTCHA detected via page title: '{title[:80]}'"
+                            )
+                        return True
+            except Exception:
+                pass
+
+            # Body-text check (small pages only — challenges are usually
+            # interstitial with very little content).
+            try:
+                body = (page.text_content("body") or "").strip().lower()
+                if 0 < len(body) < 4000:
+                    for pattern in self.CHALLENGE_TEXT_PATTERNS:
+                        if pattern in body:
+                            if self.logger:
+                                self.logger.warning(
+                                    f"CAPTCHA/verification text detected: '{pattern}'"
+                                )
+                            return True
             except Exception:
                 pass
 
@@ -114,6 +219,28 @@ class AntiBotManager:
 
         except Exception:
             return False
+
+    def wait_until_cleared(
+        self,
+        page: Page,
+        *,
+        max_wait_seconds: int = 90,
+        poll_interval_seconds: float = 1.5,
+    ) -> bool:
+        """Poll until ``detect_captcha`` reports False (or timeout).
+
+        The engine calls this *after* the human has pressed ENTER so we
+        avoid proceeding when the challenge is still visible (browsers
+        sometimes need a second to finalise the cookie set).  Returns True
+        when the challenge has cleared.
+        """
+        import time as _t
+        deadline = _t.time() + max_wait_seconds
+        while _t.time() < deadline:
+            if not self.detect_captcha(page):
+                return True
+            _t.sleep(poll_interval_seconds)
+        return False
 
     def detect_bot_block(self, page: Page) -> bool:
         """Detect if page shows bot blocking message."""

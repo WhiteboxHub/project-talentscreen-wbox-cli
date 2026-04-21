@@ -1,0 +1,112 @@
+{"job_id": 44, "phase": "rules", "screenshot_path": "logs/job_44/screenshots/001_20260421_145336_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-21T21:53:37.681609Z"}
+{"job_id": 44, "phase": "rules", "url": "https://jobs.ashbyhq.com/quartermaster/99586688-c351-491b-b3f2-76a9819620d7?src=LinkedIn", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-21T21:53:37.682419Z"}
+{"job_id": 44, "phase": "rules", "url": "https://jobs.ashbyhq.com/quartermaster/99586688-c351-491b-b3f2-76a9819620d7?src=LinkedIn", "pattern": "ashbyhq\\.com", "event": "Detected ashby from URL", "level": "info", "timestamp": "2026-04-21T21:53:37.683157Z"}
+{"job_id": 44, "phase": "rules", "event": "Using ashby handler", "level": "info", "timestamp": "2026-04-21T21:53:37.728744Z"}
+{"job_id": 44, "phase": "rules", "event": "Looking for Ashby apply button", "level": "info", "timestamp": "2026-04-21T21:53:37.729070Z"}
+{"job_id": 44, "phase": "rules", "selector": "a:has-text('Apply')", "event": "Clicked Ashby apply button", "level": "info", "timestamp": "2026-04-21T21:53:37.873974Z"}
+{"job_id": 44, "phase": "rules", "url_preview": "https://jobs.ashbyhq.com/quartermaster/99586688-c351-491b-b3f2-76a9819620d7/application?src=LinkedIn", "event": "Apply navigated in the same tab.", "level": "info", "timestamp": "2026-04-21T21:53:37.876633Z"}
+{"job_id": 44, "phase": "rules", "screenshot_path": "logs/job_44/screenshots/002_20260421_145340_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-21T21:53:41.651608Z"}
+{"job_id": 44, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-21T21:53:43.719262Z"}
+{"job_id": 44, "phase": "llm", "dom_path": "logs/job_44/dom_snapshots/001_20260421_145345_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-21T21:53:45.905402Z"}
+{"job_id": 44, "phase": "rules", "event": "Filling Ashby form", "level": "info", "timestamp": "2026-04-21T21:53:45.906708Z"}
+{"job_id": 44, "phase": "rules", "results": {"resume": true}, "event": "Ashby form fill complete", "level": "info", "timestamp": "2026-04-21T21:53:45.930904Z"}
+{"job_id": 44, "phase": "rules", "event": "ATS pre-pass filled 1 fields: ['resume']", "level": "info", "timestamp": "2026-04-21T21:53:45.931518Z"}
+{"job_id": 44, "phase": "llm", "dom_path": "logs/job_44/dom_snapshots/002_20260421_145346_ax_tree_after_rules_prefill.json", "name": "ax_tree_after_rules_prefill", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-21T21:53:46.772835Z"}
+{"job_id": 44, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-21T21:53:46.912395Z"}
+{"job_id": 44, "phase": "llm", "tokens": 8052, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-21T21:53:52.874174Z"}
+{"job_id": 44, "phase": "llm", "action_count": 9, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-21T21:53:52.878728Z"}
+{"job_id": 44, "phase": "llm", "selector": "Resume*", "field_label": "Resume", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-21T21:53:52.889402Z"}
+{"job_id": 44, "phase": "llm", "event": "Upload scan: file_inputs=3 wd_selectors=0 attach_buttons=3 selector='Resume*'", "level": "info", "timestamp": "2026-04-21T21:53:52.932511Z"}
+{"job_id": 44, "phase": "llm", "event": "Upload via file chooser 'button:has-text('Upload')'", "level": "info", "timestamp": "2026-04-21T21:53:56.233539Z"}
+{"job_id": 44, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-21T21:54:23.542539Z"}
+{"job_id": 44, "phase": "llm", "tokens": 8113, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-21T21:54:33.951233Z"}
+{"job_id": 44, "phase": "llm", "action_count": 9, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-21T21:54:33.953668Z"}
+{"job_id": 44, "phase": "llm", "selector": "Name*", "field_label": "Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-21T21:54:33.960500Z"}
+{"job_id": 44, "phase": "llm", "event": "Fill executed via label['Name']", "level": "info", "timestamp": "2026-04-21T21:54:34.735732Z"}
+{"job_id": 44, "phase": "llm", "selector": "Email*", "field_label": "Email", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-21T21:54:34.736303Z"}
+{"job_id": 44, "phase": "llm", "event": "Fill executed via label['Email']", "level": "info", "timestamp": "2026-04-21T21:54:35.838205Z"}
+{"job_id": 44, "phase": "llm", "selector": "No", "field_label": "Are you eligible for a U.S Security Clearance?", "event": "Executing click action", "level": "info", "timestamp": "2026-04-21T21:54:35.838701Z"}
+{"job_id": 44, "phase": "llm", "action": "click", "selector": "No", "event": "Action execution failed: 'ToolExecutor' object has no attribute '_normalize_fill_value'", "level": "error", "timestamp": "2026-04-21T21:54:35.859674Z"}
+{"job_id": 44, "phase": "llm", "selector": "Male", "field_label": "Gender", "event": "Executing click action", "level": "info", "timestamp": "2026-04-21T21:54:35.860316Z"}
+{"job_id": 44, "phase": "rules", "event": "Ashby option click OK: 'Gender' = 'Male' (score=32)", "level": "info", "timestamp": "2026-04-21T21:54:35.865448Z"}
+{"job_id": 44, "phase": "llm", "event": "Click via AshbyHandler.click_option", "level": "info", "timestamp": "2026-04-21T21:54:35.865875Z"}
+{"job_id": 44, "phase": "llm", "selector": "Asian (Not Hispanic or Latino)", "field_label": "Race", "event": "Executing click action", "level": "info", "timestamp": "2026-04-21T21:54:35.866158Z"}
+{"job_id": 44, "phase": "rules", "event": "Ashby option click OK: 'Race' = 'Asian (Not Hispanic or Latino)' (score=32)", "level": "info", "timestamp": "2026-04-21T21:54:35.871221Z"}
+{"job_id": 44, "phase": "llm", "event": "Click via AshbyHandler.click_option", "level": "info", "timestamp": "2026-04-21T21:54:35.871571Z"}
+{"job_id": 44, "phase": "llm", "selector": "I am not a protected veteran", "field_label": "Veteran Status", "event": "Executing click action", "level": "info", "timestamp": "2026-04-21T21:54:35.871939Z"}
+{"job_id": 44, "phase": "rules", "event": "Ashby option click OK: 'Veteran Status' = 'I am not a protected veteran' (score=32)", "level": "info", "timestamp": "2026-04-21T21:54:35.879854Z"}
+{"job_id": 44, "phase": "llm", "event": "Click via AshbyHandler.click_option", "level": "info", "timestamp": "2026-04-21T21:54:35.880268Z"}
+{"job_id": 44, "phase": "llm", "selector": "No, I don't have a disability and have not had one in the past", "field_label": "Disability Status", "event": "Executing click action", "level": "info", "timestamp": "2026-04-21T21:54:35.880478Z"}
+{"job_id": 44, "phase": "rules", "event": "Ashby option click OK: 'Disability Status' = 'No, I don't have a disability and have not had one in the past' (score=32)", "level": "info", "timestamp": "2026-04-21T21:54:35.885232Z"}
+{"job_id": 44, "phase": "llm", "event": "Click via AshbyHandler.click_option", "level": "info", "timestamp": "2026-04-21T21:54:35.885620Z"}
+{"job_id": 44, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-21T21:54:58.251358Z"}
+{"job_id": 44, "phase": "llm", "tokens": 8177, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-21T21:55:07.020339Z"}
+{"job_id": 44, "phase": "llm", "action_count": 8, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-21T21:55:07.021834Z"}
+{"job_id": 44, "phase": "llm", "selector": "Name*", "field_label": "Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-21T21:55:07.024492Z"}
+{"job_id": 44, "phase": "llm", "event": "Fill executed via label['Name']", "level": "info", "timestamp": "2026-04-21T21:55:08.419843Z"}
+{"job_id": 44, "phase": "llm", "selector": "Email*", "field_label": "Email", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-21T21:55:08.420279Z"}
+{"job_id": 44, "phase": "llm", "event": "Fill executed via label['Email']", "level": "info", "timestamp": "2026-04-21T21:55:09.807173Z"}
+{"job_id": 44, "phase": "llm", "selector": "No", "field_label": "Are you eligible for a U.S Security Clearance?", "event": "Executing click action", "level": "info", "timestamp": "2026-04-21T21:55:09.807542Z"}
+{"job_id": 44, "phase": "llm", "action": "click", "selector": "No", "event": "Action execution failed: 'ToolExecutor' object has no attribute '_normalize_fill_value'", "level": "error", "timestamp": "2026-04-21T21:55:09.818198Z"}
+{"job_id": 44, "phase": "llm", "selector": "Male", "field_label": "Gender", "event": "Executing click action", "level": "info", "timestamp": "2026-04-21T21:55:09.818850Z"}
+{"job_id": 44, "phase": "rules", "event": "Ashby option click OK: 'Gender' = 'Male' (score=32)", "level": "info", "timestamp": "2026-04-21T21:55:09.821467Z"}
+{"job_id": 44, "phase": "llm", "event": "Click via AshbyHandler.click_option", "level": "info", "timestamp": "2026-04-21T21:55:09.821803Z"}
+{"job_id": 44, "phase": "llm", "selector": "Asian (Not Hispanic or Latino)", "field_label": "Race", "event": "Executing click action", "level": "info", "timestamp": "2026-04-21T21:55:09.821995Z"}
+{"job_id": 44, "phase": "rules", "event": "Ashby option click OK: 'Race' = 'Asian (Not Hispanic or Latino)' (score=32)", "level": "info", "timestamp": "2026-04-21T21:55:09.824235Z"}
+{"job_id": 44, "phase": "llm", "event": "Click via AshbyHandler.click_option", "level": "info", "timestamp": "2026-04-21T21:55:09.824531Z"}
+{"job_id": 44, "phase": "llm", "selector": "I am not a protected veteran", "field_label": "Veteran Status", "event": "Executing click action", "level": "info", "timestamp": "2026-04-21T21:55:09.824795Z"}
+{"job_id": 44, "phase": "rules", "event": "Ashby option click OK: 'Veteran Status' = 'I am not a protected veteran' (score=32)", "level": "info", "timestamp": "2026-04-21T21:55:09.834296Z"}
+{"job_id": 44, "phase": "llm", "event": "Click via AshbyHandler.click_option", "level": "info", "timestamp": "2026-04-21T21:55:09.835055Z"}
+{"job_id": 44, "phase": "llm", "selector": "No, I don't have a disability and have not had one in the past", "field_label": "Disability Status", "event": "Executing click action", "level": "info", "timestamp": "2026-04-21T21:55:09.835481Z"}
+{"job_id": 44, "phase": "rules", "event": "Ashby option click OK: 'Disability Status' = 'No, I don't have a disability and have not had one in the past' (score=32)", "level": "info", "timestamp": "2026-04-21T21:55:09.838392Z"}
+{"job_id": 44, "phase": "llm", "event": "Click via AshbyHandler.click_option", "level": "info", "timestamp": "2026-04-21T21:55:09.838784Z"}
+{"job_id": 44, "phase": "llm", "event": "All required fields satisfied on first pass \u2014 skipping multi-page loop.", "level": "info", "timestamp": "2026-04-21T21:55:32.072026Z"}
+{"job_id": 44, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-21T22:05:16.705703Z"}
+{"job_id": 44, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-21T22:05:23.110083Z"}
+{"job_id": 44, "phase": "rules", "screenshot_path": "logs/job_44/screenshots/001_20260421_150539_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-21T22:05:41.259859Z"}
+{"job_id": 44, "phase": "rules", "url": "https://jobs.ashbyhq.com/quartermaster/99586688-c351-491b-b3f2-76a9819620d7?src=LinkedIn", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-21T22:05:41.261012Z"}
+{"job_id": 44, "phase": "rules", "url": "https://jobs.ashbyhq.com/quartermaster/99586688-c351-491b-b3f2-76a9819620d7?src=LinkedIn", "pattern": "ashbyhq\\.com", "event": "Detected ashby from URL", "level": "info", "timestamp": "2026-04-21T22:05:41.261785Z"}
+{"job_id": 44, "phase": "rules", "event": "Using ashby handler", "level": "info", "timestamp": "2026-04-21T22:05:41.304934Z"}
+{"job_id": 44, "phase": "rules", "event": "Looking for Ashby apply button", "level": "info", "timestamp": "2026-04-21T22:05:41.305274Z"}
+{"job_id": 44, "phase": "rules", "selector": "a:has-text('Apply')", "event": "Clicked Ashby apply button", "level": "info", "timestamp": "2026-04-21T22:05:41.492549Z"}
+{"job_id": 44, "phase": "rules", "url_preview": "https://jobs.ashbyhq.com/quartermaster/99586688-c351-491b-b3f2-76a9819620d7/application?src=LinkedIn", "event": "Apply navigated in the same tab.", "level": "info", "timestamp": "2026-04-21T22:05:41.494688Z"}
+{"job_id": 44, "phase": "rules", "screenshot_path": "logs/job_44/screenshots/002_20260421_150544_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-21T22:05:45.356892Z"}
+{"job_id": 44, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-21T22:05:47.506674Z"}
+{"job_id": 44, "phase": "llm", "dom_path": "logs/job_44/dom_snapshots/001_20260421_150549_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-21T22:05:49.814544Z"}
+{"job_id": 44, "phase": "rules", "event": "Filling Ashby form", "level": "info", "timestamp": "2026-04-21T22:05:49.816492Z"}
+{"job_id": 44, "phase": "rules", "results": {"resume": true}, "event": "Ashby form fill complete", "level": "info", "timestamp": "2026-04-21T22:05:49.884204Z"}
+{"job_id": 44, "phase": "rules", "event": "ATS pre-pass filled 1 fields: ['resume']", "level": "info", "timestamp": "2026-04-21T22:05:49.888239Z"}
+{"job_id": 44, "phase": "llm", "dom_path": "logs/job_44/dom_snapshots/002_20260421_150550_ax_tree_after_rules_prefill.json", "name": "ax_tree_after_rules_prefill", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-21T22:05:50.761089Z"}
+{"job_id": 44, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-21T22:05:50.950516Z"}
+{"job_id": 44, "phase": "llm", "tokens": 8194, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-21T22:05:58.424620Z"}
+{"job_id": 44, "phase": "llm", "action_count": 9, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-21T22:05:58.428239Z"}
+{"job_id": 44, "phase": "llm", "selector": "Resume*", "field_label": "Resume", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-21T22:05:58.431443Z"}
+{"job_id": 44, "phase": "llm", "event": "Upload scan: file_inputs=3 wd_selectors=0 attach_buttons=3 selector='Resume*'", "level": "info", "timestamp": "2026-04-21T22:05:58.452254Z"}
+{"job_id": 44, "phase": "llm", "event": "Upload via file chooser 'button:has-text('Upload')'", "level": "info", "timestamp": "2026-04-21T22:06:01.075372Z"}
+{"job_id": 44, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-21T22:06:28.399509Z"}
+{"job_id": 44, "phase": "llm", "tokens": 8213, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-21T22:06:35.706337Z"}
+{"job_id": 44, "phase": "llm", "action_count": 9, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-21T22:06:35.707668Z"}
+{"job_id": 44, "phase": "llm", "selector": "Name*", "field_label": "Name", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-21T22:06:35.714947Z"}
+{"job_id": 44, "phase": "llm", "event": "Fill executed via label['Name']", "level": "info", "timestamp": "2026-04-21T22:06:36.382273Z"}
+{"job_id": 44, "phase": "llm", "selector": "Email*", "field_label": "Email", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-21T22:06:36.385536Z"}
+{"job_id": 44, "phase": "llm", "event": "Fill executed via label['Email']", "level": "info", "timestamp": "2026-04-21T22:06:37.421967Z"}
+{"job_id": 44, "phase": "llm", "selector": "No", "field_label": "Are you eligible for a U.S Security Clearance?", "event": "Executing click action", "level": "info", "timestamp": "2026-04-21T22:06:37.422361Z"}
+{"job_id": 44, "phase": "rules", "event": "Ashby option click OK: 'Are you eligible for a U.S Security Clearance?' = 'No' (mode=button, score=33, confirmed=False)", "level": "info", "timestamp": "2026-04-21T22:06:37.429570Z"}
+{"job_id": 44, "phase": "llm", "event": "Click via AshbyHandler.click_option", "level": "info", "timestamp": "2026-04-21T22:06:37.430346Z"}
+{"job_id": 44, "phase": "llm", "selector": "Male", "field_label": "Gender", "event": "Executing click action", "level": "info", "timestamp": "2026-04-21T22:06:37.430941Z"}
+{"job_id": 44, "phase": "rules", "event": "Ashby option click OK: 'Gender' = 'Male' (mode=radio, score=32, confirmed=True)", "level": "info", "timestamp": "2026-04-21T22:06:37.438589Z"}
+{"job_id": 44, "phase": "llm", "event": "Click via AshbyHandler.click_option", "level": "info", "timestamp": "2026-04-21T22:06:37.439586Z"}
+{"job_id": 44, "phase": "llm", "selector": "Asian (Not Hispanic or Latino)", "field_label": "Race", "event": "Executing click action", "level": "info", "timestamp": "2026-04-21T22:06:37.440232Z"}
+{"job_id": 44, "phase": "rules", "event": "Ashby option click OK: 'Race' = 'Asian (Not Hispanic or Latino)' (mode=radio, score=32, confirmed=True)", "level": "info", "timestamp": "2026-04-21T22:06:37.446289Z"}
+{"job_id": 44, "phase": "llm", "event": "Click via AshbyHandler.click_option", "level": "info", "timestamp": "2026-04-21T22:06:37.446878Z"}
+{"job_id": 44, "phase": "llm", "selector": "I am not a protected veteran", "field_label": "Veteran Status", "event": "Executing click action", "level": "info", "timestamp": "2026-04-21T22:06:37.447108Z"}
+{"job_id": 44, "phase": "rules", "event": "Ashby option click OK: 'Veteran Status' = 'I am not a protected veteran' (mode=radio, score=32, confirmed=True)", "level": "info", "timestamp": "2026-04-21T22:06:37.452679Z"}
+{"job_id": 44, "phase": "llm", "event": "Click via AshbyHandler.click_option", "level": "info", "timestamp": "2026-04-21T22:06:37.453340Z"}
+{"job_id": 44, "phase": "llm", "selector": "No, I don't have a disability and have not had one in the past", "field_label": "Disability Status", "event": "Executing click action", "level": "info", "timestamp": "2026-04-21T22:06:37.453583Z"}
+{"job_id": 44, "phase": "rules", "event": "Ashby option click OK: 'Disability Status' = 'No, I don't have a disability and have not had one in the past' (mode=radio, score=32, confirmed=True)", "level": "info", "timestamp": "2026-04-21T22:06:37.459007Z"}
+{"job_id": 44, "phase": "llm", "event": "Click via AshbyHandler.click_option", "level": "info", "timestamp": "2026-04-21T22:06:37.459475Z"}
+{"job_id": 44, "phase": "llm", "event": "All required fields satisfied on first pass \u2014 skipping multi-page loop.", "level": "info", "timestamp": "2026-04-21T22:06:59.704000Z"}
+{"job_id": 44, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-21T22:07:19.627472Z"}
+{"job_id": 44, "phase": "human", "url_before": "https://jobs.ashbyhq.com/quartermaster/99586688-c351-491b-b3f2-76a9819620d7/application?src=LinkedIn", "url_after": "https://jobs.ashbyhq.com/quartermaster/99586688-c351-491b-b3f2-76a9819620d7/application?src=LinkedIn", "advanced": false, "reason": "The agent could not finish the form on its own.", "event": "human_handoff_resumed", "level": "info", "timestamp": "2026-04-21T22:07:24.123569Z"}
+{"job_id": 44, "phase": null, "event": "Application completed successfully", "level": "info", "timestamp": "2026-04-21T22:07:24.166517Z"}
+{"job_id": 44, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-21T22:07:25.716401Z"}

@@ -1,0 +1,22 @@
+{"job_id": 42, "phase": "rules", "screenshot_path": "logs/job_42/screenshots/001_20260421_111855_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-21T18:18:55.384049Z"}
+{"job_id": 42, "phase": "rules", "url": "https://jobs.saic.com/jobs/17442492-ai-systems-engineer?bid=370&rx_campaign=Linkedin1&rx_ch=jobpost&rx_group=128565&rx_id=8efad20d-1b4d-11f1-8f3a-498f5abce120&rx_job=T2601287&rx_medium=post&rx_paid=1&rx_r=none&rx_source=linkedin&rx_ts=20260421T121202Z&rx_vp=jobslots&tm_company=2520&tm_event=view&tm_job=T2601287&rx_viewer=a0eb2e171e9a11f1a10fa5ff5b7035982187a8db60da473dabe72455f9ddd95c", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-21T18:18:55.384960Z"}
+{"job_id": 42, "phase": "rules", "event": "Could not detect ATS type, using UNKNOWN", "level": "warning", "timestamp": "2026-04-21T18:18:55.414317Z"}
+{"job_id": 42, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-21T18:18:55.440880Z"}
+{"job_id": 42, "phase": "rules", "event": "Using unknown handler", "level": "info", "timestamp": "2026-04-21T18:18:55.442012Z"}
+{"job_id": 42, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-21T18:18:55.442250Z"}
+{"job_id": 42, "phase": "rules", "event": "No apply button found (generic)", "level": "warning", "timestamp": "2026-04-21T18:18:55.503602Z"}
+{"job_id": 42, "phase": "human", "task": "find_apply_button", "event": "Agent requesting human assistance", "level": "info", "timestamp": "2026-04-21T18:19:17.533380Z"}
+{"job_id": 42, "phase": "rules", "screenshot_path": "logs/job_42/screenshots/001_20260421_112651_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-21T18:26:52.733420Z"}
+{"job_id": 42, "phase": "rules", "url": "https://jobs.saic.com/jobs/17442492-ai-systems-engineer?bid=370&rx_campaign=Linkedin1&rx_ch=jobpost&rx_group=128565&rx_id=8efad20d-1b4d-11f1-8f3a-498f5abce120&rx_job=T2601287&rx_medium=post&rx_paid=1&rx_r=none&rx_source=linkedin&rx_ts=20260421T121202Z&rx_vp=jobslots&tm_company=2520&tm_event=view&tm_job=T2601287&rx_viewer=a0eb2e171e9a11f1a10fa5ff5b7035982187a8db60da473dabe72455f9ddd95c", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-21T18:26:52.738081Z"}
+{"job_id": 42, "phase": "rules", "signature": "jobvite", "event": "Detected jobvite from DOM", "level": "info", "timestamp": "2026-04-21T18:26:52.841785Z"}
+{"job_id": 42, "phase": "rules", "event": "Using jobvite handler", "level": "info", "timestamp": "2026-04-21T18:26:52.904853Z"}
+{"job_id": 42, "phase": "rules", "event": "Looking for Jobvite apply button", "level": "info", "timestamp": "2026-04-21T18:26:52.905396Z"}
+{"job_id": 42, "phase": "rules", "selector": "a:has-text('Apply Now')", "event": "Clicked Jobvite apply button", "level": "info", "timestamp": "2026-04-21T18:26:54.593206Z"}
+{"job_id": 42, "phase": "rules", "screenshot_path": "logs/job_42/screenshots/002_20260421_112718_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-21T18:27:18.608776Z"}
+{"job_id": 42, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-21T18:27:20.688411Z"}
+{"job_id": 42, "phase": "llm", "dom_path": "logs/job_42/dom_snapshots/001_20260421_112722_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-21T18:27:22.851470Z"}
+{"job_id": 42, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-21T18:27:22.989200Z"}
+{"job_id": 42, "phase": "llm", "tokens": 9940, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-21T18:27:27.128134Z"}
+{"job_id": 42, "phase": "llm", "action_count": 0, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-21T18:27:27.130195Z"}
+{"job_id": 42, "phase": "llm", "event": "Page 1: 0/0 actions succeeded", "level": "info", "timestamp": "2026-04-21T18:27:49.372297Z"}
+{"job_id": 42, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-21T18:28:46.609722Z"}
