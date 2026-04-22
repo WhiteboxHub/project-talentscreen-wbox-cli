@@ -19,10 +19,12 @@ from jobcli.core.schemas import (
     ApplicationState,
     ApplicationStatus,
     ATSType,
+    BrowserAction,
     Config,
     ExecutionPhase,
     InteractionMode,
     Job,
+    LLMActionResponse,
     ResumeData,
 )
 from jobcli.core.tool_executor import ToolExecutor
@@ -68,15 +70,58 @@ def _strip_apply_clicks_when_filling_only(llm_response, task: str) -> None:
 # Reject third-party / federated apply variants no matter what task the
 # LLM was asked to do.  Belt-and-braces with the prompt rule + the
 # rule-based locator's third-party filter.
-_THIRD_PARTY_APPLY_RE = re.compile(
+#
+# Two tiers:
+#   1) UNAMBIGUOUS — these strings are never valid form answers, so we can
+#      drop the click on sight:  "Easy Apply", "Apply with LinkedIn",
+#      "Sign in with Google", etc.
+#   2) BRAND-ONLY — a bare brand like "LinkedIn" is often a LEGITIMATE
+#      dropdown option (e.g. "How did you hear about us?"), so we only
+#      treat it as a third-party apply button when the surrounding
+#      context also mentions apply/sign-in/continue.  Contexts that
+#      strongly suggest it is an answer (e.g. "How did you hear",
+#      "source", "referral") veto the drop entirely.
+_THIRD_PARTY_APPLY_UNAMBIGUOUS_RE = re.compile(
     r"(?i)("
     r"easy\s*apply|"
     r"apply\s+(with|via|using|through|on)\s+|"
-    r"\blinkedin\b|\bindeed\b|\bglassdoor\b|\bziprecruiter\b|"
-    r"\bmonster\b|\bgoogle\b|\bfacebook\b|\bseek\b|\bnaukri\b|\bxing\b|"
-    r"\bsign\s*in\s+with\b|\bcontinue\s+with\b|\boauth\b|\bsso\b"
+    r"sign\s*in\s+with\b|continue\s+with\b|\boauth\b|\bsso\b"
     r")"
 )
+_THIRD_PARTY_BRAND_RE = re.compile(
+    r"(?i)\b(linkedin|indeed|glassdoor|ziprecruiter|monster|seek|naukri|xing|facebook)\b"
+)
+# Pattern that indicates the CLICK is answering a "how did you hear"-style
+# question — in which case the brand name is a valid answer, not a third-
+# party apply button.
+_REFERRAL_SOURCE_CONTEXT_RE = re.compile(
+    r"(?i)("
+    r"how\s+did\s+you\s+hear|"
+    r"where\s+did\s+you\s+hear|"
+    r"hear\s+about|"
+    r"referral|referred\s+by|"
+    r"\bsource\b|"
+    r"how\s+(do|did)\s+you\s+find|"
+    r"found\s+us|"
+    r"channel"
+    r")"
+)
+
+
+def _looks_like_third_party_apply(blob: str) -> bool:
+    """True if *blob* looks like a third-party apply / federated sign-in button."""
+    if not blob:
+        return False
+    if _THIRD_PARTY_APPLY_UNAMBIGUOUS_RE.search(blob):
+        return True
+    # Brand name alone is ambiguous.  Only treat as third-party apply when
+    # we see an apply/sign-in verb AND no "how did you hear" context.
+    if _THIRD_PARTY_BRAND_RE.search(blob):
+        if _REFERRAL_SOURCE_CONTEXT_RE.search(blob):
+            return False
+        if re.search(r"(?i)\b(apply|sign\s*in|log\s*in|continue)\b", blob):
+            return True
+    return False
 
 
 def _safe_domain(url: str) -> str:
@@ -89,6 +134,56 @@ def _safe_domain(url: str) -> str:
         return host
     except Exception:
         return ""
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Job-board (aggregator) detection.
+# These are NOT applicant-tracking systems — they are listing / discovery
+# sites that link out to the employer's real ATS.  The agent cannot
+# submit an application from these domains, so we hand control to the
+# human and ask them to click through to the real ATS tab before
+# resuming.  This is deliberate, user-driven policy: do NOT try to
+# auto-navigate these (they're gated behind login / bot-detection /
+# Easy-Apply modals that we've explicitly committed not to automate).
+# ──────────────────────────────────────────────────────────────────────
+_JOB_BOARD_DOMAINS: tuple[str, ...] = (
+    "linkedin.com", "www.linkedin.com",
+    "indeed.com", "www.indeed.com", "in.indeed.com", "uk.indeed.com",
+    "glassdoor.com", "www.glassdoor.com",
+    "ziprecruiter.com", "www.ziprecruiter.com",
+    "monster.com", "www.monster.com",
+    "simplyhired.com", "www.simplyhired.com",
+    "dice.com", "www.dice.com",
+    "wellfound.com", "www.wellfound.com",
+    "angel.co", "www.angel.co",
+    "jobright.ai", "www.jobright.ai",
+    "builtin.com", "www.builtin.com",
+    "otta.com", "www.otta.com",
+    "seek.com.au", "www.seek.com.au",
+    "naukri.com", "www.naukri.com",
+    "stepstone.com", "www.stepstone.com",
+    "totaljobs.com", "www.totaljobs.com",
+    "cv-library.co.uk", "www.cv-library.co.uk",
+    "reed.co.uk", "www.reed.co.uk",
+    "remote.co", "www.remote.co",
+    "remoteok.com", "www.remoteok.com",
+    "weworkremotely.com", "www.weworkremotely.com",
+)
+
+
+def _job_board_name(url: str) -> Optional[str]:
+    """If *url* is a known job board / aggregator, return its pretty name.
+    Otherwise return ``None``.  Used to decide whether to hand off to
+    the human immediately instead of trying to drive the page."""
+    host = _safe_domain(url)
+    if not host:
+        return None
+    for board in _JOB_BOARD_DOMAINS:
+        if host == board or host.endswith("." + board):
+            # Return the shortest "pretty" form (strip www.)
+            pretty = board.split(".")[0] if board.startswith("www.") else board
+            return pretty.split(".")[0].title()  # "linkedin" → "Linkedin"
+    return None
 
 
 def _normalize_label(s: str) -> str:
@@ -233,6 +328,280 @@ def _empty_required_fields(ax_tree) -> list[str]:
     return out
 
 
+def _live_validation_errors(page) -> list[str]:
+    """Scan the live DOM for visible validation-error messages.
+
+    Complements ``_empty_required_fields`` which only sees what the
+    accessibility-tree extractor produced: some ATSes (notably modern
+    Greenhouse, Lever's React forms) render errors as plain ``<div>``
+    nodes with classes like ``.error`` / ``.field-error`` and don't set
+    ``aria-invalid`` on the input, so the AXTree reports the field as
+    fine while the user sees a red "This field is required." message.
+
+    Returns the *text* of each visible error so they can be surfaced
+    in the handoff message.  Deduplicates and strips whitespace.
+    """
+    if page is None:
+        return []
+    # CSS classes commonly used for validation errors.  We intentionally
+    # avoid very generic names ("red", "warning") that would false-match.
+    selector = ",".join(
+        [
+            "[aria-invalid='true']",
+            ".field-error",
+            ".error-message",
+            ".error-text",
+            ".invalid-feedback",
+            ".form-error",
+            ".input-error",
+            "[role='alert']",
+        ]
+    )
+    try:
+        # Run one ``evaluate_all`` so we do the collection+visibility probe
+        # + text extraction in a single round-trip (far faster than
+        # iterating with ``locator.all()``).
+        js = r"""(sel) => {
+            const out = [];
+            const seen = new Set();
+            document.querySelectorAll(sel).forEach((el) => {
+                // Skip off-screen / display:none nodes — validation
+                // errors for OTHER steps of a multi-step wizard may still
+                // be in the DOM but not visible.
+                const r = el.getBoundingClientRect();
+                if (r.width === 0 || r.height === 0) return;
+                const s = getComputedStyle(el);
+                if (s.display === 'none' || s.visibility === 'hidden') return;
+                const t = (el.innerText || el.textContent || '').trim();
+                if (!t) return;
+                // Reject very long text — probably a container, not the
+                // error message itself.
+                if (t.length > 200) return;
+                if (seen.has(t)) return;
+                seen.add(t);
+                out.push(t);
+            });
+            return out;
+        }"""
+        msgs = page.evaluate(js, selector) or []
+    except Exception:
+        return []
+    return [str(m) for m in msgs if m]
+
+
+def _submit_button_visible(page) -> bool:
+    """Return True iff a Submit/Apply-now button is currently on the page.
+
+    Used post-submission to decide whether the form was accepted: if the
+    button we just pressed is gone (and there are no validation errors),
+    that's a very strong signal the ATS took the application even when
+    it doesn't surface any "Thank you" text.  We check both typed
+    ``<button type=submit>``/``<input type=submit>`` and role/label
+    matches, because modern React-based ATSes often render submit as a
+    ``<button>`` without a ``type``.
+    """
+    if page is None:
+        return False
+    js = r"""() => {
+        const candidates = Array.from(
+            document.querySelectorAll(
+                "button[type='submit'], input[type='submit'], " +
+                "button, [role='button']"
+            )
+        );
+        const labelRe = /\b(submit|apply\s*now|send\s*application|submit\s*application)\b/i;
+        for (const el of candidates) {
+            try {
+                const r = el.getBoundingClientRect();
+                if (r.width === 0 || r.height === 0) continue;
+                const s = getComputedStyle(el);
+                if (s.display === 'none' || s.visibility === 'hidden') continue;
+                const txt = (el.innerText || el.value || el.getAttribute('aria-label') || '').trim();
+                const typedSubmit =
+                    el.tagName === 'BUTTON' && el.getAttribute('type') === 'submit' ||
+                    el.tagName === 'INPUT'  && el.getAttribute('type') === 'submit';
+                if (typedSubmit || labelRe.test(txt)) return true;
+            } catch (_) {}
+        }
+        return false;
+    }"""
+    try:
+        return bool(page.evaluate(js))
+    except Exception:
+        # Playwright raised (page closing, navigation in flight, …).
+        # Treat as "unknown / probably still there" so we don't falsely
+        # claim success.
+        return True
+
+
+def _unselected_required_dropdowns(page) -> list[str]:
+    """DOM-side scan for required dropdowns still showing a "Select…" placeholder.
+
+    Greenhouse's new React application form renders every dropdown as a
+    ``div[role='combobox']`` that displays ``"Select..."`` until the user
+    picks an option.  These comboboxes expose neither ``required=true``
+    nor a meaningful ``value`` on the accessibility tree, so the
+    AXTree-based ``_empty_required_fields`` misses them entirely.
+
+    The scan walks each visible *outer* combobox/listbox widget, ignores
+    nested search-inputs (react-select keeps a hidden ``<input
+    role='combobox'>`` that is always blank), checks for a chosen-value
+    marker, and only reports labels with ``*`` / ``aria-required``.
+    """
+    if page is None:
+        return []
+    js = r"""() => {
+        const out = [];
+        const seen = new Set();
+        // Placeholder text that indicates an unpicked dropdown.
+        const PLACEHOLDERS = [
+            'select...', 'select an option', 'choose...', 'please choose',
+            'please select', 'choose one', '-- select --', '—', '--',
+        ];
+        // Class names react-select / chosen / ant-select use to store
+        // the rendered "chosen option" text.  If any of these are
+        // present and non-empty, the dropdown IS filled.
+        const CHOSEN_VALUE_SEL = [
+            '.select__single-value',
+            '.select__multi-value__label',
+            '.react-select__single-value',
+            '.react-select__multi-value__label',
+            '.chosen-single > span:not(.chosen-default)',
+            '.ant-select-selection-item',
+            '.Select-value-label',
+            '[class*="singleValue" i]',
+        ].join(',');
+        // Class names used for the "placeholder" text.
+        const PLACEHOLDER_SEL = [
+            '.select__placeholder',
+            '.react-select__placeholder',
+            '.chosen-default',
+            '.ant-select-selection-placeholder',
+            '.Select-placeholder',
+            '[class*="placeholder" i]',
+        ].join(',');
+
+        const isVisible = (el) => {
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0) return false;
+            const s = getComputedStyle(el);
+            return s.display !== 'none' && s.visibility !== 'hidden';
+        };
+        const findLabel = (el) => {
+            const labelledby = el.getAttribute('aria-labelledby');
+            if (labelledby) {
+                const parts = labelledby.split(/\s+/)
+                    .map(id => document.getElementById(id))
+                    .filter(Boolean)
+                    .map(n => (n.innerText || n.textContent || '').trim())
+                    .filter(Boolean);
+                if (parts.length) return parts.join(' ');
+            }
+            const al = (el.getAttribute('aria-label') || '').trim();
+            if (al) return al;
+            if (el.id) {
+                const lbl = document.querySelector(`label[for="${el.id}"]`);
+                if (lbl) return (lbl.innerText || lbl.textContent || '').trim();
+            }
+            let parent = el.parentElement;
+            for (let i = 0; i < 6 && parent; i++) {
+                const lbl = parent.querySelector(':scope > label, :scope > legend, :scope > .label, :scope > [class*="label" i]');
+                if (lbl) {
+                    const t = (lbl.innerText || lbl.textContent || '').trim();
+                    if (t) return t;
+                }
+                parent = parent.parentElement;
+            }
+            return '';
+        };
+        const hasChosenValue = (el) => {
+            // If a "single-value"/multi-value label node exists and
+            // contains text, the dropdown IS filled.  This is the
+            // most reliable signal on react-select / ant-select.
+            const chosen = el.querySelector(CHOSEN_VALUE_SEL);
+            if (chosen) {
+                const t = (chosen.innerText || chosen.textContent || '').trim();
+                if (t) return true;
+            }
+            return false;
+        };
+        const looksPlaceholder = (text) => {
+            if (!text) return true;
+            const t = text.trim().toLowerCase();
+            if (!t) return true;
+            return PLACEHOLDERS.some(p => t === p || t.startsWith(p));
+        };
+
+        const combos = document.querySelectorAll(
+            "[role='combobox'], [role='listbox'], .select__control, " +
+            ".react-select__control, .chosen-single, .ant-select-selector, " +
+            ".Select-control"
+        );
+        combos.forEach((el) => {
+            // Skip hidden <input role='combobox'> — react-select and
+            // many other libs keep a permanently empty search input
+            // inside the actual dropdown container.  We only want the
+            // outermost, visible widget.
+            if (el.tagName === 'INPUT') return;
+            if (!isVisible(el)) return;
+            // Skip inner nested combobox/listbox nodes: if an ancestor
+            // we've already visited was a combobox, this is a duplicate.
+            const ancestorCombo = el.parentElement &&
+                el.parentElement.closest(
+                    "[role='combobox'], [role='listbox'], .select__control, " +
+                    ".react-select__control, .chosen-single, .ant-select-selector, " +
+                    ".Select-control"
+                );
+            if (ancestorCombo && ancestorCombo !== el) return;
+
+            // If it has a chosen-value node with text, it's definitely
+            // filled — skip regardless of what the outer innerText looks
+            // like (which can include "× ▼" decorations on some libs).
+            if (hasChosenValue(el)) return;
+
+            // Otherwise, compute a cleaned text that ignores placeholder
+            // nodes and the X/caret buttons.
+            let text = '';
+            try {
+                const clone = el.cloneNode(true);
+                clone.querySelectorAll(PLACEHOLDER_SEL).forEach(
+                    p => p.remove()
+                );
+                clone.querySelectorAll(
+                    "[aria-hidden='true'], button, svg, " +
+                    ".select__indicators, .select__indicator, " +
+                    ".react-select__indicators, .react-select__indicator, " +
+                    ".chosen-search, .chosen-search-input, " +
+                    ".ant-select-arrow, .ant-select-clear, " +
+                    ".Select-arrow-zone, .Select-clear-zone"
+                ).forEach(n => n.remove());
+                text = (clone.innerText || clone.textContent || '').trim();
+            } catch (_) {
+                text = (el.innerText || el.textContent || '').trim();
+            }
+
+            if (!looksPlaceholder(text)) return;
+
+            const label = findLabel(el);
+            if (!label) return;
+            const required = label.includes('*') ||
+                el.getAttribute('aria-required') === 'true' ||
+                (el.closest("[aria-required='true']") !== null);
+            if (!required) return;
+            const clean = label.replace(/\s+/g, ' ').trim();
+            if (seen.has(clean)) return;
+            seen.add(clean);
+            out.push(clean);
+        });
+        return out;
+    }"""
+    try:
+        labels = page.evaluate(js) or []
+    except Exception:
+        return []
+    return [str(l) for l in labels if l]
+
+
 _NEXT_BUTTON_RE = re.compile(
     r"(?i)\b(next|continue|proceed|save\s*&?\s*continue|review|submit|submit\s+application|apply|finish|complete)\b"
 )
@@ -274,7 +643,7 @@ def _strip_third_party_apply_clicks(llm_response, logger=None) -> None:
     for a in llm_response.actions:
         if a.action == ActionType.CLICK:
             blob = " ".join(str(x) for x in (a.field_label, a.selector, a.value) if x)
-            if _THIRD_PARTY_APPLY_RE.search(blob):
+            if _looks_like_third_party_apply(blob):
                 if logger:
                     logger.warning(
                         f"Dropping third-party apply click proposed by LLM: '{blob[:100]}'",
@@ -307,6 +676,198 @@ class ApplicationEngine:
         
         self.anti_bot = AntiBotManager()
 
+    # ------------------------------------------------------------------
+    # CAPTCHA / bot-challenge freeze gate
+    # ------------------------------------------------------------------
+    def _freeze_if_verification(
+        self,
+        page,
+        agent: AgentInterface,
+        logger: JobLogger,
+        *,
+        context_label: str,
+    ) -> bool:
+        """If the current page is showing a CAPTCHA / "verify you are human"
+        challenge, freeze all automation and hand control to the human.
+
+        Any programmatic scrolling / clicking / AX-tree extraction while a
+        challenge is running tends to re-trigger the bot signal and break
+        verification (Cloudflare Turnstile, hCaptcha "invisible", etc.).  So
+        on detection we:
+
+          1. Stop issuing any Playwright commands besides URL / title reads.
+          2. Show a prominent browser overlay + terminal modal + bell.
+          3. Wait for the human to press ENTER.
+          4. Poll ``wait_until_cleared`` until the challenge actually
+             disappears (some challenges take a moment to finalise cookies
+             after the user interacts).
+          5. Return True if the page is now clear, False if the user
+             cancelled or the challenge never cleared.
+
+        Returns True if automation may continue; False if the caller should
+        abort this job.
+        """
+        try:
+            if not self.anti_bot.detect_captcha(page):
+                return True
+        except Exception:
+            return True
+
+        logger.warning(
+            f"Bot challenge / CAPTCHA detected ({context_label}) — freezing automation.",
+            phase=ExecutionPhase.RULES,
+        )
+        try:
+            logger.capture_screenshot(page, f"captcha_{context_label}", ExecutionPhase.RULES)
+        except Exception:
+            pass
+
+        # Block here — handle_captcha shows the browser overlay + terminal
+        # modal + bell and waits for ENTER.
+        solved = agent.handle_captcha()
+        if not solved:
+            return False
+
+        # The human pressed ENTER.  Poll to make sure the challenge actually
+        # cleared; Cloudflare sometimes flips the cookie a second or two
+        # later after the user has already solved the puzzle.
+        cleared = self.anti_bot.wait_until_cleared(page, max_wait_seconds=30)
+        if not cleared:
+            agent.show_warning(
+                "Verification challenge is still visible. Finish it in the browser, "
+                "then press ENTER again."
+            )
+            # Second chance — some challenges chain two steps.
+            solved = agent.handle_captcha()
+            if not solved:
+                return False
+            cleared = self.anti_bot.wait_until_cleared(page, max_wait_seconds=45)
+
+        if cleared:
+            agent.show_success("Verification cleared — resuming automation.")
+        return cleared
+
+    def _handoff_for_job_board(
+        self,
+        page,
+        agent: AgentInterface,
+        logger: JobLogger,
+        *,
+        board: str,
+    ) -> Optional[Page]:
+        """Hand off when the landing page is a job board (LinkedIn, JobRight, …).
+
+        Returns the ``Page`` the human ended up on (could be a new tab), or
+        ``None`` if the human cancelled.  The caller should treat ``None``
+        as a terminal failure for this job.
+        """
+        page_ids_before = {id(p) for p in page.context.pages}
+        page_count_before = len(page.context.pages)
+        url_before = ""
+        try:
+            url_before = page.url or ""
+        except Exception:
+            pass
+
+        logger.info(
+            f"Job-board URL detected ({board}) — handing off to human.",
+            phase=ExecutionPhase.HUMAN,
+            board=board,
+            url=url_before,
+        )
+        agent.show_warning(
+            f"{board} is a job board, not an ATS. The agent can't submit "
+            "applications from here."
+        )
+
+        hint = (
+            f"On {board}, find and click the employer's real Apply button "
+            "(often labelled 'Apply on company site' or similar) — NOT "
+            "'Easy Apply'. It will usually open a new tab on the company's "
+            "ATS (Greenhouse / Ashby / Workday / …). Once you're on the "
+            "ATS application page, press ENTER here."
+        )
+        result = agent.handoff_to_human(
+            reason=f"URL is on {board} (a job board). "
+                   "Please click through to the company's real application page.",
+            hint=hint,
+            wait_for_navigation_seconds=10,
+        )
+        if result.cancelled:
+            agent.show_error("Cancelled by user at job-board handoff.")
+            return None
+
+        # The human may have opened a new tab (most common on LinkedIn /
+        # Indeed: "Apply on company site" opens a popup).  Use the existing
+        # tab-adoption helper to pick the best page to automate from here.
+        adopted = adopt_application_page_after_action(
+            page,
+            page_count_before=page_count_before,
+            url_before=url_before,
+            page_ids_before=page_ids_before,
+            logger=logger,
+            poll_seconds=6.0,
+        )
+        new_page = adopted if adopted is not None else page
+        try:
+            new_page.bring_to_front()
+        except Exception:
+            pass
+        try:
+            new_url = new_page.url or ""
+        except Exception:
+            new_url = ""
+
+        # Still on a job board?  That means the human either didn't move
+        # off or ended up on a different aggregator (e.g. LinkedIn →
+        # Indeed redirect).  Keep prompting until they get to a real ATS
+        # page or cancel.  Limit to 3 tries to avoid infinite loops.
+        attempts = 0
+        while _job_board_name(new_url) and attempts < 2:
+            attempts += 1
+            agent.show_warning(
+                f"Still on a job board ({_job_board_name(new_url)}). "
+                "Please click through to the company's real ATS page."
+            )
+            page_ids_before = {id(p) for p in new_page.context.pages}
+            page_count_before = len(new_page.context.pages)
+            url_before = new_url
+            result = agent.handoff_to_human(
+                reason="Still on a job board — need to reach the company's ATS.",
+                hint=hint,
+                wait_for_navigation_seconds=10,
+            )
+            if result.cancelled:
+                return None
+            adopted = adopt_application_page_after_action(
+                new_page,
+                page_count_before=page_count_before,
+                url_before=url_before,
+                page_ids_before=page_ids_before,
+                logger=logger,
+                poll_seconds=6.0,
+            )
+            new_page = adopted if adopted is not None else new_page
+            try:
+                new_url = new_page.url or ""
+            except Exception:
+                new_url = ""
+
+        if _job_board_name(new_url):
+            agent.show_error(
+                f"Still on a job board after {attempts + 1} attempts. "
+                "Aborting — please re-run with the ATS URL directly."
+            )
+            return None
+
+        logger.info(
+            "Resuming on ATS page handed to us by the human.",
+            phase=ExecutionPhase.HUMAN,
+            url=new_url[:200],
+        )
+        agent.show_success(f"Resuming on ATS page: {new_url[:120]}")
+        return new_page
+
     def apply_to_job(self, job: Job) -> ApplicationStatus:
         """Apply to a single job using a unified agent loop with inline human checkpoints."""
         global_logger.info(f"Starting application for job {job.id}", job_url=job.url)
@@ -325,10 +886,29 @@ class ApplicationEngine:
         mode = self.config.interaction_mode
 
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=self.config.headless)
+            # ──────────────────────────────────────────────────────────
+            # Anti-detection surface.  Centralised in ``core.stealth`` so
+            # the same launch flags / context settings / init script are
+            # also used by ``scripts/stealth_check.py`` and the unit
+            # tests, guaranteeing that what we ship is what we test.
+            # ──────────────────────────────────────────────────────────
+            from jobcli.core.stealth import (
+                LAUNCH_ARGS,
+                IGNORE_DEFAULT_ARGS,
+                CONTEXT_OPTIONS,
+                apply_stealth,
+            )
+
+            browser = p.chromium.launch(
+                headless=self.config.headless,
+                args=LAUNCH_ARGS,
+                ignore_default_args=IGNORE_DEFAULT_ARGS,
+            )
             context = browser.new_context(
                 user_agent=self.config.user_agent or self.anti_bot.get_random_user_agent(),
+                **CONTEXT_OPTIONS,
             )
+            apply_stealth(context, logger=logger)
             page = context.new_page()
             self.anti_bot.logger = logger
 
@@ -352,12 +932,63 @@ class ApplicationEngine:
                 except playwright.sync_api.TimeoutError:
                     logger.warning("Page load timed out after 45s. Continuing anyway.", phase=ExecutionPhase.RULES)
                 self._random_delay()
+
+                # ── 1b. Freeze immediately if we landed on a CAPTCHA ────
+                # This MUST run before cookie-consent dismissal and any
+                # other DOM manipulation.  Clicking cookie buttons, probing
+                # elements, or injecting scripts while a bot challenge is
+                # active tends to flip the challenge into a permanent
+                # "access denied" state.
+                if not self._freeze_if_verification(
+                    page, agent, logger, context_label="post_navigate"
+                ):
+                    self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
+                    return ApplicationStatus.FAILED
+
                 self._dismiss_cookie_consent(page, logger)
                 logger.capture_screenshot(page, "initial", ExecutionPhase.RULES)
 
+                # ── 1c. Job-board (LinkedIn / JobRight / Indeed / …) handoff ──
+                # These sites are job-aggregators, NOT ATSes.  The agent can't
+                # submit an application from them — the real application lives
+                # on the employer's ATS, reached either by clicking "Apply on
+                # company site" (opens a new tab) or by following a redirect
+                # from "Easy Apply" (which we explicitly forbid anyway).
+                # Hand control to the human, let them click through, and then
+                # adopt whatever tab/page they land on as the new target.
+                board = _job_board_name(page.url or job.url)
+                if board:
+                    page = self._handoff_for_job_board(
+                        page, agent, logger, board=board
+                    )
+                    if page is None:
+                        self.job_repo.update_status(
+                            job.id or 0, ApplicationStatus.FAILED
+                        )
+                        return ApplicationStatus.FAILED
+                    # Keep AgentInterface / state pointing at the page the
+                    # human handed us.
+                    agent.page = page
+                    # Also re-check for a verification challenge on the new
+                    # page — the employer's ATS may itself be gated.
+                    if not self._freeze_if_verification(
+                        page, agent, logger, context_label="post_jobboard_handoff"
+                    ):
+                        self.job_repo.update_status(
+                            job.id or 0, ApplicationStatus.FAILED
+                        )
+                        return ApplicationStatus.FAILED
+                    self._dismiss_cookie_consent(page, logger)
+                    logger.capture_screenshot(
+                        page, "after_jobboard_handoff", ExecutionPhase.HUMAN
+                    )
+
                 # ── 2. Detect ATS ───────────────────────────────────────
                 detector = ATSDetector(page, logger)
-                ats_type = detector.detect(job.url)
+                # Always detect from the CURRENT page URL (may differ from the
+                # original job.url after a job-board handoff).
+                current_url = page.url or job.url
+                ats_type = detector.detect(current_url)
                 state.detected_ats = ats_type
                 self.job_repo.update_ats_type(job.id or 0, ats_type)
                 agent.set_context(ats_type=ats_type)
@@ -365,62 +996,67 @@ class ApplicationEngine:
 
                 # ── 3. Click Apply (auto, with inline human fallback) ───
                 agent.show_phase_banner("Finding and clicking Apply button")
+
+                # A verification challenge may appear *between* pages (job
+                # board → ATS redirect) — check again right before we touch
+                # the DOM looking for an Apply button.
+                if not self._freeze_if_verification(
+                    page, agent, logger, context_label="pre_apply_click"
+                ):
+                    self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
+                    return ApplicationStatus.FAILED
+
                 apply_clicked, page = self._click_apply_button(page, state, logger, ats_type)
                 # Page may have changed (new tab) — update agent's reference
                 agent.page = page
 
+                # Clicking Apply often takes us to a gated ATS page that
+                # itself shows a CAPTCHA. Freeze before moving on.
+                if apply_clicked:
+                    if not self._freeze_if_verification(
+                        page, agent, logger, context_label="post_apply_click"
+                    ):
+                        self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
+                        return ApplicationStatus.FAILED
+
                 if not apply_clicked:
                     agent.show_warning("Could not find Apply button automatically.")
-                    # First try the lightweight "tell me the selector" path.
-                    ok, selector, stype = agent.request_help_finding_element("find_apply_button", ats_type)
-                    if ok and selector:
+                    # Hand the browser to the human directly.  We used to
+                    # show a terminal-only selector picker here, but it
+                    # was confusing and rarely useful — the native
+                    # browser handoff is always the better UX.
+                    handoff = agent.handoff_to_human(
+                        reason="Could not find a native Apply button on this page.",
+                        hint="Click the correct Apply button yourself (avoid 'Apply with LinkedIn/Indeed'), "
+                             "or navigate to the application form. Then press ENTER to hand control back.",
+                    )
+                    if handoff.cancelled:
+                        self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
+                        return ApplicationStatus.FAILED
+
+                    page = handoff.page
+                    agent.page = page
+
+                    # If the human navigated forward, treat the apply step
+                    # as already completed — do NOT go back. Re-detect ATS
+                    # in case they landed on an entirely different host
+                    # (e.g. company site -> Workday/Greenhouse).
+                    if handoff.advanced:
+                        apply_clicked = True
                         try:
-                            if stype and stype.value == "xpath":
-                                page.click(f"xpath={selector}")
-                            else:
-                                page.click(selector)
-                            apply_clicked = True
-                            agent.show_success("Apply button clicked with your help.")
-                            self._random_delay()
-                            logger.capture_screenshot(page, "human_apply_click", ExecutionPhase.HUMAN)
-                        except Exception as e:
-                            agent.show_error(f"Click failed: {e}")
-
-                    # If still stuck, hand the browser to the human entirely
-                    # and resume from whatever page they end up on.
-                    if not apply_clicked:
-                        handoff = agent.handoff_to_human(
-                            reason="Could not find a native Apply button on this page.",
-                            hint="Click the correct Apply button yourself (avoid 'Apply with LinkedIn/Indeed'), "
-                                 "or navigate to the application form. Then press ENTER to hand control back.",
-                        )
-                        if handoff.cancelled:
-                            self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
-                            return ApplicationStatus.FAILED
-
-                        page = handoff.page
-                        agent.page = page
-
-                        # If the human navigated forward, treat the apply step
-                        # as already completed — do NOT go back. Re-detect ATS
-                        # in case they landed on an entirely different host
-                        # (e.g. company site -> Workday/Greenhouse).
-                        if handoff.advanced:
-                            apply_clicked = True
-                            try:
-                                new_ats = ATSDetector(page, logger).detect(page.url)
-                                if new_ats != ats_type:
-                                    ats_type = new_ats
-                                    state.detected_ats = ats_type
-                                    self.job_repo.update_ats_type(job.id or 0, ats_type)
-                                    agent.set_context(ats_type=ats_type)
-                                    agent.show_status(
-                                        f"Re-detected ATS after handoff: {ats_type.value}",
-                                        phase=ExecutionPhase.RULES,
-                                    )
-                            except Exception:
-                                pass
-                            logger.capture_screenshot(page, "human_apply_resume", ExecutionPhase.HUMAN)
+                            new_ats = ATSDetector(page, logger).detect(page.url)
+                            if new_ats != ats_type:
+                                ats_type = new_ats
+                                state.detected_ats = ats_type
+                                self.job_repo.update_ats_type(job.id or 0, ats_type)
+                                agent.set_context(ats_type=ats_type)
+                                agent.show_status(
+                                    f"Re-detected ATS after handoff: {ats_type.value}",
+                                    phase=ExecutionPhase.RULES,
+                                )
+                        except Exception:
+                            pass
+                        logger.capture_screenshot(page, "human_apply_resume", ExecutionPhase.HUMAN)
                 else:
                     agent.show_success("Apply button clicked.")
 
@@ -751,6 +1387,66 @@ class ApplicationEngine:
             ax_tree = extractor.extract()
             logger.save_structured_dom(ax_tree.model_dump(), "ax_tree_snapshot", ExecutionPhase.LLM)
 
+            # ── ATS-handler pre-pass + persistent reference ───────────────
+            # Every ATS has its own handler (Ashby, Workday, Greenhouse,
+            # Lever…) with hardcoded, battle-tested selectors for the
+            # common fields (firstName, lastName, email, phone, linkedin,
+            # resume upload) AND for the common "click option" patterns
+            # (Yes/No radios, custom dropdowns).  We:
+            #   1. Run ``fill_form`` as a pre-pass for known text fields.
+            #   2. Keep the handler around so the ``ToolExecutor`` can
+            #      consult it during the LLM loop for click_option /
+            #      select_dropdown_option (see tool_executor.py).
+            rules_handler = None
+            try:
+                rules_handler = ATSHandlerFactory.create_handler(
+                    state.detected_ats, page, self.resume, logger
+                )
+                if rules_handler and state.detected_ats not in (ATSType.UNKNOWN,):
+                    agent.show_status(
+                        f"Running {state.detected_ats.value} handler for known fields…",
+                        phase=ExecutionPhase.RULES,
+                    )
+                    try:
+                        prefill_results = rules_handler.fill_form(
+                            self.config.resume_pdf_path
+                        )
+                        filled = [k for k, v in (prefill_results or {}).items() if v]
+                        if filled:
+                            agent.show_success(
+                                f"{state.detected_ats.value} handler filled: "
+                                + ", ".join(filled)
+                            )
+                            logger.info(
+                                f"ATS pre-pass filled {len(filled)} fields: {filled}",
+                                phase=ExecutionPhase.RULES,
+                            )
+                            # Re-extract so the LLM doesn't see fields we
+                            # already handled — avoids re-proposing them.
+                            page.wait_for_timeout(800)
+                            ax_tree = extractor.extract()
+                            logger.save_structured_dom(
+                                ax_tree.model_dump(),
+                                "ax_tree_after_rules_prefill",
+                                ExecutionPhase.LLM,
+                            )
+                        else:
+                            logger.info(
+                                "ATS pre-pass produced no fills — form may use "
+                                "non-standard field names; LLM will handle it.",
+                                phase=ExecutionPhase.RULES,
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"ATS pre-pass raised {e!r}; falling through to LLM.",
+                            phase=ExecutionPhase.RULES,
+                        )
+            except Exception as e:
+                logger.debug(
+                    f"Could not create pre-pass handler: {e}",
+                    phase=ExecutionPhase.RULES,
+                )
+
             llm_client = LLMClient(provider, api_key, logger)
 
             from jobcli.core.memory import AgentMemory
@@ -771,7 +1467,12 @@ class ApplicationEngine:
 
             MAX_ASK_LOOPS = 3
             loop_count = 0
-            executor = ToolExecutor(page, logger, memory=memory, synonym_resolver=synonym_resolver, ats_type=state.detected_ats)
+            executor = ToolExecutor(
+                page, logger, memory=memory,
+                synonym_resolver=synonym_resolver,
+                ats_type=state.detected_ats,
+                ats_handler=rules_handler,
+            )
             results: dict = {}
             performed_uploads: set = set()
 
@@ -779,6 +1480,22 @@ class ApplicationEngine:
             while loop_count < MAX_ASK_LOOPS:
                 loop_count += 1
                 agent.show_status(f"AI iteration {loop_count}/{MAX_ASK_LOOPS}", phase=ExecutionPhase.LLM)
+
+                # Before calling the LLM or touching the page, make sure no
+                # bot-verification challenge is currently on screen.  If it
+                # is, pause the whole loop until the human clears it — the
+                # LLM would only see "verify you are human" text anyway.
+                if not self._freeze_if_verification(
+                    page, agent, logger, context_label=f"llm_iter_{loop_count}"
+                ):
+                    logger.log_phase_end(ExecutionPhase.LLM, False)
+                    return False
+                # The human may have navigated somewhere else while solving
+                # the challenge; re-extract the AX tree from the current page.
+                try:
+                    ax_tree = extractor.extract()
+                except Exception:
+                    pass
 
                 memory_context = memory.build_llm_context(state.detected_ats)
                 llm_response = llm_client.analyze_page_from_axtree(
@@ -824,31 +1541,86 @@ class ApplicationEngine:
                         f"AI requested {len(ask_actions)} answer(s) — pausing all other actions.",
                         phase=ExecutionPhase.HUMAN,
                     )
-                    answered_any = False
+                    resolved_actions: list[BrowserAction] = []
                     for act in ask_actions:
                         label = act.field_label or act.selector
                         options = None
+                        is_dropdown = False
                         for dp in ax_tree.dropdown_fields:
                             if dp["label"].lower() == label.lower():
                                 options = dp["options"]
+                                is_dropdown = True
                                 break
                         # request_field_input does DB-lookup-first and persists
                         # any new human answer automatically.
                         answer = agent.request_field_input(
                             label, options=options, question_text=act.value,
                         )
-                        if answer:
-                            answered_any = True
-                            # Mutate the action in-place so this iteration's
-                            # planned operations don't run; we'll re-loop with
-                            # the updated memory instead.
-                            act.action = ActionType.FILL
-                            act.value = answer
+                        if not answer:
+                            continue
+                        # Turn the ASK into a concrete browser action.  Using
+                        # ``label`` as the selector lets ``_execute_type`` and
+                        # ``_execute_select`` match by <label for>, aria-label,
+                        # placeholder, name/id attribute, etc. — covering the
+                        # ATS form patterns we care about.
+                        act.selector = label
+                        act.value = answer
+                        act.action = ActionType.SELECT if is_dropdown else ActionType.FILL
+                        resolved_actions.append(act)
 
-                    if answered_any:
-                        # Re-run the LLM cycle with the new memory context.
-                        # This guarantees the model considers all already-known
-                        # answers when planning the next batch of actions.
+                    if resolved_actions:
+                        # Execute the resolved fills IMMEDIATELY.  The old
+                        # behaviour of just mutating + ``continue`` silently
+                        # dropped the values because the actions never reached
+                        # the executor — the model rarely re-proposes the
+                        # same fill on the next iteration, so the answer
+                        # would sit in memory but never land in the DOM.
+                        agent.show_status(
+                            f"Applying {len(resolved_actions)} resolved answer(s) "
+                            "to the browser…",
+                            phase=ExecutionPhase.LLM,
+                        )
+                        resolved_response = LLMActionResponse(
+                            reasoning="Executing ASK-resolved answers.",
+                            actions=resolved_actions,
+                            requires_human=False,
+                            page_complete=False,
+                        )
+                        # Dropdown safety net: ensure FILL→SELECT coercion
+                        # runs on these too (e.g. "Commutable distance" that
+                        # the LLM tagged as a text field but is really a
+                        # combobox).
+                        _coerce_dropdown_actions(resolved_response, ax_tree, logger)
+
+                        ask_results = executor.execute_actions(resolved_response)
+                        ask_succeeded = sum(
+                            1 for v in ask_results.values() if v
+                        )
+                        agent.show_status(
+                            f"Applied {ask_succeeded}/{len(resolved_actions)} "
+                            "resolved answer(s).",
+                            phase=ExecutionPhase.LLM,
+                        )
+                        # Persist successful locators so future runs hit them
+                        # directly without needing the LLM again.
+                        page_domain = _safe_domain(page.url)
+                        for i, act in enumerate(resolved_actions):
+                            if ask_results.get(f"action_{i}_{act.action.value}"):
+                                try:
+                                    self.locator_repo.upsert_for_field(
+                                        ats_type=state.detected_ats,
+                                        domain=page_domain,
+                                        purpose=(act.field_label or act.selector or "")[:100],
+                                        selector=act.selector,
+                                        selector_type=act.selector_type,
+                                        success=True,
+                                        job_id=state.job_id,
+                                    )
+                                except Exception:
+                                    pass
+
+                        # Re-run the LLM cycle so it sees the filled fields
+                        # and can tackle whatever is left.
                         agent.show_status(
                             "Memory updated — re-running AI with new context.",
                             phase=ExecutionPhase.LLM,
@@ -932,7 +1704,20 @@ class ApplicationEngine:
                 if id(adopted) != id(page):
                     page = adopted
                     agent.page = page
-                    executor = ToolExecutor(page, logger, memory=memory, synonym_resolver=synonym_resolver, ats_type=state.detected_ats)
+                    # New tab means the handler's ``page`` reference is
+                    # now stale — rebind it so ``click_option`` talks
+                    # to the right page.
+                    if rules_handler is not None:
+                        try:
+                            rules_handler.page = page
+                        except Exception:
+                            pass
+                    executor = ToolExecutor(
+                        page, logger, memory=memory,
+                        synonym_resolver=synonym_resolver,
+                        ats_type=state.detected_ats,
+                        ats_handler=rules_handler,
+                    )
                     extractor = AccessibilityTreeExtractor(page)
                     agent.show_status("Followed new tab.", phase=ExecutionPhase.LLM)
                     self._dismiss_cookie_consent(page, logger)
@@ -1013,30 +1798,224 @@ class ApplicationEngine:
                             except Exception:
                                 pass
 
-                # ── Handle failed fields — inline human input ─────────────
-                # AgentInterface internally checks the DB first and persists
-                # any new answers, so we don't need to re-save here.
+                # ── Handle failed fields ──────────────────────────────────
+                # There are two distinct buckets of failure:
+                #   (a) VALUE MISSING — the LLM proposed a fill/select but
+                #       provided no value.  ``show_failed_fields`` asks the
+                #       human for each (DB-first), returns BrowserActions
+                #       with values filled in, and we re-execute them.
+                #   (b) SELECTOR BAD — the LLM proposed a fill with a value
+                #       but the selector didn't match the DOM (common on
+                #       Ashby / custom ATS).  Asking the user for the same
+                #       value again won't help — we need a human pair of
+                #       eyes on the browser to finish the form.
                 failed_actions = executor.get_failed_actions()
                 if failed_actions:
-                    agent.show_failed_fields(
-                        failed_actions,
-                        dropdown_options_by_selector=getattr(executor, "last_dropdown_options", None),
-                    )
+                    # Bucket (a): fields missing a value.
+                    missing_value = [
+                        a for a in failed_actions
+                        if a.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT)
+                        and not (a.value and str(a.value).strip())
+                    ]
+                    # Bucket (b): fields that had a value but the selector
+                    # refused it.
+                    selector_failed = [
+                        a for a in failed_actions
+                        if a.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT)
+                        and (a.value and str(a.value).strip())
+                    ]
+
+                    retry_failed: list[BrowserAction] = []
+                    if missing_value:
+                        filled_actions = agent.show_failed_fields(
+                            missing_value,
+                            dropdown_options_by_selector=getattr(executor, "last_dropdown_options", None),
+                        )
+                        if filled_actions:
+                            agent.show_status(
+                                f"Re-executing {len(filled_actions)} field(s) with your answers…",
+                                phase=ExecutionPhase.LLM,
+                            )
+                            retry_succeeded = 0
+                            page_domain = _safe_domain(page.url)
+                            for act in filled_actions:
+                                ok = False
+                                try:
+                                    ok = executor.execute_action(act)
+                                except Exception as e:
+                                    logger.error(
+                                        f"Retry for '{act.field_label}' raised: {e}",
+                                        phase=ExecutionPhase.LLM,
+                                    )
+                                if ok:
+                                    retry_succeeded += 1
+                                    label = act.field_label or act.selector
+                                    memory.save_field_answer(
+                                        label, act.value, state.detected_ats,
+                                        success=True, source="human",
+                                    )
+                                    try:
+                                        self.locator_repo.upsert_for_field(
+                                            ats_type=state.detected_ats,
+                                            domain=page_domain,
+                                            purpose=f"{act.action.value}:{_normalize_label(label)}",
+                                            selector=act.selector,
+                                            selector_type=act.selector_type,
+                                            success=True,
+                                            job_id=state.job_id,
+                                        )
+                                    except Exception:
+                                        pass
+                                else:
+                                    retry_failed.append(act)
+                            agent.show_status(
+                                f"Retry result: {retry_succeeded}/{len(filled_actions)} filled successfully.",
+                                phase=ExecutionPhase.LLM,
+                            )
+
+                    # ── Collect anything that's still unfinished ─────────
+                    still_broken = selector_failed + retry_failed
+                    if still_broken:
+                        # Build a "label → value" preview so the human sees
+                        # WHAT the agent knows and just has to type/paste it
+                        # into the browser (we already have the answers —
+                        # only the selector failed).
+                        rows = []
+                        for a in still_broken[:8]:
+                            lbl = a.field_label or a.selector
+                            val = (a.value or "").strip()
+                            if val:
+                                preview = val if len(val) <= 60 else val[:57] + "…"
+                                rows.append(f"  • {lbl}: {preview}")
+                            else:
+                                rows.append(f"  • {lbl}  (no value)")
+                        more = f"\n  … and {len(still_broken) - 8} more" if len(still_broken) > 8 else ""
+                        pretty_list = "\n".join(rows) + more
+                        agent.show_warning(
+                            f"{len(still_broken)} field(s) could not be typed by the "
+                            "agent (selector didn't match). Values are ready — just "
+                            "need a human to put them in:\n" + pretty_list
+                        )
+                        handoff = agent.handoff_to_human(
+                            reason=(
+                                f"The agent already has the values for "
+                                f"{len(still_broken)} field(s), but couldn't find a "
+                                "selector that works on this page. Please type or "
+                                "paste them into the browser using the list above."
+                            ),
+                            hint="When done, press ENTER and JobCLI will continue "
+                                 "from the page you're on.",
+                        )
+                        if handoff.cancelled:
+                            logger.log_phase_end(ExecutionPhase.LLM, False)
+                            return False
+                        page = handoff.page
+                        agent.page = page
+                        # Human may have advanced the form — re-extract so the
+                        # next iteration sees the updated page.
+                        try:
+                            ax_tree = extractor.extract()
+                        except Exception:
+                            pass
 
                 if not failed_actions and not ask_actions:
                     agent.show_success("All actions completed.")
                     break
 
             # ── Multi-page form loop ──────────────────────────────────────
+            # NOTE: This loop is for Workday-style "Next → Next → Submit"
+            # multi-step forms. Single-page ATS (Ashby, Lever, Greenhouse
+            # inline forms) should exit after the very first iteration
+            # once required fields are satisfied — see early-exit checks
+            # below.
             MAX_PAGES = 5
             page_count = 1
+            # Track fingerprint of empty-required fields so we can detect
+            # "we're going in circles on the same page" and bail out.
+            prev_empty_fingerprint: Optional[str] = None
+
+            # Early exit: if required fields are already satisfied AND
+            # no URL change is expected, the form is complete on this
+            # single page.  Don't re-run the LLM.
+            #
+            # We combine three signals here because no single one is
+            # sufficient on React-rendered ATS forms:
+            #   • AXTree  → ``_empty_required_fields(ax_tree)``
+            #   • Live DOM custom-dropdown scan → ``_unselected_required_dropdowns``
+            #   • Client-side validation errors → ``_live_validation_errors``
+            try:
+                initial_empty = _empty_required_fields(ax_tree)
+            except Exception:
+                initial_empty = []
+            try:
+                initial_dropdown_empty = _unselected_required_dropdowns(page)
+            except Exception:
+                initial_dropdown_empty = []
+            try:
+                initial_errors = _live_validation_errors(page)
+            except Exception:
+                initial_errors = []
+            if not initial_empty and not initial_dropdown_empty and not initial_errors:
+                logger.info(
+                    "All required fields satisfied on first pass — skipping multi-page loop.",
+                    phase=ExecutionPhase.LLM,
+                )
+                page_count = MAX_PAGES  # sentinel to bypass loop
+            elif initial_dropdown_empty or initial_errors:
+                logger.info(
+                    "Form has unresolved required dropdowns or validation errors — "
+                    f"empty_required={len(initial_empty)} "
+                    f"empty_dropdowns={len(initial_dropdown_empty)} "
+                    f"validation_errors={len(initial_errors)}. "
+                    "Multi-page loop will run a repair pass.",
+                    phase=ExecutionPhase.LLM,
+                )
 
             while page_count < MAX_PAGES:
                 total = len(results)
                 successes = sum(1 for v in results.values() if v)
 
+                # Low success rate is a strong signal that the LLM's
+                # selectors didn't match the DOM — do NOT silently proceed
+                # to submit, hand the form off to the human so they can
+                # finish it in the browser.  This is what lets the user
+                # recover from an Ashby / custom-ATS page where the fills
+                # failed even though the LLM supplied values.
                 if total == 0 or (successes / total) < 0.5:
-                    logger.info(f"Page {page_count}: {successes}/{total} actions succeeded", phase=ExecutionPhase.LLM)
+                    logger.info(
+                        f"Page {page_count}: {successes}/{total} actions succeeded — "
+                        "handing off to human.",
+                        phase=ExecutionPhase.LLM,
+                    )
+                    # Also check for required fields that are still empty so
+                    # the handoff message is specific.
+                    try:
+                        required_but_empty = _empty_required_fields(ax_tree)
+                    except Exception:
+                        required_but_empty = []
+                    hint_extra = ""
+                    if required_but_empty:
+                        preview = ", ".join(required_but_empty[:6])
+                        if len(required_but_empty) > 6:
+                            preview += " …"
+                        hint_extra = f" Required fields still empty: {preview}."
+                    handoff = agent.handoff_to_human(
+                        reason=(
+                            f"Only {successes}/{total} auto-fills succeeded on this "
+                            "page. JobCLI is handing control to you to finish it."
+                        ),
+                        hint=(
+                            "Complete every required field in the browser. "
+                            "When you're done (or after clicking Next/Submit), "
+                            "press ENTER and JobCLI will continue."
+                            + hint_extra
+                        ),
+                    )
+                    if handoff.cancelled:
+                        logger.log_phase_end(ExecutionPhase.LLM, False)
+                        return False
+                    page = handoff.page
+                    agent.page = page
                     break
 
                 agent.show_status(f"Page {page_count}: {successes}/{total} actions succeeded.", phase=ExecutionPhase.LLM)
@@ -1094,6 +2073,61 @@ class ApplicationEngine:
                             break
 
                 button_clicked = any(a.action == ActionType.CLICK for a in (llm_response.actions if 'llm_response' in locals() else []))
+
+                # ── Early-exit: single-page form is complete ────────────
+                # If URL didn't change AND no required fields remain empty,
+                # the form is done and we should NOT keep re-asking the
+                # LLM. This is what stops Ashby/Lever/etc. from being
+                # treated as multi-page.
+                try:
+                    new_empty = _empty_required_fields(new_ax_tree)
+                except Exception:
+                    new_empty = []
+                if not url_changed and not new_empty:
+                    agent.show_status(
+                        "Form complete on this page — no required fields left.",
+                        phase=ExecutionPhase.LLM,
+                    )
+                    break
+
+                # ── Circle-breaker ─────────────────────────────────────
+                # If we're on the same URL and the set of empty-required
+                # fields is identical to the previous pass, re-running
+                # the LLM won't help — the same selectors will fail the
+                # same way. Hand off to the human instead of looping.
+                current_fingerprint = (
+                    new_ax_tree.url + "|" + "|".join(sorted(new_empty))
+                )
+                if (
+                    not url_changed
+                    and prev_empty_fingerprint is not None
+                    and current_fingerprint == prev_empty_fingerprint
+                ):
+                    preview = ", ".join(new_empty[:6]) + (" …" if len(new_empty) > 6 else "")
+                    logger.info(
+                        "Same page, same empty fields as last pass — stopping "
+                        "the re-scan loop.",
+                        phase=ExecutionPhase.LLM,
+                    )
+                    handoff = agent.handoff_to_human(
+                        reason=(
+                            "The agent has re-scanned this page and can't make "
+                            f"further progress. Still missing: {preview}"
+                            if preview else
+                            "The agent has re-scanned this page and can't make "
+                            "further progress automatically."
+                        ),
+                        hint="Finish the remaining fields in the browser and "
+                             "press ENTER to continue.",
+                    )
+                    if handoff.cancelled:
+                        logger.log_phase_end(ExecutionPhase.LLM, False)
+                        return False
+                    page = handoff.page
+                    agent.page = page
+                    break
+                prev_empty_fingerprint = current_fingerprint
+
                 if not url_changed and not fields_changed and not button_clicked:
                     break
 
@@ -1102,7 +2136,13 @@ class ApplicationEngine:
                     agent.show_status("Navigated to new page.", phase=ExecutionPhase.LLM)
                     self._dismiss_cookie_consent(page, logger)
                 else:
-                    agent.show_status("New fields detected on same page.", phase=ExecutionPhase.LLM)
+                    # Not a new page — we're just re-scanning to see if
+                    # earlier actions revealed new fields. Use language
+                    # that reflects that so the log isn't misleading.
+                    agent.show_status(
+                        f"Re-scanning same page (pass {page_count}) after actions.",
+                        phase=ExecutionPhase.LLM,
+                    )
 
                 ax_tree = new_ax_tree
 
@@ -1171,26 +2211,175 @@ class ApplicationEngine:
                 if id(adopted2) != id(page):
                     page = adopted2
                     agent.page = page
-                    executor = ToolExecutor(page, logger, memory=memory, synonym_resolver=synonym_resolver, ats_type=state.detected_ats)
+                    if rules_handler is not None:
+                        try:
+                            rules_handler.page = page
+                        except Exception:
+                            pass
+                    executor = ToolExecutor(
+                        page, logger, memory=memory,
+                        synonym_resolver=synonym_resolver,
+                        ats_type=state.detected_ats,
+                        ats_handler=rules_handler,
+                    )
                     extractor = AccessibilityTreeExtractor(page)
                     self._dismiss_cookie_consent(page, logger)
                 else:
                     page = adopted2
 
             # ── Pre-submission checkpoint ─────────────────────────────────
-            required_missing = []
+            # Re-extract the page so we judge from the CURRENT browser state
+            # (the user may have just finished fields manually during a
+            # handoff — the old ax_tree would be stale).
+            try:
+                ax_tree = extractor.extract()
+            except Exception:
+                pass
+
+            # ── Aggregate all "form not ready" signals ────────────────────
+            # Three independent scans so we don't silently ship an
+            # incomplete form:
+            #   1. AXTree-based required/empty scan.
+            #   2. Live-DOM custom-dropdown "Select…" placeholder scan
+            #      (catches React comboboxes that AXTree misses).
+            #   3. Visible client-side validation error messages.
+            required_missing: list[str] = []
             for field in ax_tree.form_fields:
                 if field.get("required") or "*" in field.get("name", ""):
-                    if not field.get("value") or not str(field.get("value")).strip():
-                        required_missing.append(field.get("name", "unknown"))
-            if required_missing:
-                agent.show_warning(f"Mandatory fields still empty: {required_missing}")
+                    val = field.get("value")
+                    role = (field.get("role") or "").lower()
+                    checked = field.get("checked")
+                    if role in ("checkbox", "radio", "switch"):
+                        if not (
+                            checked is True
+                            or (
+                                isinstance(checked, str)
+                                and checked.lower() in ("true", "on", "yes", "1")
+                            )
+                        ):
+                            required_missing.append(field.get("name", "unknown"))
+                    else:
+                        if not val or not str(val).strip():
+                            required_missing.append(field.get("name", "unknown"))
 
-            red_marks = page.locator(".error, .invalid, [aria-invalid='true'], .red-text").count()
-            if red_marks > 0:
-                agent.show_warning(f"{red_marks} validation errors on page.")
-                if not self.config.headless:
-                    page.wait_for_timeout(2000)
+            try:
+                empty_dropdowns = _unselected_required_dropdowns(page)
+            except Exception:
+                empty_dropdowns = []
+            try:
+                visible_errors = _live_validation_errors(page)
+            except Exception:
+                visible_errors = []
+
+            blockers: list[str] = []
+            blockers.extend(required_missing)
+            for lbl in empty_dropdowns:
+                if lbl not in blockers:
+                    blockers.append(lbl)
+
+            # Up to TWO handoff rounds — ask once, re-verify, ask again if
+            # the human hasn't resolved everything.  Never auto-submit
+            # a form that still has validation errors.
+            for round_idx in range(2):
+                if not blockers and not visible_errors:
+                    break
+
+                preview_parts: list[str] = []
+                if blockers:
+                    pv = ", ".join(blockers[:6])
+                    if len(blockers) > 6:
+                        pv += " …"
+                    preview_parts.append(f"{len(blockers)} empty required: {pv}")
+                if visible_errors:
+                    ev = "; ".join(visible_errors[:3])
+                    if len(visible_errors) > 3:
+                        ev += " …"
+                    preview_parts.append(
+                        f"{len(visible_errors)} validation error(s): {ev}"
+                    )
+                preview = " | ".join(preview_parts)
+
+                agent.show_warning(
+                    f"Cannot submit yet — {preview}"
+                )
+                handoff = agent.handoff_to_human(
+                    reason=(
+                        "The form isn't ready to submit. "
+                        f"{preview}. "
+                        "Please finish the remaining fields — "
+                        "especially any dropdowns showing 'Select…' — "
+                        "directly in the browser."
+                    ),
+                    hint=(
+                        "Look for red 'This field is required.' messages "
+                        "and any unfilled dropdowns, then press ENTER."
+                    ),
+                )
+                if handoff.cancelled:
+                    logger.log_phase_end(ExecutionPhase.LLM, False)
+                    return False
+                page = handoff.page
+                agent.page = page
+
+                # Re-extract everything from the latest browser state.
+                try:
+                    ax_tree = extractor.extract()
+                except Exception:
+                    pass
+                required_missing = []
+                for field in ax_tree.form_fields:
+                    if field.get("required") or "*" in field.get("name", ""):
+                        val = field.get("value")
+                        role = (field.get("role") or "").lower()
+                        checked = field.get("checked")
+                        if role in ("checkbox", "radio", "switch"):
+                            if not (
+                                checked is True
+                                or (
+                                    isinstance(checked, str)
+                                    and checked.lower() in ("true", "on", "yes", "1")
+                                )
+                            ):
+                                required_missing.append(
+                                    field.get("name", "unknown")
+                                )
+                        else:
+                            if not val or not str(val).strip():
+                                required_missing.append(
+                                    field.get("name", "unknown")
+                                )
+                try:
+                    empty_dropdowns = _unselected_required_dropdowns(page)
+                except Exception:
+                    empty_dropdowns = []
+                try:
+                    visible_errors = _live_validation_errors(page)
+                except Exception:
+                    visible_errors = []
+                blockers = list(required_missing)
+                for lbl in empty_dropdowns:
+                    if lbl not in blockers:
+                        blockers.append(lbl)
+
+            # If after two rounds the form still isn't ready, refuse to
+            # submit rather than risk shipping a half-filled application.
+            if blockers or visible_errors:
+                summary_parts: list[str] = []
+                if blockers:
+                    summary_parts.append(
+                        f"{len(blockers)} empty required field(s)"
+                    )
+                if visible_errors:
+                    summary_parts.append(
+                        f"{len(visible_errors)} validation error(s)"
+                    )
+                summary = " and ".join(summary_parts)
+                agent.show_error(
+                    f"Not submitting — the form still has {summary}. "
+                    "Finish it in the browser and re-run JobCLI to continue."
+                )
+                logger.log_phase_end(ExecutionPhase.LLM, False)
+                return False
 
             # ── Confirm submission (integrated checkpoint) ────────────────
             if not agent.confirm_submission():
@@ -1198,21 +2387,221 @@ class ApplicationEngine:
                 logger.log_phase_end(ExecutionPhase.LLM, False)
                 return False
 
+            # ── Click the Submit button ───────────────────────────────────
+            # The agent fill loop never emits a "SUBMIT" action itself —
+            # the Next/Submit/Apply click detection in ``_split_off_advance_clicks``
+            # holds those back while required fields are still empty.
+            # So once the human has confirmed, we explicitly click the
+            # submit button here.  Use the ATS-specific handler first
+            # (it knows Greenhouse's ``#submit_app_button``, Ashby's
+            # ``button[type=submit]``, Workday's sequence, etc.), then
+            # fall back to a generic Submit locator if the handler
+            # couldn't find one.
+            submit_clicked = False
+            # Snapshot pre-submit state so we can compare afterwards.
+            # URL change and the submit-button disappearing are the two
+            # most reliable signals that the form was accepted, even
+            # when the confirmation copy doesn't match our phrase list.
+            try:
+                _pre_submit_url = page.url or ""
+            except Exception:
+                _pre_submit_url = ""
+            try:
+                _pre_submit_had_submit_btn = bool(_submit_button_visible(page))
+            except Exception:
+                _pre_submit_had_submit_btn = True
+            try:
+                if rules_handler is not None:
+                    agent.show_status(
+                        "Clicking submit…", phase=ExecutionPhase.LLM
+                    )
+                    submit_clicked = bool(rules_handler.submit_application())
+            except Exception as e:
+                logger.warning(
+                    f"ATS-specific submit_application() raised {e!r}; "
+                    "falling back to generic submit.",
+                    phase=ExecutionPhase.LLM,
+                )
+
+            if not submit_clicked:
+                # Generic fallback — matches the most common submit-button
+                # shapes across every ATS we've seen.
+                submit_candidates = [
+                    "button[type='submit']:not([disabled])",
+                    "input[type='submit']:not([disabled])",
+                    "button:has-text('Submit Application')",
+                    "button:has-text('Submit application')",
+                    "button:has-text('Submit'):not([disabled])",
+                    "button:has-text('Apply Now'):not([disabled])",
+                    "button:has-text('Send Application')",
+                    "[role='button']:has-text('Submit')",
+                ]
+                for sel in submit_candidates:
+                    try:
+                        btn = page.locator(sel).last
+                        if btn.count() == 0:
+                            continue
+                        try:
+                            btn.scroll_into_view_if_needed(timeout=1500)
+                        except Exception:
+                            pass
+                        if not btn.is_visible(timeout=1200):
+                            continue
+                        btn.click(timeout=5000)
+                        submit_clicked = True
+                        logger.info(
+                            f"Clicked submit via generic selector '{sel}'.",
+                            phase=ExecutionPhase.LLM,
+                        )
+                        break
+                    except Exception as e:
+                        logger.debug(
+                            f"Submit selector '{sel}' failed: {e}",
+                            phase=ExecutionPhase.LLM,
+                        )
+                        continue
+
+            if not submit_clicked:
+                agent.show_error(
+                    "Could not find the Submit button. Please click it "
+                    "manually in the browser."
+                )
+                handoff = agent.handoff_to_human(
+                    reason=(
+                        "Automation couldn't locate the Submit button. "
+                        "Please click Submit yourself."
+                    ),
+                    hint=(
+                        "Click the Submit/Apply button in the browser. "
+                        "When you see the confirmation page, press ENTER."
+                    ),
+                )
+                if handoff.cancelled:
+                    logger.log_phase_end(ExecutionPhase.LLM, False)
+                    return False
+                page = handoff.page
+                agent.page = page
+
+            # Wait for the submission to settle (navigation / SPA update).
+            try:
+                page.wait_for_load_state("networkidle", timeout=8000)
+            except Exception:
+                try:
+                    page.wait_for_timeout(2500)
+                except Exception:
+                    pass
+
             # ── Final success evaluation ──────────────────────────────────
-            total = len(results)
-            successes = sum(1 for v in results.values() if v)
+            # Ashby / Greenhouse / Lever rarely show the same literal
+            # text on their confirmation pages, and modern ATSes are
+            # SPAs that often keep the URL path identical — so a fixed
+            # phrase list is always incomplete.  Use *four* independent
+            # signals and accept the submission as soon as one strong
+            # success signal fires **and** no validation error is
+            # visible.
             _confirmation_texts = [
-                "Thank you", "application submitted", "application is received",
-                "successfully submitted", "application received",
+                # Generic
+                "thank you", "thanks!", "thanks for applying",
+                "application submitted", "successfully submitted",
+                "application received", "application is received",
+                "we have received your application",
+                "we've received your application",
+                "application sent", "application complete",
+                "your application has been submitted",
+                "you've applied", "you have applied",
+                # Ashby phrasing
+                "we'll be in touch", "we will be in touch",
+                # Greenhouse / Lever phrasing
+                "thank you for your interest", "thanks for your interest",
+                "application confirmed",
             ]
-            _text_confirmed = any(page.locator(f"text={t}").count() > 0 for t in _confirmation_texts)
-            is_confirmation = any(term in page.url.lower() for term in ["success", "confirmation", "thank-you"]) or _text_confirmed
-            success = is_confirmation or (total > 0 and (successes / total) >= 0.5)
+            try:
+                _page_text = (page.evaluate(
+                    "() => (document.body ? document.body.innerText : '').toLowerCase()"
+                ) or "")[:20_000]
+            except Exception:
+                _page_text = ""
+            _text_confirmed = any(t in _page_text for t in _confirmation_texts)
+
+            _url_now = (page.url or "").lower()
+            _url_confirmed = any(
+                term in _url_now
+                for term in [
+                    "success", "confirmation", "confirm",
+                    "thank-you", "thank_you", "thanks",
+                    "submitted", "application-confirmation",
+                    "complete", "completed", "applied",
+                ]
+            )
+            _url_changed = bool(
+                _pre_submit_url and _url_now and _url_now != _pre_submit_url.lower()
+            )
+
+            # "Form gone" = the submit button we just pressed is no
+            # longer on the page.  Combined with "no validation errors
+            # visible", this is essentially what a human sees when the
+            # ATS silently whisks the form away.
+            try:
+                _submit_btn_still_there = bool(_submit_button_visible(page))
+            except Exception:
+                _submit_btn_still_there = True
+            _form_disappeared = (
+                _pre_submit_had_submit_btn and not _submit_btn_still_there
+            )
+
+            try:
+                _has_errors = bool(_live_validation_errors(page))
+            except Exception:
+                _has_errors = False
+
+            # Strong positive signal: explicit confirmation text or URL
+            # clearly says "confirmation/thanks/submitted".
+            _strong_confirm = _text_confirmed or _url_confirmed
+            # Medium positive signal: URL changed or the form vanished,
+            # combined with absence of any visible validation error.
+            _soft_confirm = (_url_changed or _form_disappeared) and not _has_errors
+
+            is_confirmation = _strong_confirm or _soft_confirm
+            success = bool(submit_clicked and is_confirmation)
 
             if success:
                 agent.show_success("Application submitted!")
                 page.wait_for_timeout(1000)
                 logger.capture_screenshot(page, "llm_success", ExecutionPhase.LLM)
+                if not _strong_confirm:
+                    # Be transparent that we inferred success from
+                    # behavioural signals rather than explicit text.
+                    logger.info(
+                        "Submission inferred from URL/form change "
+                        f"(url_changed={_url_changed}, form_gone={_form_disappeared}, "
+                        f"errors={_has_errors}).",
+                        phase=ExecutionPhase.LLM,
+                    )
+            elif submit_clicked and not _has_errors:
+                # Submit was clicked, nothing changed visibly, but no
+                # error either.  Treat as probable-success so we don't
+                # drop the user into a "form incomplete" handoff for a
+                # form that was in fact already submitted.  The user
+                # can still verify in the visible browser window.
+                agent.show_success(
+                    "Submit clicked — confirmation not auto-detected. "
+                    "Verify in the browser; the application likely went through."
+                )
+                logger.capture_screenshot(
+                    page, "llm_submit_unverified", ExecutionPhase.LLM
+                )
+                success = True
+            elif submit_clicked and _has_errors:
+                # Real failure: the form is still showing validation
+                # errors after the click.  Fall through to the handoff
+                # so the human can fix and retry.
+                agent.show_warning(
+                    "Submit was clicked but the form still shows validation errors. "
+                    "Please fix them in the browser."
+                )
+                logger.capture_screenshot(
+                    page, "llm_submit_failed", ExecutionPhase.LLM
+                )
             else:
                 agent.show_error("Submission could not be verified.")
 

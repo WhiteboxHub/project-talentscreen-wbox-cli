@@ -111,6 +111,11 @@ class JobLogger:
             msg = f"{prefix} [bold]AI Action:[/bold] {metadata['action']}"
             if "selector" in metadata: msg += f" on {metadata['selector']}"
             if "value" in metadata: msg += f" -> [green]{metadata['value']}[/green]"
+            # Keep the actual error/info message — otherwise failures
+            # (e.g. raised exceptions) show up as useless "AI Action: click
+            # on Yes" lines with no root cause attached.
+            if message and level.lower() in ("error", "warning", "critical"):
+                msg += f"  [dim]— {message}[/dim]"
             self.console.print(msg)
         elif "success" in metadata:
              status = "[green]✓[/green]" if metadata["success"] else "[red]✗[/red]"

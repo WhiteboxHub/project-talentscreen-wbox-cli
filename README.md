@@ -251,28 +251,94 @@ RESUME_JSON_PATH=C:/path/to/resume.json
 
 ```bash
 pip install -e ".[dev]"
-
-# Run all tests (67 tests — Phase 1 memory system fully covered)
-pytest -v
-
-# Run only learning/memory tests
-pytest tests/test_repositories.py tests/test_extractor.py tests/test_memory_confidence.py -v
-
-# Live DB smoke test
-python -X utf8 smoke_test.py
+pytest
 ```
 
----
+## Testing
 
-## Roadmap
+JobCLI ships with three test strata. Run them before any change that
+touches browser automation or ATS handlers.
 
-| Phase | Status | Description |
+### 1. Full test suite
+
+```bash
+pytest
+```
+
+Runs unit tests for CLI guardrails, LLM client wrappers, repositories,
+session management, the state machine, URL normalisation, the async
+engine, and the stealth fingerprint (see below).
+
+### 2. Stealth / anti-bot verification
+
+The single biggest reason an ATS flags an application as spam is a
+bot-like browser fingerprint. `tests/test_stealth.py` locks down every
+patch we apply via `jobcli/core/stealth.py` so regressions are caught
+before they reach production.
+
+```bash
+# Just the stealth tests
+pytest tests/test_stealth.py -v
+```
+
+Two strata of checks:
+
+| Stratum | What it verifies | Runs when |
 |---|---|---|
-| Phase 1 | ✅ Complete | Local learning engine — confidence, merge protection, PII isolation |
-| Phase 2 | 🔜 Planned | Central sync server — push high-confidence patterns across users |
-| Phase 3 | 🔜 Planned | Community knowledge base — shared locators and field answers |
+| **Static** (13 tests) | Every fingerprint patch is present in the stealth JS + launch config (webdriver hidden, plugins populated, WebGL vendor spoofed, `Function.prototype.toString` native, iframe contentWindow patched, etc.) | Always |
+| **Runtime** (9 tests) | Launches headless Chromium with the production config, injects the stealth script, and asserts the patches actually took effect in a real document — `navigator.webdriver === undefined`, plugins length ≥ 3, WebGL vendor ≠ SwiftShader, spoofed getters report `[native code]`, permissions.query returns `prompt` not `denied`, etc. | Skipped automatically when Playwright browsers aren't installed |
 
----
+To run the runtime tests you need the Chromium binary:
+
+```bash
+playwright install chromium
+pytest tests/test_stealth.py -v
+```
+
+When you add a new patch to `jobcli/core/stealth.py`, add a matching
+assertion in `tests/test_stealth.py` — both a static check (the source
+contains the patch) and a runtime check (the page reflects it).
+
+### 3. Live fingerprint diagnostic
+
+Before a real application submission on a flaky ATS, run the
+diagnostic script to confirm your current fingerprint still looks
+human. It spins up Chromium with the exact flags / init-script the
+production engine uses and prints a pass/fail table for each signal,
+plus excerpts from public bot-detection pages.
+
+```bash
+# Headed (watch what the ATS would see)
+python scripts/stealth_check.py
+
+# Headless — same binary the engine uses at apply time
+python scripts/stealth_check.py --headless
+
+# Throw in a specific ATS URL or your own probe
+python scripts/stealth_check.py --url 'https://bot.sannysoft.com/'
+python scripts/stealth_check.py --skip-remote   # offline mode
+```
+
+Exit code is `0` when every local check passes, `1` otherwise — wire
+it into CI (or a git pre-push hook) to prevent broken stealth patches
+from shipping. A healthy output looks like:
+
+```
+[PASS] navigator.webdriver is undefined
+[PASS] navigator.plugins is populated
+[PASS] navigator.languages looks US-English
+[PASS] window.chrome exists
+[PASS] window.chrome.runtime has OnInstalledReason
+[PASS] navigator.hardwareConcurrency is plausible
+[PASS] navigator.deviceMemory is plausible
+[PASS] WebGL vendor is not SwiftShader
+[PASS] Function.prototype.toString on spoofed getter looks native
+[PASS] navigator.permissions.query('notifications') returns 'default'
+```
+
+If any line reads `[FAIL]`, **do not run a live application** until
+the patch is fixed — that exact signal is what Ashby / Greenhouse /
+Workday spam classifiers will latch onto.
 
 ## License
 

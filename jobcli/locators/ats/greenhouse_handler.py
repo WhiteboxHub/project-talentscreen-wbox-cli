@@ -115,26 +115,102 @@ class GreenhouseHandler(GenericATSHandler):
         return super().find_apply_button()
 
     # ------------------------------------------------------------------
+    # Selector catalog — legacy + modern `job-boards.greenhouse.io`
+    # ------------------------------------------------------------------
+    # Greenhouse hosts two distinct application products:
+    #
+    #   LEGACY  (``boards.greenhouse.io/<co>/jobs/<id>``)
+    #       Rails-rendered form; inputs use
+    #       ``name="job_application[first_name]"`` etc.
+    #
+    #   MODERN  (``job-boards.greenhouse.io/<co>/jobs/<id>``)
+    #       React-rendered form; inputs use plain ``id="first_name"`` and
+    #       ``autocomplete="given-name"`` attributes, no
+    #       ``job_application[...]`` wrapping.  Resume upload is a hidden
+    #       file input under a custom "Attach resume" button.
+    #
+    # We try each candidate in order and accept the first one that matches.
+    _FIELD_SELECTORS: dict[str, list[str]] = {
+        "first_name": [
+            "input[name='job_application[first_name]']",
+            "input#first_name",
+            "input[autocomplete='given-name']",
+            "input[name='first_name']",
+        ],
+        "last_name": [
+            "input[name='job_application[last_name]']",
+            "input#last_name",
+            "input[autocomplete='family-name']",
+            "input[name='last_name']",
+        ],
+        "email": [
+            "input[name='job_application[email]']",
+            "input#email",
+            "input[autocomplete='email']",
+            "input[type='email']",
+            "input[name='email']",
+        ],
+        "phone": [
+            "input[name='job_application[phone]']",
+            "input#phone",
+            "input[autocomplete='tel']",
+            "input[type='tel']",
+            "input[name='phone']",
+        ],
+        "linkedin": [
+            "input[name='job_application[linkedin_profile_url]']",
+            "input#linkedin",
+            "input[name='linkedin']",
+            "input[name*='linkedin' i]",
+        ],
+        "resume": [
+            "input[name='job_application[resume]']",
+            "input[type='file'][name*='resume' i]",
+            "input[type='file'][data-ui*='resume' i]",
+            "input[type='file'][accept*='pdf']",
+            "input[type='file']",
+        ],
+        "cover_letter": [
+            "input[name='job_application[cover_letter]']",
+            "input[type='file'][name*='cover' i]",
+        ],
+    }
+
+    def _first_visible(self, selectors: list[str], timeout_ms: int = 500):
+        """Return the first selector whose element is present & visible.
+
+        Uses ``query_selector`` (no implicit wait) + a cheap visibility
+        probe so a missing selector fails in a few ms rather than the 3s
+        default ``page.fill`` timeout.  Returns ``None`` if nothing
+        matches — caller is expected to log ONCE after trying all
+        candidates.
+        """
+        for selector in selectors:
+            try:
+                el = self.page.query_selector(selector)
+                if not el:
+                    continue
+                try:
+                    if el.is_visible():
+                        return selector
+                except Exception:
+                    # Hidden file inputs are intentionally not "visible"
+                    # but are still fillable via set_input_files.
+                    if "type='file'" in selector or "type=\"file\"" in selector:
+                        return selector
+            except Exception:
+                continue
+        return None
+
+    # ------------------------------------------------------------------
     # Field detection
     # ------------------------------------------------------------------
     def detect_form_fields(self) -> list[str]:
-        """Detect Greenhouse form fields."""
-        field_selectors = {
-            "first_name":  "input[name='job_application[first_name]']",
-            "last_name":   "input[name='job_application[last_name]']",
-            "email":       "input[name='job_application[email]']",
-            "phone":       "input[name='job_application[phone]']",
-            "resume":      "input[name='job_application[resume]']",
-            "cover_letter":"input[name='job_application[cover_letter]']",
-            "linkedin":    "input[name='job_application[linkedin_profile_url]']",
-        }
-        detected = []
-        for field_name, selector in field_selectors.items():
-            try:
-                if self.page.query_selector(selector):
-                    detected.append(field_name)
-            except Exception:
-                continue
+        """Detect Greenhouse form fields (legacy + modern)."""
+        detected: list[str] = []
+        for field_name, selectors in self._FIELD_SELECTORS.items():
+            if self._first_visible(selectors):
+                detected.append(field_name)
         return detected
 
     # ------------------------------------------------------------------
@@ -148,19 +224,26 @@ class GreenhouseHandler(GenericATSHandler):
         results: dict[str, bool] = {}
         personal = self.resume.personal
 
-        platform_fields: list[tuple[str, str, Optional[str]]] = [
-            ("first_name",  "input[name='job_application[first_name]']", personal.first_name),
-            ("last_name",   "input[name='job_application[last_name]']",  personal.last_name),
-            ("email",       "input[name='job_application[email]']",       personal.email),
-            ("phone",       "input[name='job_application[phone]']",       personal.phone),
-            ("linkedin",    "input[name='job_application[linkedin_profile_url]']", personal.linkedin),
+        platform_fields: list[tuple[str, Optional[str]]] = [
+            ("first_name", personal.first_name),
+            ("last_name",  personal.last_name),
+            ("email",      personal.email),
+            ("phone",      personal.phone),
+            ("linkedin",   personal.linkedin),
         ]
 
-        for field_name, selector, value in platform_fields:
+        for field_name, value in platform_fields:
             if not value:
                 continue
+            selector = self._first_visible(self._FIELD_SELECTORS[field_name])
+            if not selector:
+                # No selector shape matched — this is normal on forms
+                # that don't have the field at all.  Skip silently; the
+                # LLM / generic fallback will handle anything we missed.
+                results[field_name] = False
+                continue
             try:
-                self.page.fill(selector, value, timeout=3000)
+                self.page.fill(selector, value, timeout=2000)
                 results[field_name] = True
                 if self.logger:
                     self.logger.info(
@@ -177,21 +260,30 @@ class GreenhouseHandler(GenericATSHandler):
                     )
                 results[field_name] = False
 
-        # Resume upload
+        # Resume upload — try each candidate file-input shape.
         if resume_path:
-            try:
-                self.page.set_input_files(
-                    "input[name='job_application[resume]']", resume_path
+            uploaded = False
+            for selector in self._FIELD_SELECTORS["resume"]:
+                try:
+                    if not self.page.query_selector(selector):
+                        continue
+                    self.page.set_input_files(selector, resume_path)
+                    uploaded = True
+                    try:
+                        self.page.wait_for_load_state(
+                            "domcontentloaded", timeout=5000
+                        )
+                    except Exception:
+                        pass
+                    break
+                except Exception:
+                    continue
+            results["resume"] = uploaded
+            if not uploaded and self.logger:
+                self.logger.warning(
+                    "Greenhouse resume upload: no matching file input found.",
+                    phase=ExecutionPhase.RULES,
                 )
-                results["resume"] = True
-                self.page.wait_for_load_state("domcontentloaded", timeout=5000)
-            except Exception as e:
-                if self.logger:
-                    self.logger.warning(
-                        f"Greenhouse resume upload failed: {e}",
-                        phase=ExecutionPhase.RULES,
-                    )
-                results["resume"] = False
 
         # Custom fields (work auth, sponsorship)
         self._fill_custom_fields(results)

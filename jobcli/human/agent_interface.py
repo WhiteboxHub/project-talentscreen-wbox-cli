@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Optional
 from playwright.sync_api import Page
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Confirm, IntPrompt, Prompt
+from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from jobcli.core.logger import JobLogger
@@ -168,8 +168,18 @@ class AgentInterface:
         fields: Optional[list[str]] = None,
     ) -> None:
         """Inject a fixed top banner into the browser page so the human sees
-        a clear visual cue WHILE looking at the form.  The banner persists
-        until ``clear_browser_overlay()`` is called or the page navigates."""
+        a clear visual cue WHILE looking at the form.
+
+        The banner is rendered inside a **Shadow DOM** so the host page's
+        CSS can NEVER reach it (no inherited ``letter-spacing``, no
+        ``text-transform: uppercase``, no custom font replacing
+        characters with ligatures, etc.).  Without that isolation, some
+        ATS pages' global styles were making the banner text render
+        with overlapping / merged letters.
+
+        The banner persists until ``clear_browser_overlay()`` is called
+        or the page navigates.
+        """
         try:
             color = {
                 "info":    {"bg": "#1d4ed8", "border": "#1e3a8a"},   # blue
@@ -182,59 +192,145 @@ class AgentInterface:
                 items = "".join(f"<li>{self._escape_html(f)}</li>" for f in fields[:8])
                 if len(fields) > 8:
                     items += f"<li>… and {len(fields) - 8} more</li>"
-                field_list_html = (
-                    f"<ul style='margin:6px 0 0 18px;padding:0;font-size:13px;line-height:1.4'>{items}</ul>"
-                )
+                field_list_html = f"<ul class='fields'>{items}</ul>"
 
             self.page.evaluate(
-                """({id, title, message, color, fieldsHtml}) => {
+                r"""({id, title, message, color, fieldsHtml}) => {
                     const old = document.getElementById(id);
                     if (old) old.remove();
-                    const bar = document.createElement('div');
-                    bar.id = id;
-                    bar.setAttribute('data-jobcli', 'handoff');
-                    bar.style.cssText = `
-                        position: fixed !important;
-                        top: 0 !important;
-                        left: 0 !important;
-                        right: 0 !important;
-                        z-index: 2147483647 !important;
-                        background: ${color.bg} !important;
-                        color: #ffffff !important;
-                        padding: 14px 20px !important;
-                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-                        font-size: 15px !important;
-                        line-height: 1.4 !important;
-                        box-shadow: 0 4px 14px rgba(0,0,0,0.35) !important;
-                        border-bottom: 4px solid ${color.border} !important;
-                        animation: jobcli-pulse 1.4s ease-in-out infinite !important;
+
+                    // Host element is invisible; all visual structure
+                    // lives inside its Shadow DOM, isolated from the
+                    // page's CSS.
+                    const host = document.createElement('div');
+                    host.id = id;
+                    host.setAttribute('data-jobcli', 'handoff');
+                    host.style.cssText = [
+                        'all: initial',
+                        'position: fixed',
+                        'top: 0',
+                        'left: 0',
+                        'right: 0',
+                        'z-index: 2147483647',
+                        'pointer-events: auto',
+                    ].map(s => s + ' !important').join(';');
+
+                    const shadow = host.attachShadow({mode: 'closed'});
+
+                    // CSS reset + banner styles (scoped to this shadow root)
+                    const css = `
+                        :host, * { all: revert; }
+                        :host {
+                            display: block;
+                            font: 15px/1.5 -apple-system, BlinkMacSystemFont,
+                                  'Segoe UI', Roboto, 'Helvetica Neue',
+                                  Arial, sans-serif;
+                            letter-spacing: normal;
+                            word-spacing: normal;
+                            text-transform: none;
+                            font-variant: normal;
+                            font-feature-settings: normal;
+                            font-style: normal;
+                            font-weight: normal;
+                            text-decoration: none;
+                            text-shadow: none;
+                            -webkit-font-smoothing: antialiased;
+                            -moz-osx-font-smoothing: grayscale;
+                            text-rendering: optimizeLegibility;
+                            color: #ffffff;
+                        }
+                        .bar {
+                            box-sizing: border-box;
+                            width: 100%;
+                            padding: 14px 20px;
+                            background: ${color.bg};
+                            color: #ffffff;
+                            border-bottom: 4px solid ${color.border};
+                            box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+                            animation: jobcli-pulse 1.4s ease-in-out infinite;
+                        }
+                        .inner {
+                            max-width: 1200px;
+                            margin: 0 auto;
+                            display: flex;
+                            align-items: flex-start;
+                            gap: 14px;
+                        }
+                        .icon {
+                            font-size: 26px;
+                            line-height: 1.1;
+                            flex: 0 0 auto;
+                        }
+                        .body {
+                            flex: 1 1 auto;
+                            min-width: 0;
+                        }
+                        .title {
+                            font-weight: 700;
+                            font-size: 16px;
+                            margin: 0 0 4px 0;
+                            letter-spacing: normal;
+                            line-height: 1.35;
+                            word-break: normal;
+                            overflow-wrap: anywhere;
+                        }
+                        .msg {
+                            font-size: 14px;
+                            line-height: 1.5;
+                            margin: 0;
+                            letter-spacing: normal;
+                            word-break: normal;
+                            overflow-wrap: anywhere;
+                            opacity: 0.97;
+                        }
+                        .fields {
+                            margin: 8px 0 0 20px;
+                            padding: 0;
+                            font-size: 13px;
+                            line-height: 1.5;
+                        }
+                        .fields li {
+                            margin: 2px 0;
+                        }
+                        .hint {
+                            margin-top: 8px;
+                            font-size: 12px;
+                            line-height: 1.5;
+                            opacity: 0.85;
+                        }
+                        @keyframes jobcli-pulse {
+                            0%, 100% { box-shadow: 0 4px 14px rgba(0,0,0,0.35); }
+                            50%      { box-shadow: 0 4px 22px ${color.bg}; }
+                        }
                     `;
-                    bar.innerHTML = `
-                        <div style="max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:14px">
-                            <div style="font-size:28px;line-height:1">⏸︎</div>
-                            <div style="flex:1">
-                                <div style="font-weight:700;font-size:16px;margin-bottom:2px">${title}</div>
-                                <div style="opacity:0.95">${message}</div>
-                                ${fieldsHtml}
-                                <div style="margin-top:6px;font-size:12px;opacity:0.85">
-                                    JobCLI is waiting in the terminal — finish here, then return to the terminal and press ENTER.
-                                </div>
+
+                    const style = document.createElement('style');
+                    style.textContent = css;
+
+                    const wrap = document.createElement('div');
+                    wrap.className = 'bar';
+                    wrap.innerHTML = `
+                        <div class="inner">
+                            <div class="icon">⏸</div>
+                            <div class="body">
+                                <div class="title"></div>
+                                <div class="msg"></div>
+                                <div class="fields-slot"></div>
+                                <div class="hint">JobCLI is waiting in the terminal — finish here, then return to the terminal and press ENTER.</div>
                             </div>
                         </div>
                     `;
-                    if (!document.getElementById(id + '-style')) {
-                        const style = document.createElement('style');
-                        style.id = id + '-style';
-                        style.textContent = `
-                            @keyframes jobcli-pulse {
-                                0%, 100% { box-shadow: 0 4px 14px rgba(0,0,0,0.35); }
-                                50%      { box-shadow: 0 4px 22px ${color.bg}; }
-                            }
-                            body { padding-top: 0 !important; }
-                        `;
-                        document.head.appendChild(style);
+                    // Assign textContent so any HTML-ish characters in
+                    // title/message render literally (no injection risk).
+                    wrap.querySelector('.title').textContent = title;
+                    wrap.querySelector('.msg').textContent = message;
+                    if (fieldsHtml) {
+                        wrap.querySelector('.fields-slot').innerHTML = fieldsHtml;
                     }
-                    document.documentElement.appendChild(bar);
+
+                    shadow.appendChild(style);
+                    shadow.appendChild(wrap);
+                    document.documentElement.appendChild(host);
                 }""",
                 {
                     "id": self._OVERLAY_ID,
@@ -646,27 +742,23 @@ class AgentInterface:
         task: str,
         ats_type: ATSType = ATSType.UNKNOWN,
     ) -> tuple[bool, Optional[str], Optional[SelectorType]]:
-        """When the agent is stuck finding a button/element, ask the human.
+        """Deprecated — always returns ``(False, None, None)``.
 
-        AUTO mode returns (False, None, None).
+        The old implementation rendered a terminal-only "Select from
+        detected elements / Provide manual selector / Skip" picker.  It
+        was confusing (users had to translate the agent's DOM list into
+        CSS selectors themselves) and it blocked the far cleaner path of
+        handing the actual browser back to the human.  Callers are
+        expected to fall through to ``handoff_to_human`` on False, which
+        they all do.
         """
-        if self.mode == InteractionMode.AUTO:
-            return False, None, None
-
         if self.logger:
-            self.logger.info("Agent requesting human assistance", phase=ExecutionPhase.HUMAN, task=task)
-
-        self.console.print(f"\n  [bold yellow]Agent needs help:[/bold yellow] [cyan]{task}[/cyan]")
-        self.console.print(f"  URL: [blue]{self.page.url}[/blue]")
-
-        self._show_detected_elements()
-        choice = self._get_user_choice()
-        if choice == "skip":
-            return False, None, None
-        elif choice == "manual":
-            return self._get_manual_selector(task, ats_type)
-        elif choice == "select":
-            return self._select_from_elements(task, ats_type)
+            self.logger.debug(
+                "request_help_finding_element is deprecated — "
+                "routing directly to handoff_to_human.",
+                phase=ExecutionPhase.HUMAN,
+                task=task,
+            )
         return False, None, None
 
     def ask_continue(self) -> bool:
@@ -680,15 +772,17 @@ class AgentInterface:
         failed_actions: list[BrowserAction],
         *,
         dropdown_options_by_selector: Optional[dict[str, list[str]]] = None,
-    ) -> dict[str, str]:
+    ) -> list[BrowserAction]:
         """For each failed field: try DB first, then prompt human.
 
-        Returns a dict ``{field_label: answer}`` of every value gathered (from
-        either the DB or the human).  Every human-supplied answer is saved to
-        the DB before being returned.
+        Returns a list of new :class:`BrowserAction` objects with the
+        collected values populated, ready to be re-executed against the
+        browser.  Every human-supplied answer is also saved to the DB (via
+        ``request_field_input`` → ``AgentMemory.save_field_answer``) so the
+        next job on this ATS reuses it automatically.
         """
         if not failed_actions:
-            return {}
+            return []
 
         actionable = [
             a for a in failed_actions
@@ -696,7 +790,7 @@ class AgentInterface:
             and not (a.value and a.value.strip())
         ]
         if not actionable:
-            return {}
+            return []
 
         # Header banner — clear "agent stopped" signal
         if self.mode != InteractionMode.AUTO:
@@ -711,14 +805,25 @@ class AgentInterface:
                 )
             )
 
-        answers: dict[str, str] = {}
+        filled: list[BrowserAction] = []
         for act in actionable:
             label = act.field_label or act.selector
             options = (dropdown_options_by_selector or {}).get(act.selector)
             answer = self.request_field_input(label, options=options)
-            if answer:
-                answers[label] = answer
-        return answers
+            if not answer:
+                continue
+            # Build a fresh BrowserAction that preserves the original
+            # selector/selector_type/field_label but now carries the value
+            # we just collected.  If the field has a known dropdown option
+            # list, coerce FILL → SELECT so the executor uses the
+            # dropdown-friendly strategy.
+            action_type = act.action
+            if options and action_type in (ActionType.FILL, ActionType.TYPE):
+                action_type = ActionType.SELECT
+            filled.append(
+                act.model_copy(update={"value": answer, "action": action_type})
+            )
+        return filled
 
     def final_browser_pause(self) -> None:
         """Keep the browser open for final inspection (non-headless only)."""
@@ -745,112 +850,6 @@ class AgentInterface:
                 sys.stdin.readline()
         except Exception:
             time.sleep(seconds)
-
-    def _show_detected_elements(self) -> None:
-        try:
-            buttons = self._get_buttons()
-            links = self._get_links()
-            if buttons:
-                table = Table(title="Detected Buttons")
-                table.add_column("#", style="cyan", width=4)
-                table.add_column("Text", style="green")
-                table.add_column("Visible", style="magenta", width=7)
-                for i, btn in enumerate(buttons[:10], 1):
-                    table.add_row(str(i), btn.get("text", "")[:50], "Y" if btn.get("visible") else "N")
-                self.console.print(table)
-            if links:
-                table = Table(title="Detected Links")
-                table.add_column("#", style="cyan", width=4)
-                table.add_column("Text", style="green")
-                table.add_column("Visible", style="magenta", width=7)
-                for i, link in enumerate(links[:10], 1):
-                    table.add_row(str(i), link.get("text", "")[:50], "Y" if link.get("visible") else "N")
-                self.console.print(table)
-        except Exception as e:
-            self.console.print(f"  [red]Error detecting elements: {e}[/red]")
-
-    def _get_buttons(self) -> list[dict]:
-        script = """() => {
-            const buttons = document.querySelectorAll('button, input[type="submit"], [role="button"]');
-            return Array.from(buttons).map(btn => ({
-                text: btn.textContent?.trim() || btn.value || '',
-                type: btn.type || btn.tagName.toLowerCase(),
-                visible: btn.offsetParent !== null,
-                selector: btn.id ? `#${btn.id}` : (btn.className ? `.${btn.className.split(' ')[0]}` : ''),
-            }));
-        }"""
-        try:
-            return self.page.evaluate(script)
-        except Exception:
-            return []
-
-    def _get_links(self) -> list[dict]:
-        script = """() => {
-            const links = document.querySelectorAll('a');
-            return Array.from(links).map(link => ({
-                text: link.textContent?.trim() || '',
-                visible: link.offsetParent !== null,
-                selector: link.id ? `#${link.id}` : (link.className ? `.${link.className.split(' ')[0]}` : ''),
-            }));
-        }"""
-        try:
-            return self.page.evaluate(script)
-        except Exception:
-            return []
-
-    def _get_user_choice(self) -> str:
-        self.console.print("\n  [bold]What would you like to do?[/bold]")
-        self.console.print("  1. Select from detected elements")
-        self.console.print("  2. Provide manual selector")
-        self.console.print("  3. Skip")
-        choice = IntPrompt.ask("  Choice", choices=["1", "2", "3"], default=1)
-        return {1: "select", 2: "manual", 3: "skip"}[choice]
-
-    def _select_from_elements(
-        self, task: str, ats_type: ATSType,
-    ) -> tuple[bool, Optional[str], Optional[SelectorType]]:
-        etype = Prompt.ask("  Element type", choices=["button", "link"], default="button")
-        elements = self._get_buttons() if etype == "button" else self._get_links()
-        if not elements:
-            self.console.print("  [red]No elements detected[/red]")
-            return False, None, None
-        idx = IntPrompt.ask("  Select element #", default=1)
-        if 1 <= idx <= len(elements):
-            selector = elements[idx - 1].get("selector", "")
-            if not selector:
-                return self._get_manual_selector(task, ats_type)
-            if Confirm.ask("  Save this locator for future use?", default=True):
-                self._save_learned_locator(task, ats_type, selector, SelectorType.CSS, "Human selected element")
-            return True, selector, SelectorType.CSS
-        return False, None, None
-
-    def _get_manual_selector(
-        self, task: str, ats_type: ATSType,
-    ) -> tuple[bool, Optional[str], Optional[SelectorType]]:
-        stype = Prompt.ask("  Selector type", choices=["css", "xpath", "text"], default="css")
-        selector = Prompt.ask("  Selector")
-        if not selector:
-            return False, None, None
-        selector_type = SelectorType(stype)
-        try:
-            if selector_type == SelectorType.CSS:
-                el = self.page.query_selector(selector)
-            elif selector_type == SelectorType.XPATH:
-                el = self.page.query_selector(f"xpath={selector}")
-            else:
-                el = self.page.get_by_text(selector).first
-            if el:
-                self.show_success("Selector matched an element")
-                if Confirm.ask("  Save for future use?", default=True):
-                    notes = Prompt.ask("  Notes (optional)", default="")
-                    self._save_learned_locator(task, ats_type, selector, selector_type, notes)
-                return True, selector, selector_type
-            self.show_error("Selector did not match any element")
-            if Confirm.ask("  Try again?", default=True):
-                return self._get_manual_selector(task, ats_type)
-        except Exception as e:
-            self.show_error(f"Error testing selector: {e}")
-        return False, None, None
 
     def _save_learned_locator(
         self, purpose: str, ats_type: ATSType, selector: str,

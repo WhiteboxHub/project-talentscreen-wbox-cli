@@ -1,3 +1,0 @@
-{"job_id": 40, "phase": null, "event": "Application error: Page.goto: net::ERR_NAME_NOT_RESOLVED at https://.../\nCall log:\n  - navigating to \"https://.../\", waiting until \"domcontentloaded\"\n", "level": "error", "timestamp": "2026-04-20T17:26:59.553196Z"}
-{"job_id": 40, "phase": "rules", "screenshot_path": "logs/job_40/screenshots/001_20260420_102659_error.png", "name": "error", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-20T17:27:00.029627Z"}
-{"job_id": 40, "phase": null, "event": "Browser closed", "level": "info", "timestamp": "2026-04-20T17:27:00.130206Z"}

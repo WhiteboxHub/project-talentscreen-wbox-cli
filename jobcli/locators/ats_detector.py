@@ -104,20 +104,98 @@ class ATSDetector:
         return None
 
     def detect_from_dom(self) -> Optional[ATSType]:
-        """Detect ATS from DOM signatures."""
-        try:
-            # Get page HTML
-            html = self.page.content()
+        """Detect ATS from DOM signatures.
 
-            # Check each ATS signature
+        We no longer do a raw substring check against ``page.content()``:
+        that caused false positives like LinkedIn → ``ukg_pro`` when the
+        substring ``"ultipro"`` appeared in some unrelated JSON blob on
+        the page.  Instead, we require each signature to appear as one
+        of:
+
+        * an element attribute value (``data-*``, ``class``, ``id``,
+          ``aria-*``, ``name``) — strong signal
+        * an iframe / script / link ``src``/``href`` — strong signal
+        * a meta tag content — strong signal
+        * page HTML, but only when surrounded by non-word boundaries
+          AND either the host domain already hints at that ATS OR the
+          signature itself is longer than 4 characters — weak fallback
+        """
+        try:
+            # Fast-path: inspect known structural elements first.
+            structural_checks = [
+                ("iframe[src], script[src], link[href]", ("src", "href")),
+                ("meta[name='generator']", ("content",)),
+                ("[data-ats], [data-greenhouse], [data-lever], "
+                 "[data-automation-id], [data-workday], [data-ashby], "
+                 "[data-icims], [data-smartrecruiters], [data-jobvite], "
+                 "[data-workable], [data-recruitee], [data-breezy], "
+                 "[class*='ashby-'], [class*='greenhouse'], "
+                 "[class*='lever-'], [class*='wd-'], [class*='icims']",
+                 ("data-ats", "class", "id")),
+            ]
+            for css, attrs in structural_checks:
+                try:
+                    elements = self.page.query_selector_all(css)
+                except Exception:
+                    continue
+                for el in elements[:50]:
+                    for attr in attrs:
+                        try:
+                            v = el.get_attribute(attr) or ""
+                        except Exception:
+                            v = ""
+                        if not v:
+                            continue
+                        v_lower = v.lower()
+                        for ats_type, signatures in self.DOM_SIGNATURES.items():
+                            for sig in signatures:
+                                if sig.lower() in v_lower:
+                                    if self.logger:
+                                        self.logger.info(
+                                            f"Detected {ats_type.value} from DOM",
+                                            phase=ExecutionPhase.RULES,
+                                            signature=sig,
+                                            source=f"{css}[{attr}]",
+                                        )
+                                    return ats_type
+
+            # Weak fallback: word-boundary match on page HTML — only for
+            # signatures that are long enough to be unlikely as random
+            # substring noise.
+            html = self.page.content()
+            try:
+                current_host = (self.page.url or "").lower()
+            except Exception:
+                current_host = ""
             for ats_type, signatures in self.DOM_SIGNATURES.items():
                 for signature in signatures:
-                    if signature in html:
+                    if len(signature) < 5:
+                        continue  # too short — high false-positive risk
+                    pat = re.compile(
+                        r"(?<![A-Za-z0-9])" + re.escape(signature) + r"(?![A-Za-z0-9])",
+                        re.IGNORECASE,
+                    )
+                    if pat.search(html):
+                        # Extra guard: if the current host is a known job
+                        # board, demote weak HTML matches — they're
+                        # almost always employer names in search results
+                        # rather than ATS fingerprints.
+                        if any(
+                            board in current_host
+                            for board in (
+                                "linkedin.com", "indeed.com", "glassdoor.com",
+                                "ziprecruiter.com", "monster.com",
+                                "simplyhired.com", "dice.com", "wellfound.com",
+                                "jobright.ai", "builtin.com",
+                            )
+                        ):
+                            continue
                         if self.logger:
                             self.logger.info(
                                 f"Detected {ats_type.value} from DOM",
                                 phase=ExecutionPhase.RULES,
                                 signature=signature,
+                                source="html (weak)",
                             )
                         return ats_type
 
