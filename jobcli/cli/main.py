@@ -593,5 +593,74 @@ def doctor_cmd(
     raise typer.Exit(run_doctor(console, wbox_smoke=wbox_smoke))
 
 
+@app.command("sync")
+def sync_cmd() -> None:
+    """Sync learned field answers and locators with the central server."""
+    console.print("[bold cyan]JobCLI Knowledge Sync[/bold cyan]\n")
+    
+    db = get_database()
+    session = db.get_session()
+    
+    try:
+        from jobcli.storage.repositories import SyncMetadataRepository
+        sync_repo = SyncMetadataRepository(session)
+        metadata = sync_repo.get_metadata()
+        
+        apps_since_sync = metadata.apps_since_sync if metadata else 0
+        
+        if apps_since_sync > 0:
+            console.print(f"You have {apps_since_sync} applications worth of new data.")
+        
+        do_sync = Confirm.ask("New improvements available. Sync now?", default=True)
+        if not do_sync:
+            console.print("[yellow]Sync cancelled.[/yellow]")
+            return
+            
+        with console.status("[bold green]Extracting and uploading local knowledge..."):
+            from jobcli.sync.extractor import extract_field_answers, extract_locators
+            from jobcli.sync.client import upload_knowledge, download_updates
+            from jobcli.sync.sqlite_merger import merge_server_updates
+            from datetime import datetime
+            
+            field_answers = extract_field_answers(session)
+            locators = extract_locators(session)
+            
+            payload = {
+                "field_answers": field_answers,
+                "locators": locators
+            }
+            
+            # 1. Upload
+            upload_resp = upload_knowledge(payload)
+            
+            # 2. Download
+            current_version = metadata.last_version if metadata else "0.0.0"
+            download_resp = download_updates(current_version)
+            
+            new_version = download_resp.get("version", current_version)
+            field_answers_down = len(download_resp.get("field_answers", []))
+            locators_down = len(download_resp.get("locators", []))
+            
+            # 3. Merge
+            merge_server_updates(session, download_resp)
+            
+            # 4. Update metadata
+            if hasattr(sync_repo, "record_sync_success"):
+                sync_repo.record_sync_success(new_version)
+            elif metadata:
+                metadata.last_version = new_version
+                metadata.last_sync_at = datetime.now()
+                metadata.apps_since_sync = 0
+                session.commit()
+                
+            console.print(f"[bold green]✓ Downloaded {field_answers_down} field answers and {locators_down} locators.[/bold green]")
+            console.print(f"[bold green]✓ Updated to version {new_version}.[/bold green]")
+            
+    except Exception as e:
+        console.print(f"\n[red]Sync failed: {e}[/red]")
+    finally:
+        session.close()
+
+
 if __name__ == "__main__":
     app()
