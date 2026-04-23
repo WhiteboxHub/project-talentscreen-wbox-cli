@@ -14,13 +14,19 @@ Production-grade CLI for automated job applications across multiple ATS platform
 - **Three-Phase Strategy** — Autonomous AI → Heuristic Rules → Human-in-the-loop
 - **Multi-Provider LLM** — Native support for OpenAI, Anthropic, and Google Gemini
 
-### Phase 1 — Local Learning & Memory Engine *(new)*
+### Phase 1 — Local Learning & Memory Engine
 - **Confidence-Based Memory** — Answers are only trusted after ≥ 3 successful uses at ≥ 60% confidence
 - **Merge Protection** — Human/user answers can never be silently overwritten by auto-learned data
 - **Outcome Feedback Loop** — Every Playwright action (success or failure) updates confidence scores in real-time
 - **Personal Data Isolation** — PII fields (email, phone, name, address, etc.) are never stored in reusable memory
-- **Sync-Ready Architecture** — Phase 2 server sync can be added without refactoring any core logic
 - **Structured Logging** — JSON logs with screenshots and DOM snapshots
+
+### Phase 2 — Knowledge Sync *(new)*
+- **Anonymous Crowd Intelligence** — Share only high-confidence, non-PII patterns with the central server
+- **Aggregated Downloads** — Pull the best field answers and UI locators from all contributing users
+- **Strict Merge Protection** — Server data only updates local data when `server_confidence > local_confidence`
+- **Weak Data Filtering** — Records with fewer than 3 successes are never uploaded or accepted
+- **Locator Ranking** — Server ranks selectors per `(ats_type, purpose)` using `score = confidence + log(success_count)` and returns the top 3
 
 ---
 
@@ -57,10 +63,13 @@ jobcli questions
 # 5. Discover jobs from your Wbox dashboard
 jobcli discover
 
-# 6. Apply — single job
+# 6. Start the FastAPI bridge server for the Chrome Extension
+jobcli serve --port 8080
+
+# 7. Apply — single job
 jobcli apply --url https://boards.greenhouse.io/company/jobs/123
 
-# 7. Apply — all pending jobs
+# 8. Apply — all pending jobs
 jobcli apply --batch
 ```
 
@@ -95,6 +104,8 @@ jobcli apply --url <url> --mode manual
 | `jobcli discover` | Fetch job links from your Whitebox Learning dashboard |
 | `jobcli open-dashboard` | Launch an interactive browser window logged into Wbox |
 | `jobcli apply` | Apply to jobs (single `--url` or `--batch` mode) |
+| `jobcli serve` | Start the FastAPI bridge server for Chrome Extension integration |
+| `jobcli sync` | Push local learned patterns to server and pull aggregated updates |
 | `jobcli doctor` | Validate Playwright, SQLite, config, and resume JSON |
 
 ---
@@ -115,11 +126,76 @@ jobcli/
 ├── storage/          # SQLite persistence (SQLAlchemy)
 │   ├── models.py     # ORM models incl. SyncMetadataModel
 │   └── repositories.py
-├── sync/             # Local learning & Phase 2 sync preparation
+├── sync/             # Phase 1 local learning + Phase 2 server sync
 │   ├── constants.py  # CONFIDENCE_THRESHOLD, MIN_SUCCESS_COUNT, PERSONAL_FIELDS
-│   └── extractor.py  # Export high-confidence non-PII data for future sync
-└── tests/            # pytest suite (67 tests)
+│   ├── extractor.py  # Exports high-confidence non-PII data for sync
+│   ├── client.py     # HTTP bridge to /api/sync_cli endpoints
+│   └── sqlite_merger.py  # Merges server knowledge back into local SQLite
+├── bridge/           # Phase 3 Chrome Extension Integration
+│   └── server.py     # FastAPI bridge server exposing /api/v1/context
+└── tests/            # pytest suite
 ```
+
+---
+
+## Hybrid System & Chrome Extension (Phase 3)
+
+JobCLI now supports a hybrid execution model that bridges the Python Playwright engine with a Manifest V3 Chrome Extension.
+
+### Why a Hybrid System?
+Certain ATS platforms use complex React/Angular states that are difficult to automate reliably from outside the DOM (via Playwright). The Chrome Extension runs *inside* the browser context, hooking directly into native JS events, while the Python CLI acts as the "Brain" orchestrating navigation, memory, and LLM reasoning.
+
+### How it works
+1. **Bridge Server**: `jobcli serve` runs a local FastAPI server exposing `/api/v1/context` and `/api/v1/report`.
+2. **Event Trigger**: During `jobcli apply`, Playwright injects a `JOBCLI_START_FILL` event into the page.
+3. **Extension Execution**: The extension listens for the trigger, fetches the parsed resume + memory from the bridge server, and executes native DOM autofill strategies.
+4. **Feedback Loop**: The extension posts a report back to the CLI with what it filled, allowing the Python engine to seamlessly fall back to LLM processing for any missed fields.
+
+---
+
+## Knowledge Sync (Phase 2)
+
+JobCLI can contribute learned patterns to a central server and pull back aggregated improvements from all contributors. No personal data is ever shared.
+
+### How it works
+
+```
+Local SQLite
+    │
+    ├─ extractor.py ──► strips PII, filters weak data (success < 3)
+    │
+    ▼
+POST /api/sync_cli/knowledge_sync   ──► Server aggregates & scores
+    │
+GET  /api/sync_cli/knowledge_updates ◄── Top-ranked patterns per ATS
+    │
+    ▼
+sqlite_merger.py ──► only overwrites local if server_confidence > local_confidence
+```
+
+### Running a sync
+
+```bash
+jobcli sync
+```
+
+The command will interactively confirm before syncing. It shows how many applications worth of new data you have accumulated since the last sync.
+
+### Privacy guarantees
+
+| What is shared | What is NEVER shared |
+|---|---|
+| Field label → value mappings (e.g. `years_of_experience → 4`) | Email, phone, name, address |
+| UI locators (CSS selectors ranked by success rate) | Resume content, salary, SSN |
+| ATS type + confidence scores | Job URLs, company names, candidate identity |
+
+### Merge protection rules (client side)
+
+| Condition | Action |
+|---|---|
+| `server_confidence > local_confidence` | Local value **updated** |
+| `server_confidence ≤ local_confidence` | Local value **kept** |
+| `server total_success < 3` | Record **ignored** |
 
 ---
 
@@ -192,6 +268,12 @@ DEFAULT_LLM_PROVIDER=openai      # openai | anthropic | gemini
 HEADLESS=false                   # false = visible browser
 RESUME_PDF_PATH=C:/path/to/resume.pdf
 RESUME_JSON_PATH=C:/path/to/resume.json
+
+# Phase 2 Sync (optional)
+JOBCLI_SYNC_SERVER_URL=https://your-backend.com   # defaults to http://localhost:8000
+
+# Phase 3 Extension Integration
+EXTENSION_PATH=C:/path/to/project-autofill-resume-json-extension
 ```
 
 ---

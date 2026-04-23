@@ -317,6 +317,7 @@ class Config(BaseModel):
     # Paths
     resume_pdf_path: Optional[str] = None
     resume_json_path: Optional[str] = None
+    extension_path: Optional[str] = None
     log_directory: str = Field(default="logs")
     database_path: str = Field(default="~/.jobcli/jobcli.db")
 
