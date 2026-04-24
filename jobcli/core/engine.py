@@ -940,10 +940,18 @@ class ApplicationEngine:
                 CONTEXT_OPTIONS,
                 apply_stealth,
             )
+            
+            # Load extension if configured
+            launch_args = list(LAUNCH_ARGS)
+            if self.config.extension_path:
+                launch_args.extend([
+                    f"--disable-extensions-except={self.config.extension_path}",
+                    f"--load-extension={self.config.extension_path}"
+                ])
 
             browser = p.chromium.launch(
-                headless=self.config.headless,
-                args=LAUNCH_ARGS,
+                headless=self.config.headless if not self.config.extension_path else False, # Extensions require headed or new headless
+                args=launch_args,
                 ignore_default_args=IGNORE_DEFAULT_ARGS,
             )
             context = browser.new_context(
@@ -1428,6 +1436,29 @@ class ApplicationEngine:
                     page.wait_for_timeout(500)
                 except Exception:
                     pass
+
+            # ── Trigger Chrome Extension Autofill ─────────────────────────
+            try:
+                agent.show_status("Triggering Chrome Extension autofill...", phase=ExecutionPhase.RULES)
+                page.evaluate("window.dispatchEvent(new CustomEvent('JOBCLI_START_FILL'))")
+                # Wait for completion event with 15s timeout
+                ext_result = page.evaluate("""
+                    () => new Promise(resolve => {
+                        const handler = (e) => {
+                            window.removeEventListener('JOBCLI_FILL_COMPLETE', handler);
+                            resolve(e.detail || { status: 'success' });
+                        };
+                        window.addEventListener('JOBCLI_FILL_COMPLETE', handler);
+                        setTimeout(() => resolve({ error: 'timeout' }), 15000);
+                    })
+                """)
+                if ext_result and ext_result.get("error"):
+                    logger.warning(f"Extension autofill finished with error/timeout: {ext_result['error']}", phase=ExecutionPhase.RULES)
+                else:
+                    agent.show_success("Extension autofill completed.")
+            except Exception as e:
+                logger.warning(f"Failed to trigger extension: {e}", phase=ExecutionPhase.RULES)
+            # ──────────────────────────────────────────────────────────────
 
             extractor = AccessibilityTreeExtractor(page)
             ax_tree = extractor.extract()

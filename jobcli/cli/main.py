@@ -85,6 +85,7 @@ def get_config() -> Config:
         ("DEFAULT_LLM_PROVIDER", "default_llm_provider"),
         ("RESUME_PDF_PATH", "resume_pdf_path"),
         ("RESUME_JSON_PATH", "resume_json_path"),
+        ("EXTENSION_PATH", "extension_path"),
         ("DATABASE_PATH", "database_path"),
         ("LOG_DIRECTORY", "log_directory"),
         ("JOBCLI_USERNAME", "job_board_username"),
@@ -667,6 +668,7 @@ def sync_cmd() -> None:
         session.close()
 
 
+
 @app.command()
 def server() -> None:
     """Start the JobCLI web UI server."""
@@ -685,6 +687,23 @@ def server() -> None:
     dashboard_host = "localhost" if host in {"0.0.0.0", "::"} else host
     console.print(f"Access the dashboard at: [green]http://{dashboard_host}:{port}[/green]")
     uvicorn.run("jobcli.api.main:app", host=host, port=port, reload=reload)
+
+@app.command("serve")
+def serve_cmd(
+    host: str = typer.Option("127.0.0.1", help="Host to bind the server to"),
+    port: int = typer.Option(8080, help="Port to bind the server to"),
+) -> None:
+    """Start the FastAPI bridge server for the Chrome extension."""
+    console.print("[bold cyan]JobCLI Bridge Server[/bold cyan]\n")
+    
+    config = get_config()
+    db = get_database()
+    
+    from jobcli.bridge.server import start_server
+    try:
+        start_server(host=host, port=port)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Server stopped.[/yellow]")
 
 
 if __name__ == "__main__":
