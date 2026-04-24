@@ -290,7 +290,7 @@ const App = () => {
             <div style={s.welcomeBox}>
                 <div style={s.welcomeTitle}>❖ Welcome to Claude Code!</div>
                 <div style={s.welcomeCommand}>/help for help, /status for your current setup</div>
-                <div style={s.welcomePath}>Cwd: /Users/danipower/Proyectos/ludini/mcp-code-graph</div>
+                <div style={s.welcomePath}>Server: {window.location.host}</div>
             </div>
 
             {/* Tips Section */}

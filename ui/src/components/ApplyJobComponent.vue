@@ -169,7 +169,7 @@ const startApplication = async () => {
   waitingForInput.value = false
 
   try {
-    const response = await fetch('http://localhost:8000/api/apply/with-ui', {
+    const response = await fetch('/api/apply/with-ui', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: jobUrl.value })
@@ -189,7 +189,7 @@ const startApplication = async () => {
 const listenToEvents = () => {
   if (eventSource) eventSource.close()
 
-  eventSource = new EventSource(`http://localhost:8000/api/apply/session/${sessionId.value}`)
+  eventSource = new EventSource(`/api/apply/session/${sessionId.value}`)
 
   eventSource.onmessage = (event) => {
     const data = JSON.parse(event.data)
@@ -263,12 +263,13 @@ const submitAnswer = async () => {
   if (!userAnswer.value) return
 
   try {
-    await fetch('http://localhost:8000/api/apply/user-input', {
+    await fetch('/api/apply/user-input', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         session_id: sessionId.value,
-        answer: userAnswer.value
+        field_name: currentQuestion.value?.field_name,
+        value: userAnswer.value
       })
     })
   } catch (error) {

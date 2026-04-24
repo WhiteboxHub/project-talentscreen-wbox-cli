@@ -35,7 +35,7 @@ export const ApplyJobComponent: React.FC = () => {
     setWaitingForInput(false);
 
     try {
-      const response = await fetch('http://localhost:8000/api/apply/with-ui', {
+      const response = await fetch('/api/apply/with-ui', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: jobUrl })
@@ -55,7 +55,7 @@ export const ApplyJobComponent: React.FC = () => {
   const listenToEvents = (sid: string) => {
     if (eventSourceRef.current) eventSourceRef.current.close();
 
-    eventSourceRef.current = new EventSource(`http://localhost:8000/api/apply/session/${sid}`);
+    eventSourceRef.current = new EventSource(`/api/apply/session/${sid}`);
 
     eventSourceRef.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
@@ -129,12 +129,13 @@ export const ApplyJobComponent: React.FC = () => {
     if (!userAnswer) return;
 
     try {
-      await fetch('http://localhost:8000/api/apply/user-input', {
+      await fetch('/api/apply/user-input', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           session_id: sessionId,
-          answer: userAnswer
+          field_name: currentQuestion?.field_name,
+          value: userAnswer
         })
       });
     } catch (error) {
