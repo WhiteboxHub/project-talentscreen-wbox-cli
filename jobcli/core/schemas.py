@@ -302,9 +302,10 @@ class Config(BaseModel):
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
     gemini_api_key: Optional[str] = None
+    claude_api_key: Optional[str] = None
 
     # Preferences
-    default_llm_provider: Literal["openai", "anthropic", "gemini"] = "openai"
+    default_llm_provider: Literal["openai", "anthropic", "gemini", "claude"] = "openai"
     interaction_mode: InteractionMode = InteractionMode.SUPERVISED
     headless: bool = True
     max_retries: int = 3

@@ -568,13 +568,23 @@ class ConfigRepository:
         config_dict: dict[str, Any] = {}
 
         for config in configs:
-            config_dict[config.key] = config.value
+            val = config.value
+            # Migration/Robustness: Fix interaction_mode if it was saved as a stringified Enum object
+            if config.key == "interaction_mode" and val and "." in val:
+                val = val.split(".")[-1].lower()
+            
+            # Handle boolean strings stored by old save_config(str(value))
+            if val == "True": val = True
+            if val == "False": val = False
+            
+            config_dict[config.key] = val
 
         return Config(**config_dict)
 
     def save_config(self, config: Config) -> None:
         """Save entire config object."""
-        config_dict = config.model_dump()
+        # Use mode='json' so Enums become their string values
+        config_dict = config.model_dump(mode='json')
         for key, value in config_dict.items():
             if value is not None:
                 self.set(key, str(value))

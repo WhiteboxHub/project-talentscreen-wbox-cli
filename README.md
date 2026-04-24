@@ -164,7 +164,7 @@ python -X utf8 -c "
 import json
 from jobcli.storage.models import Database
 from jobcli.sync.extractor import extract_field_answers, extract_locators
-db = Database('sqlite:///C:/Users/<you>/.jobcli/jobcli.db')
+db = Database()
 db.create_tables()
 s = db.get_session()
 print(json.dumps(extract_field_answers(s), indent=2))

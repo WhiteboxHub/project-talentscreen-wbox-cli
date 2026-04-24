@@ -1,10 +1,13 @@
 """SQLAlchemy models for JobCLI."""
 
 from datetime import datetime
+import os
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, Float, Integer, String, Text, create_engine, inspect, text
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from jobcli.core.schemas import ATSType, ApplicationStatus, ExecutionPhase, SelectorType
@@ -189,7 +192,8 @@ class Database:
 
     def __init__(self, database_url: str = "sqlite:///~/.jobcli/jobcli.db") -> None:
         """Initialize database connection."""
-        self.engine = create_engine(database_url, echo=False)
+        normalized_url = _normalize_database_url(database_url)
+        self.engine = create_engine(normalized_url, echo=False)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
 
     def create_tables(self) -> None:
@@ -250,3 +254,44 @@ class Database:
     def drop_tables(self) -> None:
         """Drop all tables (for testing)."""
         Base.metadata.drop_all(bind=self.engine)
+
+
+def _normalize_database_url(database_url: str) -> str:
+    """Normalize DB URLs for local usage.
+
+    - Expands `~` and environment variables for SQLite file paths.
+    - Ensures the parent directory exists for SQLite file DBs.
+
+    This prevents accidental creation of a literal `~` folder relative to cwd.
+    """
+    try:
+        url = make_url(database_url)
+    except Exception:
+        return database_url
+
+    if not url.drivername.startswith("sqlite"):
+        return database_url
+
+    # For sqlite, URL.database is the filesystem path (or ':memory:').
+    raw_db = url.database
+    if not raw_db or raw_db == ":memory:":
+        return database_url
+
+    expanded = os.path.expandvars(os.path.expanduser(raw_db))
+    expanded_path = Path(expanded)
+
+    # Ensure parent exists for file-backed DBs.
+    try:
+        parent = expanded_path.parent
+        if str(parent) and str(parent) != ".":
+            parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
+    # SQLAlchemy expects forward slashes in sqlite URLs on Windows.
+    normalized_db = expanded_path.as_posix() if os.name == "nt" else str(expanded_path)
+
+    try:
+        return str(url.set(database=normalized_db))
+    except Exception:
+        return database_url

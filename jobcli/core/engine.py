@@ -9,7 +9,7 @@ whose behaviour adapts to the configured ``InteractionMode`` (auto / supervised
 import random
 import time
 import re
-from typing import Optional
+from typing import Any, Optional
 
 from playwright.sync_api import Page, sync_playwright
 
@@ -376,7 +376,17 @@ def _live_validation_errors(page) -> list[str]:
                 if (!t) return;
                 // Reject very long text — probably a container, not the
                 // error message itself.
-                if (t.length > 200) return;
+                if t.length > 200) return;
+                
+                // Exclusion list: phrases that are NOT errors (success messages, 
+                // help text, neutral status indicators).
+                const lower = t.toLowerCase();
+                if (lower.includes('success') || 
+                    lower.includes('completed') || 
+                    lower.includes('imported') || 
+                    lower.includes('saved') ||
+                    lower.includes('optional')) return;
+
                 if (seen.has(t)) return;
                 seen.add(t);
                 out.push(t);
@@ -662,11 +672,14 @@ class ApplicationEngine:
         config: Config,
         resume: ResumeData,
         database: Database,
+        on_event: Optional[Any] = None,
     ) -> None:
         """Initialize engine."""
         self.config = config
         self.resume = resume
         self.database = database
+        self.on_event = on_event
+        self.active_agent: Optional[AgentInterface] = None
         self.session = database.get_session()
 
         # Initialize repositories
@@ -675,6 +688,26 @@ class ApplicationEngine:
         self.locator_repo = LearnedLocatorRepository(self.session)
         
         self.anti_bot = AntiBotManager()
+        self.stop_requested = False
+
+    def request_stop(self) -> None:
+        """Signal the engine to stop as soon as possible."""
+        self.stop_requested = True
+        if self.active_agent:
+            self.active_agent.remote_resume("cancel")
+
+    def _check_stop(self) -> None:
+        """Raise InterruptedError if a stop was requested."""
+        if self.stop_requested:
+            raise InterruptedError("Process stopped by user")
+
+    def _emit_event(self, event_type: str, data: Any) -> None:
+        """Emit an event to the callback if configured."""
+        if self.on_event:
+            try:
+                self.on_event({"type": event_type, "data": data})
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # CAPTCHA / bot-challenge freeze gate
@@ -775,9 +808,17 @@ class ApplicationEngine:
             board=board,
             url=url_before,
         )
+        # If in AUTO mode, let the LLM try to navigate the board before handing off
+        if agent.mode == InteractionMode.AUTO:
+            agent.show_status(f"Attempting autonomous navigation on {board}...", phase=ExecutionPhase.LLM)
+            navigated_page = self._navigate_job_board_via_llm(page, agent, logger, board)
+            if navigated_page:
+                # Successfully landed on a new domain!
+                return navigated_page
+
         agent.show_warning(
-            f"{board} is a job board, not an ATS. The agent can't submit "
-            "applications from here."
+            f"{board} is a job board, not an ATS. The agent typically can't submit "
+            "applications from here without reaching the company site."
         )
 
         hint = (
@@ -876,6 +917,7 @@ class ApplicationEngine:
             job_id=job.id or 0,
             log_directory=self.config.log_directory,
             enable_screenshots=self.config.screenshot_on_error,
+            on_event=self.on_event,
         )
 
         state = ApplicationState(
@@ -921,9 +963,13 @@ class ApplicationEngine:
                 mode=mode,
                 logger=logger,
                 resume=self.resume,
+                is_server=not self.config.headless,
             )
+            self.active_agent = agent
+            self.stop_requested = False # Reset for new job
 
             try:
+                self._check_stop()
                 # ── 1. Navigate ─────────────────────────────────────────
                 agent.show_phase_banner("Navigating to job page")
                 import playwright.sync_api
@@ -1478,6 +1524,7 @@ class ApplicationEngine:
 
             # ── Inner fill loop (handles ASK retries) ──────────────────
             while loop_count < MAX_ASK_LOOPS:
+                self._check_stop()
                 loop_count += 1
                 agent.show_status(f"AI iteration {loop_count}/{MAX_ASK_LOOPS}", phase=ExecutionPhase.LLM)
 
@@ -1874,7 +1921,20 @@ class ApplicationEngine:
                             )
 
                     # ── Collect anything that's still unfinished ─────────
+                    for act in (retry_failed + selector_failed):
+                        logger.warning(
+                            f"Action failed on '{act.field_label or act.selector}' ({act.action.value})",
+                            phase=ExecutionPhase.LLM,
+                            value=act.value,
+                        )
+
                     still_broken = selector_failed + retry_failed
+
+                    # If clicking buttons failed and that was the only thing that failed, we must not
+                    # swallow it! Catch the un-filtered failures so we don't infinitely skip them.
+                    if not still_broken and failed_actions:
+                        still_broken = failed_actions
+
                     if still_broken:
                         # Build a "label → value" preview so the human sees
                         # WHAT the agent knows and just has to type/paste it
@@ -2615,10 +2675,63 @@ class ApplicationEngine:
             logger.log_phase_end(ExecutionPhase.LLM, False)
             return False
 
-    # NOTE: _phase_human has been removed.  Human interaction is now integrated
-    # inline via AgentInterface checkpoints throughout _agent_fill_loop and
-    # apply_to_job.  See request_help_finding_element(), request_field_input(),
-    # confirm_submission(), etc.
+    def _navigate_job_board_via_llm(
+        self,
+        page: Page,
+        agent: AgentInterface,
+        logger: JobLogger,
+        board: str,
+    ) -> Optional[Page]:
+        """Try to find and click the 'Apply on company site' button using the LLM."""
+        try:
+            page_ids_before = {id(p) for p in page.context.pages}
+            url_before = page.url or ""
+
+            # Extract AX Tree
+            from jobcli.llm.ax_tree_extractor import AccessibilityTreeExtractor
+            extractor = AccessibilityTreeExtractor(page)
+            ax_tree = extractor.extract()
+
+            # Ask LLM to find the button
+            prompt = (
+                f"I am on {board} (a job board). I need to find the button that leads to the "
+                "EMPLOYER'S REAL APPLICATION PAGE on their own website. \n"
+                "Common labels: 'Apply on company site', 'Apply', 'External Apply'. \n"
+                "DO NOT choose 'Easy Apply' or buttons that look like LinkedIn internal applications. \n"
+                "Examine the page and emit a single 'click' action for the correct button."
+            )
+            
+            from jobcli.llm.client import LLMClient
+            client = LLMClient(config=self.config)
+            response = client.get_browser_actions(ax_tree, prompt)
+
+            if response and response.actions:
+                # Execute the first click action
+                for action in response.actions:
+                    if action.action == ActionType.CLICK:
+                        logger.info(f"LLM found navigation button: {action.field_label or action.selector}", phase=ExecutionPhase.LLM)
+                        page.click(action.selector, timeout=5000)
+                        
+                        # Wait for new page/tab
+                        new_page = adopt_application_page_after_action(
+                            page,
+                            page_count_before=len(page.context.pages),
+                            url_before=url_before,
+                            page_ids_before=page_ids_before,
+                            logger=logger,
+                            poll_seconds=5.0
+                        )
+                        
+                        if new_page and _safe_domain(new_page.url) != _safe_domain(url_before):
+                            logger.info(f"LLM successfully navigated to: {new_page.url}", phase=ExecutionPhase.LLM)
+                            return new_page
+            
+            return None
+        except Exception as e:
+            logger.warning(f"LLM JobBoard navigation failed: {e}")
+            return None
+
+    # NOTE: _phase_human has been removed.
 
     def _dismiss_cookie_consent(self, page: Page, logger: JobLogger) -> None:
         """Dismiss cookie banners, privacy dialogs, and other overlays that block clicks."""

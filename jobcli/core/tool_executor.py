@@ -433,6 +433,20 @@ class ToolExecutor:
                 ("text", lambda r=root: r.get_by_text(name, exact=False).first),
                 ("aria-labelledby", lambda r=root: r.locator(f"[aria-labelledby*='{name}']").first),
             ]
+            
+            # Add a fuzzy cleaned attempt if it contains hallucinated suffixes
+            clean_name = name.lower()
+            for suffix in [" button", " checkbox", " radio", " link", " dropdown"]:
+                if suffix in clean_name:
+                    clean_name = clean_name.replace(suffix, "").strip()
+            if clean_name and clean_name != name.lower():
+                attempts.extend([
+                    ("fuzzy role button", lambda r=root, cn=clean_name: r.get_by_role("button", name=cn, exact=False).first),
+                    ("fuzzy role link", lambda r=root, cn=clean_name: r.get_by_role("link", name=cn, exact=False).first),
+                    ("fuzzy label", lambda r=root, cn=clean_name: r.get_by_label(cn, exact=False).first),
+                    ("fuzzy text", lambda r=root, cn=clean_name: r.get_by_text(cn, exact=False).first),
+                ])
+
             for label, get_loc in attempts:
                 try:
                     loc = get_loc()
