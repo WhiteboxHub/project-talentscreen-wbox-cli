@@ -96,7 +96,7 @@ class JazzHRHandler(GenericATSHandler):
                 for sel in [s.strip() for s in selector.split(",")]:
                     el = self.page.query_selector(sel)
                     if el:
-                        self.page.fill(sel, value, timeout=3000)
+                        self.humanized_fill(self.page.locator(sel).first, value)
                         results[key] = True
                         filled = True
                         break

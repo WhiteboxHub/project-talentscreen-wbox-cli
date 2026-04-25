@@ -206,19 +206,15 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# ── JobCLI runtime artifacts ──────────────────────────────────────────────────
-# Screenshots captured during automation runs
-logs/**/screenshots/
-logs/**/dom_snapshots/
+# ── JobCLI: screenshots & related run artifacts (never commit / ship from repo) ──
+# JobLogger writes under <log_directory>/job_<id>/screenshots|dom_snapshots (see jobcli/core/logger.py).
+# **/job_*/ matches no matter where log_directory points (default logs/, CI path, etc.).
+**/job_*/screenshots/
+**/job_*/dom_snapshots/
 
-# One-off debug images
-*.png
-!docs/**/*.png
-
-# Playwright trace/video artifacts
+# Playwright trace / video dumps under the log tree
 logs/**/*.zip
 logs/**/*.webm
 
-# Per-run job logs (these are ephemeral; keep jobcli.jsonl which is the global log)
-# Uncomment the next line to also exclude per-job application logs:
+# Per-run job logs (ephemeral); global aggregate logs/jobcli.jsonl stays trackable if you want
 # logs/job_*/application.jsonl

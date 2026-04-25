@@ -9,7 +9,7 @@ whose behaviour adapts to the configured ``InteractionMode`` (auto / supervised
 import random
 import time
 import re
-from typing import Optional
+from typing import Any, Optional
 
 from playwright.sync_api import Page, sync_playwright
 
@@ -266,7 +266,22 @@ def _coerce_dropdown_actions(llm_response, ax_tree, logger=None) -> int:
                 match_label = cand
                 break
             for dl in dropdown_labels:
-                if cand and dl and (cand in dl or dl in cand):
+                # Guard against empty / very-short dropdown labels that
+                # would spuriously substring-match every candidate.
+                # E.g. Lever embeds unlabeled <select> elements whose
+                # normalized label is "" → `"" in "current location"` is
+                # True in Python, coercing every FILL into SELECT.
+                if not dl or len(dl) < 3:
+                    continue
+                if not cand or len(cand) < 3:
+                    continue
+                # Require a reasonable overlap ratio so a 2-char fragment
+                # like "en" doesn't match "current location".
+                shorter = min(len(cand), len(dl))
+                longer = max(len(cand), len(dl))
+                if shorter / longer < 0.35:
+                    continue
+                if cand in dl or dl in cand:
                     match_label = dl
                     break
             if match_label:
@@ -387,6 +402,126 @@ def _live_validation_errors(page) -> list[str]:
     except Exception:
         return []
     return [str(m) for m in msgs if m]
+
+
+_AUTH_URL_PATTERNS = (
+    "/login", "/log-in", "/log_in", "/signin", "/sign-in", "/sign_in",
+    "/signup", "/sign-up", "/sign_up", "/register", "/registration",
+    "/authenticate", "/auth", "/oauth", "/sso",
+    "/account/create", "/createaccount", "/create-account",
+    "/myaccount", "/my-account",
+)
+
+# Phrases that, when they appear as a *field label* on the form being
+# analysed, indicate an authentication / account-creation screen rather
+# than a real job-application form.  Matched lowercased against the
+# accessibility-tree label (no substring false-positive guard needed
+# because these are all specific enough).
+_AUTH_LABEL_KEYWORDS = (
+    "password", "confirm password", "verify password",
+    "re-enter password", "retype password", "create password",
+    "new password", "old password", "current password",
+    "verification code", "one-time code", "one time code",
+    "otp ", "two-factor", "2fa",
+)
+
+# Phrases that, when present as a button label, are strong signals we
+# are about to authenticate / create an account instead of apply.
+_AUTH_ACTION_KEYWORDS = (
+    "sign in", "log in", "log-in",
+    "create account", "create an account", "register",
+    "sign up",
+)
+
+
+def _is_auth_form(
+    page, ax_tree
+) -> tuple[bool, str]:
+    """Detect whether the current page is an authentication / account-creation gate.
+
+    Workday, Oracle HCM, iCIMS, and a handful of other ATSes drop the
+    applicant on a "Create account or Sign in" wall *before* the real
+    application form.  When that happens we must NOT let the LLM type
+    anything: it will invent a password, submit real PII, and create a
+    garbage account.  Instead, hand the browser to the human, let them
+    log in with their own credentials, and resume once they are on the
+    actual application page.
+
+    Returns ``(is_auth, reason)``.  ``reason`` is a short human-readable
+    description used in the handoff prompt.
+    """
+    # ── Signal 1: URL path — cheapest, highest precision ──
+    try:
+        url = (page.url or "").lower()
+    except Exception:
+        url = ""
+    for pat in _AUTH_URL_PATTERNS:
+        if pat in url:
+            return True, f"URL path looks like an auth gate ({pat})."
+
+    # ── Signal 2: any visible <input type=password> in the DOM ──
+    # Strongest positive signal.  Workday's "Create account" screen has
+    # ``<input type="password" data-automation-id="password">``.
+    try:
+        pw_count = page.evaluate(
+            """() => {
+                let n = 0;
+                document.querySelectorAll("input[type='password']").forEach(el => {
+                    const r = el.getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0) n++;
+                });
+                return n;
+            }"""
+        )
+    except Exception:
+        pw_count = 0
+    if pw_count and pw_count > 0:
+        return True, f"Found {pw_count} password field(s) on the page."
+
+    # ── Signal 3: AX-tree form-field labels match auth vocabulary ──
+    try:
+        labels = [
+            (f.get("label") or "").lower()
+            for f in getattr(ax_tree, "form_fields", []) or []
+        ]
+    except Exception:
+        labels = []
+    auth_labels = [
+        lbl for lbl in labels
+        if any(kw in lbl for kw in _AUTH_LABEL_KEYWORDS)
+    ]
+    if auth_labels:
+        return True, f"Form contains auth fields: {auth_labels[:3]}."
+
+    # ── Signal 4: clickable buttons named "Sign in" / "Create account" ──
+    # Only fires when there is ALSO no obvious application content: the
+    # same page may show a "Sign in" link in a nav bar, which we don't
+    # want to treat as a login wall.
+    try:
+        button_labels = [
+            (el.get("label") or "").lower()
+            for el in getattr(ax_tree, "clickable_elements", []) or []
+        ]
+    except Exception:
+        button_labels = []
+    auth_buttons = [
+        b for b in button_labels
+        if any(kw in b for kw in _AUTH_ACTION_KEYWORDS)
+    ]
+    # Only trip when auth buttons are present AND there are few real
+    # form fields (less than 3 text/select inputs outside of email/password).
+    non_auth_fields = [
+        lbl for lbl in labels
+        if lbl and not any(kw in lbl for kw in _AUTH_LABEL_KEYWORDS)
+        and "email" not in lbl
+    ]
+    if auth_buttons and len(non_auth_fields) < 3:
+        return True, (
+            f"Page shows auth action buttons ({auth_buttons[:2]}) and "
+            "no application form fields."
+        )
+
+    return False, ""
 
 
 def _submit_button_visible(page) -> bool:
@@ -675,6 +810,14 @@ class ApplicationEngine:
         self.locator_repo = LearnedLocatorRepository(self.session)
         
         self.anti_bot = AntiBotManager()
+
+    def _set_workday_modal_resume_path(self, handler: Any) -> None:
+        """Attach the resume PDF path so :class:`WorkdayHandler` can pick *Autofill* first."""
+        p = getattr(self.config, "resume_pdf_path", None)
+        if not p or not str(p).strip():
+            return
+        if handler is not None and handler.__class__.__name__ == "WorkdayHandler":
+            setattr(handler, "resume_path_for_workday_modal", str(p))
 
     # ------------------------------------------------------------------
     # CAPTCHA / bot-challenge freeze gate
@@ -1158,6 +1301,7 @@ class ApplicationEngine:
 
             handler = ATSHandlerFactory.create_handler(ats_type, page, self.resume, logger)
             if handler:
+                self._set_workday_modal_resume_path(handler)
                 logger.info(f"Using {ats_type.value} handler", phase=ExecutionPhase.RULES)
                 ok = handler.find_apply_button()
                 page = adopt_application_page_after_action(
@@ -1234,6 +1378,7 @@ class ApplicationEngine:
 
             handler = ATSHandlerFactory.create_handler(ats_type, page, self.resume, logger)
             if handler:
+                self._set_workday_modal_resume_path(handler)
                 handler.fill_form(resume_path)
                 self._random_delay()
                 # Same as legacy _phase_rules: wizard flows need Next/Continue before final submit.
@@ -1297,6 +1442,7 @@ class ApplicationEngine:
         try:
             handler = ATSHandlerFactory.create_handler(ats_type, page, self.resume, logger)
             if handler:
+                self._set_workday_modal_resume_path(handler)
                 logger.info(f"Using {ats_type.value} handler", phase=ExecutionPhase.RULES)
                 if not handler.find_apply_button():
                     logger.warning("ATS handler failed to find apply button")
@@ -1378,6 +1524,73 @@ class ApplicationEngine:
             ax_tree = extractor.extract()
             logger.save_structured_dom(ax_tree.model_dump(), "ax_tree_snapshot", ExecutionPhase.LLM)
 
+            # ── AUTH / LOGIN GATE DETECTION ───────────────────────────────
+            # Before letting the LLM touch the form, verify we are NOT on a
+            # "Create account or Sign in" wall.  Workday / Oracle HCM /
+            # iCIMS frequently gate the real application behind such a
+            # screen, and if we auto-fill it the LLM will invent a
+            # password + register a junk account under the user's real
+            # email.  Up to 3 retries: human logs in, presses ENTER, we
+            # re-extract and check again.  If we still see auth after
+            # three rounds, we surface an error rather than silently
+            # filling an auth form.
+            for _auth_attempt in range(3):
+                is_auth, auth_reason = _is_auth_form(page, ax_tree)
+                if not is_auth:
+                    break
+                logger.warning(
+                    f"Authentication gate detected: {auth_reason}",
+                    phase=ExecutionPhase.HUMAN,
+                )
+                agent.show_warning(
+                    "This page is asking for login / account-creation, not "
+                    "an application form. Handing the browser to you so you "
+                    "can sign in with your own credentials — the agent will "
+                    "NEVER invent a password for you."
+                )
+                handoff = agent.handoff_to_human(
+                    reason=(
+                        "Login / sign-up / create-account screen detected. "
+                        f"{auth_reason} "
+                        "The agent will not auto-fill authentication forms — "
+                        "please sign in (or create an account) yourself."
+                    ),
+                    hint=(
+                        "Sign in or create an account in the browser, navigate "
+                        "to the actual application form, then press ENTER so "
+                        "the agent resumes from that page."
+                    ),
+                )
+                if handoff.cancelled:
+                    logger.log_phase_end(ExecutionPhase.LLM, False)
+                    return False
+                page = handoff.page
+                agent.page = page
+                extractor = AccessibilityTreeExtractor(page)
+                try:
+                    ax_tree = extractor.extract()
+                    logger.save_structured_dom(
+                        ax_tree.model_dump(),
+                        "ax_tree_after_auth_handoff",
+                        ExecutionPhase.LLM,
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Could not re-extract AX tree after auth handoff: {e}",
+                        phase=ExecutionPhase.LLM,
+                    )
+                    logger.log_phase_end(ExecutionPhase.LLM, False)
+                    return False
+            else:
+                # ``for … else`` runs when the loop exits without ``break``
+                # — i.e. we still see an auth form after three handoffs.
+                agent.show_error(
+                    "Still on a login / sign-up screen after three handoff "
+                    "rounds. Stopping so we don't create a junk account."
+                )
+                logger.log_phase_end(ExecutionPhase.LLM, False)
+                return False
+
             # ── ATS-handler pre-pass + persistent reference ───────────────
             # Every ATS has its own handler (Ashby, Workday, Greenhouse,
             # Lever…) with hardcoded, battle-tested selectors for the
@@ -1394,6 +1607,7 @@ class ApplicationEngine:
                     state.detected_ats, page, self.resume, logger
                 )
                 if rules_handler and state.detected_ats not in (ATSType.UNKNOWN,):
+                    self._set_workday_modal_resume_path(rules_handler)
                     agent.show_status(
                         f"Running {state.detected_ats.value} handler for known fields…",
                         phase=ExecutionPhase.RULES,
@@ -1716,7 +1930,10 @@ class ApplicationEngine:
                     page = adopted
 
                 if has_upload:
-                    wait_time = 5000 if "ashby" in page.url.lower() else 3500
+                    # Give the ATS backend enough time to parse the resume
+                    # and autofill the fields *before* we scan the DOM again.
+                    # Usually takes ~4-7 seconds for the React state to update.
+                    wait_time = 8000
                     agent.show_status(f"Upload done — waiting {wait_time/1000}s for autofill...", phase=ExecutionPhase.LLM)
                     page.wait_for_timeout(wait_time)
                     ax_tree = extractor.extract()
@@ -1923,12 +2140,41 @@ class ApplicationEngine:
                 initial_errors = _live_validation_errors(page)
             except Exception:
                 initial_errors = []
-            if not initial_empty and not initial_dropdown_empty and not initial_errors:
+            # Workday (and similar wizards like Oracle Cloud) can have every visible field filled on
+            # *step 1* while **Continue** / **Next** is still required to reach
+            # Experience, Disclosures, Review, etc.  ``_empty_required_fields`` may
+            # be empty, so we must not skip the multi-page loop for wizards.
+            # We determine if it's a wizard by checking for common Next/Continue buttons in the DOM.
+            has_wizard_buttons = False
+            try:
+                has_wizard_buttons = bool(
+                    page.query_selector(
+                        "button:has-text('Next'), button:has-text('Continue'), "
+                        "button:has-text('Save and Continue'), a:has-text('Next'), "
+                        "a:has-text('Continue'), [data-automation-id='bottom-navigation-next-button']"
+                    )
+                )
+            except Exception:
+                pass
+
+            is_wizard = state.detected_ats == ATSType.WORKDAY or has_wizard_buttons
+            if (
+                not is_wizard
+                and not initial_empty
+                and not initial_dropdown_empty
+                and not initial_errors
+            ):
                 logger.info(
-                    "All required fields satisfied on first pass — skipping multi-page loop.",
+                    "All required fields satisfied on first pass and no Next button found — skipping multi-page loop.",
                     phase=ExecutionPhase.LLM,
                 )
                 page_count = MAX_PAGES  # sentinel to bypass loop
+            elif is_wizard and not initial_empty and not initial_dropdown_empty and not initial_errors:
+                logger.info(
+                    "Required fields look satisfied, but a Next/Continue button is present — "
+                    "running the wizard pass.",
+                    phase=ExecutionPhase.LLM,
+                )
             elif initial_dropdown_empty or initial_errors:
                 logger.info(
                     "Form has unresolved required dropdowns or validation errors — "

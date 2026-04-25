@@ -243,7 +243,7 @@ class GreenhouseHandler(GenericATSHandler):
                 results[field_name] = False
                 continue
             try:
-                self.page.fill(selector, value, timeout=2000)
+                self.humanized_fill(self.page.locator(selector).first, value)
                 results[field_name] = True
                 if self.logger:
                     self.logger.info(

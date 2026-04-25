@@ -96,7 +96,7 @@ class WorkableHandler(GenericATSHandler):
             try:
                 el = self.page.query_selector(selector)
                 if el:
-                    self.page.fill(selector, value, timeout=3000)
+                    self.humanized_fill(self.page.locator(selector).first, value)
                     results[key] = True
                     if self.logger:
                         self.logger.info(f"Filled Workable '{key}'", phase=ExecutionPhase.RULES)
@@ -108,7 +108,7 @@ class WorkableHandler(GenericATSHandler):
         # Summary / cover letter
         if hasattr(self.resume, "summary") and self.resume.summary:
             try:
-                self.page.fill("textarea[name='summary']", self.resume.summary, timeout=3000)
+                self.humanized_fill(self.page.locator("textarea[name='summary']").first, self.resume.summary)
                 results["summary"] = True
             except Exception:
                 results["summary"] = False

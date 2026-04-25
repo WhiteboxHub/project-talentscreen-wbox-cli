@@ -99,7 +99,7 @@ class SmartRecruitersHandler(GenericATSHandler):
             if not value:
                 continue
             try:
-                self.page.fill(selector, value, timeout=3000)
+                self.humanized_fill(self.page.locator(selector).first, value)
                 results[key] = True
             except Exception as e:
                 if self.logger:

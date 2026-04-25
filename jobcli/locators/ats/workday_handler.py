@@ -1,8 +1,13 @@
 """Workday ATS handler."""
 
+import os
 import re
 from typing import Any, Optional, Union
 
+from jobcli.core.derived_profile import (
+    composite_location_string,
+    experience_narrative_for_forms,
+)
 from jobcli.core.resume_normalize import normalize_linkedin_url
 from jobcli.core.schemas import ApplicationState, ExecutionPhase, ResumeData
 from playwright.sync_api import Frame, Page
@@ -82,33 +87,130 @@ class WorkdayHandler(GenericATSHandler):
             pass
         return False
 
-    def _proceed_past_start_application_modal(self) -> bool:
-        """If Workday shows the entry modal after Apply, pick a path (prefer Apply Manually)."""
-        from jobcli.locators.overlay_dismiss import (
-            blocking_modal_dialog_visible,
-            dismiss_blocking_overlays,
-        )
+    def _workday_autofill_settle(self) -> None:
+        """Give Workday time to parse a resume and populate the form after Autofill.
 
+        Workday's PDF parser is slow — wait long enough for it to run and
+        populate fields before the rules-based fill pass runs on top.
+        """
         try:
-            self.page.wait_for_timeout(800)
+            # Primary wait: up to 8 s for Workday's parser to populate fields.
+            self.page.wait_for_timeout(8000)
+        except Exception:
+            pass
+        try:
+            self.page.wait_for_load_state("domcontentloaded", timeout=25000)
         except Exception:
             pass
 
-        if not self._start_application_modal_visible():
-            return False
+    def _try_click_autofill_with_resume_in_modal(self, resume_path: Optional[str] = None) -> bool:
+        """Click **Autofill with resume** and attach the PDF if Workday opens a file-chooser.
 
-        aria_modal = blocking_modal_dialog_visible(self.page, timeout_ms=400)
-        if self.logger:
-            self.logger.info(
-                "Blocking in-page modal detected (Workday application entry). "
-                "Form automation cannot proceed until this dialog is cleared — "
-                "attempting 'Apply Manually' (or Autofill fallback).",
-                phase=ExecutionPhase.RULES,
-                aria_modal_dialog=aria_modal,
+        Workday's "Autofill with Resume" button opens a file-chooser dialog so
+        the PDF can be sent to Workday's own parser.  Previously the code just
+        clicked the button and returned, so no file was ever selected — the
+        parser never ran, and the form was left blank.
+
+        Fix: wrap the click in Playwright's ``expect_file_chooser`` context
+        so the PDF is automatically submitted.  If no file-chooser appears
+        (some Workday tenants skip it when the candidate already has a resume
+        on file), we fall through as before.
+        """
+        resume_file = resume_path or getattr(self, "resume_path_for_workday_modal", None)
+
+        name_patterns = (
+            re.compile(r"autofill.*resume", re.I),
+            re.compile(r"^apply with resume$", re.I),
+            re.compile(r"use.*resume.*autofill", re.I),
+            re.compile(r"^import from resume$", re.I),
+            re.compile(r"^fill with resume$", re.I),
+        )
+
+        def _click_and_attach(click_fn) -> bool:
+            """Click via click_fn; intercept file-chooser if one appears."""
+            if resume_file and os.path.isfile(resume_file):
+                try:
+                    with self.page.expect_file_chooser(timeout=5000) as fc_info:
+                        click_fn()
+                    fc_info.value.set_files(resume_file)
+                    if self.logger:
+                        self.logger.info(
+                            "Workday: attached resume PDF to autofill file-chooser",
+                            phase=ExecutionPhase.RULES,
+                            path=resume_file,
+                        )
+                    return True
+                except Exception:
+                    # No file-chooser opened — fall through to plain click path.
+                    pass
+            # No resume file or no file-chooser: plain click already done via expect_file_chooser
+            # entering, or we need to do it without the context.
+            try:
+                click_fn()
+            except Exception:
+                pass
+            return True
+
+        for name_re in name_patterns:
+            try:
+                loc = self.page.get_by_role("button", name=name_re).first
+                if loc.is_visible(timeout=900):
+                    loc.scroll_into_view_if_needed()
+                    ok = _click_and_attach(lambda: loc.click(timeout=15000))
+                    if self.logger:
+                        self.logger.info(
+                            f"Workday: clicked start-modal control matching {name_re.pattern!r} "
+                            "(resume autofill)",
+                            phase=ExecutionPhase.RULES,
+                        )
+                    return ok
+            except Exception:
+                continue
+
+        for aid in (
+            "autofillWithResume",
+            "autofill-with-resume",
+            "candidateAutofill",
+            "applyWithResume",
+            "autofill",
+            "resumeAutofill",
+        ):
+            try:
+                loc = self.page.locator(f"[data-automation-id='{aid}']").first
+                if loc.is_visible(timeout=800):
+                    ok = _click_and_attach(lambda: loc.click(timeout=15000))
+                    if self.logger:
+                        self.logger.info(
+                            f"Workday: clicked data-automation-id='{aid}' (resume autofill entry)",
+                            phase=ExecutionPhase.RULES,
+                        )
+                    return ok
+            except Exception:
+                continue
+
+        try:
+            scoped = self.page.locator("[role='dialog']").filter(
+                has_text=re.compile(r"start your application|apply", re.I)
             )
+            for name_re in name_patterns:
+                try:
+                    b = scoped.get_by_role("button", name=name_re).first
+                    if b.is_visible(timeout=600):
+                        ok = _click_and_attach(lambda: b.click(timeout=15000))
+                        if self.logger:
+                            self.logger.info(
+                                "Workday: autofill in scoped dialog (resume path)",
+                                phase=ExecutionPhase.RULES,
+                            )
+                        return ok
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return False
 
-        dismiss_blocking_overlays(self.page, self.logger, phase=ExecutionPhase.RULES)
-
+    def _try_click_apply_manually_in_modal(self) -> bool:
+        """Click **Apply Manually** and wait for the form to load (blank start)."""
         try:
             scoped = self.page.locator("[role='dialog']").filter(
                 has_text=re.compile(r"start your application", re.I)
@@ -187,6 +289,68 @@ class WorkdayHandler(GenericATSHandler):
                 return True
         except Exception:
             pass
+        return False
+
+    def _proceed_past_start_application_modal(
+        self, resume_path: Optional[str] = None
+    ) -> bool:
+        """Clear Workday's post-Apply **Start your application** layer.
+
+        When ``resume_path`` points to a real file, we **prefer** *Autofill with
+        resume* so Workday's parser can populate fields; :meth:`fill_form` then
+        merges and corrects from the structured profile JSON. If that button
+        is missing, we use **Apply Manually** and rely on the upload + fill path.
+
+        If no resume file is available, we keep the previous order: **Apply
+        Manually** first, with autofill as a last-resort click.
+        """
+        from jobcli.locators.overlay_dismiss import (
+            blocking_modal_dialog_visible,
+            dismiss_blocking_overlays,
+        )
+
+        try:
+            self.page.wait_for_timeout(800)
+        except Exception:
+            pass
+
+        if not self._start_application_modal_visible():
+            return False
+
+        prefer_autofill = bool(resume_path and str(resume_path).strip() and os.path.isfile(resume_path))
+        aria_modal = blocking_modal_dialog_visible(self.page, timeout_ms=400)
+        if self.logger:
+            self.logger.info(
+                "Blocking in-page modal detected (Workday application entry). "
+                f"Resolving dialog — prefer_resume_autofill={prefer_autofill}.",
+                phase=ExecutionPhase.RULES,
+                aria_modal_dialog=aria_modal,
+            )
+
+        dismiss_blocking_overlays(self.page, self.logger, phase=ExecutionPhase.RULES)
+
+        if prefer_autofill and self._try_click_autofill_with_resume_in_modal(resume_path=resume_path):
+            self._workday_autofill_settle()
+            if not self._start_application_modal_visible():
+                return True
+            if self.logger:
+                self.logger.info(
+                    "Autofill was clicked; modal may still be visible (upload may be required) — "
+                    "continuing to Apply Manually or upload in fill_form.",
+                    phase=ExecutionPhase.RULES,
+                )
+
+        if self._try_click_apply_manually_in_modal():
+            return True
+
+        if not prefer_autofill and self._try_click_autofill_with_resume_in_modal(resume_path=resume_path):
+            self._workday_autofill_settle()
+            if self.logger:
+                self.logger.info(
+                    "Workday: used Autofill with resume as secondary option (no local resume path)",
+                    phase=ExecutionPhase.RULES,
+                )
+            return True
 
         for name_re in (
             re.compile(r"autofill with resume", re.I),
@@ -199,7 +363,7 @@ class WorkdayHandler(GenericATSHandler):
                     self.wait_for_page_load(timeout=20000)
                     if self.logger:
                         self.logger.info(
-                            "Clicked 'Autofill with Resume' in Workday start modal",
+                            "Clicked 'Autofill with Resume' in Workday start modal (last resort)",
                             phase=ExecutionPhase.RULES,
                         )
                     return True
@@ -307,7 +471,8 @@ class WorkdayHandler(GenericATSHandler):
                             selector=selector,
                         )
                     self.wait_for_page_load(timeout=10000)
-                    self._proceed_past_start_application_modal()
+                    rpf = getattr(self, "resume_path_for_workday_modal", None)
+                    self._proceed_past_start_application_modal(rpf)
                     return True
             except Exception as e:
                 if self.logger:
@@ -319,7 +484,8 @@ class WorkdayHandler(GenericATSHandler):
 
         parent_ok = super().find_apply_button()
         if parent_ok:
-            self._proceed_past_start_application_modal()
+            rpf = getattr(self, "resume_path_for_workday_modal", None)
+            self._proceed_past_start_application_modal(rpf)
         return parent_ok
 
     # ------------------------------------------------------------------
@@ -344,12 +510,22 @@ class WorkdayHandler(GenericATSHandler):
     # Form fill — platform-specific selectors + generic fallback
     # ------------------------------------------------------------------
     def fill_form(self, resume_path: Optional[str] = None) -> dict[str, Any]:
-        """Fill Workday application form."""
-        if self.logger:
-            self.logger.info("Filling Workday form", phase=ExecutionPhase.RULES)
+        """Fill Workday application form.
 
-        # Apply may have been triggered by LLM / generic path; clear entry modal first.
-        self._proceed_past_start_application_modal()
+        If the **Start your application** dialog was already cleared via
+        *Autofill with resume* at Apply time, the page may have partial
+        data from Workday's PDF parser. This pass **merges** your
+        structured :class:`ResumeData` (JSON) on top — filling empties
+        and aligning name, contact, experience, and education to your
+        source of truth. Upload + rules run even when autofill was used
+        (some fields still need correction).
+        """
+        if self.logger:
+            self.logger.info("Filling Workday form (merge profile JSON on top of any autofill)", phase=ExecutionPhase.RULES)
+
+        rpf = resume_path or getattr(self, "resume_path_for_workday_modal", None)
+        # Apply may have been triggered by LLM / generic path; clear entry modal if it reappears.
+        self._proceed_past_start_application_modal(rpf)
 
         results: dict[str, bool] = {}
         personal = self.resume.personal
@@ -371,6 +547,40 @@ class WorkdayHandler(GenericATSHandler):
             results[short_key] = self._fill_workday_input(
                 short_key, automation_id, value
             )
+
+        # Single-field "Location" (city, state, country) — many Workday
+        # flows use a typeahead instead of separate address line fields.
+        loc_composite = composite_location_string(self.resume)
+        if loc_composite:
+            for loc_key, loc_aid in (
+                ("location_composite", "location"),
+                ("location_composite", "workLocation"),
+                ("location_composite", "searchLocation"),
+                ("location_composite", "geolocation"),
+                ("location_composite", "locationSearch"),
+                ("location_composite", "locationGroup"),
+            ):
+                if self._fill_workday_input(loc_key, loc_aid, loc_composite):
+                    results["location"] = True
+                    break
+                if self._fill_workday_dropdown(loc_key, loc_aid, loc_composite):
+                    results["location"] = True
+                    break
+            if not results.get("location"):
+                for root in self._workday_fill_roots():
+                    try:
+                        le = root.get_by_label(
+                            re.compile(
+                                r"^location$|^search\s*location$|where\s*are\s*you",
+                                re.I,
+                            )
+                        ).last
+                        if le.is_visible(timeout=600):
+                            self.humanized_fill(le, loc_composite)
+                            results["location"] = True
+                            break
+                    except Exception:
+                        continue
 
         # State — often a dropdown in Workday
         if personal.state:
@@ -406,8 +616,13 @@ class WorkdayHandler(GenericATSHandler):
         if resume_path:
             results["resume"] = self._upload_resume_workday(resume_path)
 
-        # Work history (rules): first résumé job — Workday uses repeatable sections + Add
-        self._fill_workday_experience_first_entry(results)
+        # Work history / education / certs — Workday "My Experience" step
+        # shows only subsection titles (Work Experience, Education,
+        # Certifications) and a separate [Add] per block. We must click
+        # that Add before *each* row; see _workday_click_add_for_subsection.
+        self._fill_workday_all_experience_rows(results)
+        self._fill_workday_all_education_rows(results)
+        self._fill_workday_all_certification_rows(results)
 
         # Generic fallback for anything that failed
         results = self.generic_fill_failed_fields(results, resume_path=None)
@@ -420,8 +635,8 @@ class WorkdayHandler(GenericATSHandler):
             )
         return results
 
-    def _workday_try_click_add_in_experience_section(self) -> None:
-        """Reveal first work-history row when the section is empty (Workday 'Add' pattern)."""
+    def _workday_try_click_add_in_experience_section(self) -> bool:
+        """Best-effort: [Add] in the data-automation-id work experience block (legacy UIs)."""
         for root in self._workday_fill_roots():
             try:
                 section = root.locator(
@@ -431,72 +646,406 @@ class WorkdayHandler(GenericATSHandler):
                 ).first
                 if not section.is_visible(timeout=800):
                     continue
-                add = section.get_by_role("button", name=re.compile(r"^add$", re.I)).first
+                add = section.get_by_role("button", name=re.compile(r"^\+?\s*add\s*$", re.I)).first
                 if add.is_visible(timeout=600):
                     add.click(timeout=5000)
                     self.page.wait_for_timeout(700)
                     if self.logger:
                         self.logger.info(
-                            "Clicked Add in Workday work experience section",
+                            "Clicked Add in Workday work experience (automation-id) section",
                             phase=ExecutionPhase.RULES,
                         )
-                    return
+                    return True
             except Exception:
                 continue
+        return False
 
-    def _fill_workday_experience_first_entry(self, results: dict[str, Any]) -> None:
-        """Fill the first job from ``resume.experience`` using common Workday automation-ids."""
-        if not self.resume.experience:
-            return
-        ex = self.resume.experience[0]
+    def _workday_click_add_for_subsection(
+        self,
+        heading_re: re.Pattern,
+        log_label: str = "",
+    ) -> bool:
+        """Click the [Add] that belongs to a *named* block (e.g. Work Experience).
 
-        # Headings vary by tenant ("Work Experience", "My Experience", …)
+        The wizard step is often "My Experience", but the subsection title
+        is the distinct string "Work Experience" with its own Add. We
+        must not match the step name or we scope the wrong [Add] / none.
+
+        Strategy: find visible text for ``heading_re``, then either the
+        first ``following::button`` in document order, or a button
+        under a shallow ancestor, preferring a label of ``^Add$``/``+Add``.
+        """
+        label = log_label or (heading_re.pattern or "")
+
+        def _is_add(t: str) -> bool:
+            t = (t or "").strip()
+            if not t:
+                return False
+            return bool(re.match(r"^\+?\s*add(\s+|$)", t, re.I)) and "address" not in t.lower()
+
         for root in self._workday_fill_roots():
             try:
-                if root.get_by_text(
-                    re.compile(r"work experience|my experience|employment history", re.I)
-                ).first.is_visible(timeout=800):
-                    self._workday_try_click_add_in_experience_section()
-                    break
+                h = root.get_by_text(heading_re, exact=False).first
+                if not h.is_visible(timeout=1200):
+                    continue
             except Exception:
                 continue
 
-        # Common Workday candidate-field ids (first row / single row)
+            # 1) Next button in tree order (common when Add sits right under the title).
+            for xp in (
+                "xpath=following::button[1]",
+                "xpath=following::a[@role='button' or contains(@class,'button')][1]",
+            ):
+                try:
+                    btn = h.locator(xp).first
+                    if not btn.is_visible(timeout=500):
+                        continue
+                    t = (btn.text_content() or btn.inner_text() or "").strip()
+                    if not _is_add(t):
+                        continue
+                    btn.scroll_into_view_if_needed()
+                    btn.click(timeout=5000)
+                    self.page.wait_for_timeout(800)
+                    if self.logger:
+                        self.logger.info(
+                            f"Workday: clicked Add under {label!r} (via following axis)",
+                            phase=ExecutionPhase.RULES,
+                        )
+                    return True
+                except Exception:
+                    continue
+
+            # 2) Walk a few div ancestors: smallest container with one Add.
+            for up in (1, 2, 3, 4, 5, 6, 7, 8):
+                try:
+                    box = h.locator(f"xpath=ancestor::div[{up}]").first
+                    if not box.is_visible(timeout=200):
+                        continue
+                    add = box.get_by_role(
+                        "button", name=re.compile(r"^\+?\s*add\s*$", re.I)
+                    ).first
+                    if not add.is_visible(timeout=400):
+                        add = box.locator("a[role='button']", has_text=re.compile(r"^\+?\s*add\s*$", re.I)).first
+                    if add.is_visible(timeout=500):
+                        add.scroll_into_view_if_needed()
+                        add.click(timeout=5000)
+                        self.page.wait_for_timeout(800)
+                        if self.logger:
+                            self.logger.info(
+                                f"Workday: clicked Add under {label!r} (via ancestor {up})",
+                                phase=ExecutionPhase.RULES,
+                            )
+                        return True
+                except Exception:
+                    continue
+
+        # 3) Legacy automation-id cluster (some tenants)
+        if "work" in (heading_re.pattern or "").lower() or "experience" in (
+            heading_re.pattern or ""
+        ).lower():
+            if self._workday_try_click_add_in_experience_section():
+                return True
+
+        if self.logger:
+            self.logger.warning(
+                f"Workday: could not find [Add] for subsection {label!r}",
+                phase=ExecutionPhase.RULES,
+            )
+        return False
+
+    def _workday_experience_pairs(
+        self, ex: Any, short_key_prefix: str
+    ) -> list[tuple[str, str, str]]:
+        """Build (results_key, automation_id, value) for one job — no description.
+
+        Long description is filled once via :meth:`_workday_fill_experience_narrative`
+        so we do not write the same paragraph into six different boxes.
+        """
         pairs: list[tuple[str, str, str]] = []
         if ex.title:
             pairs.extend(
                 [
-                    ("experience_jobTitle", "jobTitle", ex.title),
-                    ("experience_positionTitle", "positionTitle", ex.title),
+                    (f"{short_key_prefix}_jobTitle", "jobTitle", ex.title),
+                    (f"{short_key_prefix}_positionTitle", "positionTitle", ex.title),
                 ]
             )
         if ex.company:
             pairs.extend(
                 [
-                    ("experience_companyName", "companyName", ex.company),
-                    ("experience_company", "company", ex.company),
+                    (f"{short_key_prefix}_companyName", "companyName", ex.company),
+                    (f"{short_key_prefix}_company", "company", ex.company),
                 ]
             )
         if ex.start_date:
-            pairs.append(("experience_start", "startDate", ex.start_date))
-        if ex.end_date:
-            pairs.append(("experience_end", "endDate", ex.end_date))
-        if ex.description:
-            desc = (ex.description or "").strip()[:8000]
-            if desc:
-                pairs.extend(
-                    [
-                        ("experience_jobDescription", "jobDescription", desc),
-                        ("experience_description", "description", desc),
-                        ("experience_roles", "rolesAndResponsibilities", desc),
-                    ]
-                )
+            pairs.append((f"{short_key_prefix}_start", "startDate", ex.start_date))
+        if getattr(ex, "current", False):
+            pairs.append((f"{short_key_prefix}_end", "endDate", "Present"))
+        elif ex.end_date:
+            pairs.append((f"{short_key_prefix}_end", "endDate", ex.end_date))
+        return pairs
 
-        for short_key, aid, val in pairs:
-            if not val:
+    def _workday_fill_experience_narrative(
+        self, pfx: str, ex: Any, results: dict[str, Any]
+    ) -> None:
+        """One narrative block for job description / responsibilities (resume-aware)."""
+        text = experience_narrative_for_forms(self.resume, ex)
+        if not (text and str(text).strip()):
+            return
+        for aid in (
+            "jobDescription",
+            "description",
+            "rolesAndResponsibilities",
+            "summaryText",
+            "responsibility",
+            "responsibilityQualifications",
+            "comments",
+            "highlights",
+        ):
+            sk = f"{pfx}_narrative_{aid}"
+            if self._workday_rich_text(sk, aid, text):
+                results[f"{pfx}_narrative"] = True
+                return
+        for pat in (
+            r"Description|Responsibilit|Duties|Summary|role\s*description|Key\s*accomplishment",
+        ):
+            for root in self._workday_fill_roots():
+                try:
+                    loc = root.get_by_label(re.compile(pat, re.I)).last
+                    if loc.is_visible(timeout=600):
+                        self.humanized_fill(loc, text)
+                        if self.logger:
+                            self.logger.info(
+                                f"Workday: filled {pfx!r} narrative via label {pat!r}",
+                                phase=ExecutionPhase.RULES,
+                            )
+                        results[f"{pfx}_narrative"] = True
+                        return
+                except Exception:
+                    continue
+
+    def _workday_rich_text(self, short_key: str, automation_id: str, value: str) -> bool:
+        """Fill input, textarea, or contenteditable under a Workday field id."""
+        if self._fill_workday_input(short_key, automation_id, value):
+            return True
+        for root in self._workday_fill_roots():
+            for tag in ("textarea", "div[contenteditable='true']"):
+                for sel in (
+                    f"[data-automation-id='{automation_id}'] {tag}",
+                    f"[data-automation-id*='{automation_id}'] {tag}",
+                ):
+                    try:
+                        loc = root.locator(sel).first
+                        if loc.count() == 0:
+                            continue
+                        if not loc.is_visible(timeout=500):
+                            continue
+                        self.humanized_fill(loc, value)
+                        if self.logger:
+                            self.logger.info(
+                                f"Workday: filled rich text {short_key!r} ({sel[:80]})",
+                                phase=ExecutionPhase.RULES,
+                            )
+                        return True
+                    except Exception:
+                        continue
+        return False
+
+    def _fill_workday_all_experience_rows(self, results: dict[str, Any]) -> None:
+        """For each job: click [Add] under **Work Experience**, then fill by automation-ids."""
+        for idx, ex in enumerate(self.resume.experience or []):
+            heading = re.compile(
+                r"^Work Experience$|Work\s+Experience|Employment\s+History|Professional\s+Experience",
+                re.I,
+            )
+            if not self._workday_click_add_for_subsection(heading, "Work Experience"):
+                if self.logger and idx == 0:
+                    self.logger.warning(
+                        "Workday: [Add] for work experience not clicked; "
+                        "automation-id fallbacks on next fill may all fail",
+                        phase=ExecutionPhase.RULES,
+                    )
+
+            pfx = "experience" if idx == 0 else f"experience_{idx + 1}"
+            for short_key, aid, val in self._workday_experience_pairs(ex, pfx):
+                if not val:
+                    continue
+                if self._fill_workday_input(short_key, aid, val):
+                    results[short_key] = True
+            self._workday_fill_experience_narrative(pfx, ex, results)
+
+    def _workday_fill_education_field(
+        self,
+        short_key: str,
+        aid: str,
+        sval: str,
+        label_regexes: list[str],
+    ) -> bool:
+        """Degree / major are often *comboboxes* in Workday, not ``<input>``."""
+        if self._fill_workday_input(short_key, aid, sval):
+            return True
+        if self._fill_workday_dropdown(short_key, aid, sval):
+            if self.logger:
+                self.logger.info(
+                    f"Workday: education field {short_key!r} set via dropdown (id={aid})",
+                    phase=ExecutionPhase.RULES,
+                )
+            return True
+        for rx in label_regexes:
+            for root in self._workday_fill_roots():
+                try:
+                    loc = root.get_by_label(re.compile(rx, re.I)).last
+                    if loc.is_visible(timeout=500):
+                        self.humanized_fill(loc, sval)
+                        if self.logger:
+                            self.logger.info(
+                                f"Workday: filled {short_key!r} via label {rx!r}",
+                                phase=ExecutionPhase.RULES,
+                            )
+                        return True
+                except Exception:
+                    continue
+        return False
+
+    def _fill_workday_all_education_rows(self, results: dict[str, Any]) -> None:
+        """For each school: [Add] under **Education** then field labels + common automation-ids."""
+        for idx, ed in enumerate(self.resume.education or []):
+            hpat = re.compile(
+                r"^Education$|Education\s+History|Academic\s+Background|Schooling",
+                re.I,
+            )
+            self._workday_click_add_for_subsection(hpat, "Education")
+            pfx = "education" if idx == 0 else f"education_{idx + 1}"
+            school_ok = degree_ok = field_ok = gpa_ok = year_ok = False
+            for short_key, aid, val, label_regexes in self._workday_education_tuples(ed, pfx):
+                if val is None or (isinstance(val, str) and not str(val).strip()):
+                    continue
+                sval = str(val) if not isinstance(val, str) else val
+                if "_school_" in short_key and school_ok:
+                    continue
+                if "_degree_" in short_key and degree_ok:
+                    continue
+                if "_field_" in short_key and field_ok:
+                    continue
+                if "_gpa_" in short_key and gpa_ok:
+                    continue
+                if "_year_" in short_key and year_ok:
+                    continue
+                if self._workday_fill_education_field(
+                    short_key, aid, sval, list(label_regexes)
+                ):
+                    results[short_key] = True
+                    if "_school_" in short_key:
+                        school_ok = True
+                    if "_degree_" in short_key:
+                        degree_ok = True
+                    if "_field_" in short_key:
+                        field_ok = True
+                    if "_gpa_" in short_key:
+                        gpa_ok = True
+                    if "_year_" in short_key:
+                        year_ok = True
+
+    @staticmethod
+    def _workday_education_tuples(
+        ed: Any, pfx: str
+    ) -> list[tuple[str, str, str, list[str]]]:
+        """(short_key, auto_id, value, fallback label regexes)."""
+        from jobcli.locators.repeating_sections import EDUCATION_FIELD_LABELS
+
+        out: list[tuple[str, str, str, list[str]]] = []
+        if ed.school:
+            pats = EDUCATION_FIELD_LABELS["school"]
+            for aid in ("schoolName", "school", "university", "institution"):
+                out.append((f"{pfx}_school_{aid}", aid, ed.school, pats))
+        if ed.degree:
+            pats = EDUCATION_FIELD_LABELS["degree"]
+            for aid in (
+                "degree",
+                "degreeName",
+                "educationalDegree",
+                "educational-degree",
+                "academicDegree",
+                "academicLevel",
+                "qualification",
+                "programOfStudy",
+                "degreeNameVisible",
+            ):
+                out.append((f"{pfx}_degree_{aid}", aid, ed.degree, pats))
+        if ed.field_of_study:
+            pats = EDUCATION_FIELD_LABELS["field_of_study"]
+            for aid in ("fieldOfStudy", "major", "majorName", "concentration"):
+                out.append((f"{pfx}_field_{aid}", aid, ed.field_of_study, pats))
+        if ed.gpa is not None:
+            pats = EDUCATION_FIELD_LABELS.get("gpa", [r"^gpa$", r"grade"])
+            for aid in ("gpa", "gradePointAverage", "cumulativeGPA"):
+                out.append((f"{pfx}_gpa_{aid}", aid, str(ed.gpa), pats))
+        if ed.graduation_year is not None:
+            pats = EDUCATION_FIELD_LABELS["graduation_year"]
+            y = str(ed.graduation_year)
+            for aid in ("graduationYear", "endDate", "year", "endYear", "yearOfGraduation"):
+                out.append((f"{pfx}_year_{aid}", aid, y, pats))
+        return out
+
+    def _fill_workday_all_certification_rows(self, results: dict[str, Any]) -> None:
+        """For each resume certification string: [Add] under **Certification(s)** and type it.
+
+        If ``resume.certifications`` is empty, we do **nothing** — no Add
+        clicks, no text — so the generic/LLM layers are less likely to
+        invent a certification that is not in the profile JSON.
+        """
+        raw = self.resume.certifications or []
+        certs = [c.strip() for c in raw if c and str(c).strip()]
+        if not certs:
+            return
+
+        for idx, c in enumerate(certs):
+            hpat = re.compile(
+                r"^Certification(s)?$|Certifications|Professional\s+Certification",
+                re.I,
+            )
+            if not self._workday_click_add_for_subsection(hpat, "Certifications"):
+                if self.logger:
+                    self.logger.warning(
+                        f"Workday: could not click Add for certification row {idx + 1}",
+                        phase=ExecutionPhase.RULES,
+                    )
+            self.page.wait_for_timeout(800)
+            filled = False
+            for short_key, aid, val in [
+                (f"cert_name_{idx}", "certificationName", c),
+                (f"cert_name_{idx}", "certification", c),
+                (f"cert_name_{idx}", "certificationDescription", c),
+            ]:
+                if self._fill_workday_input(short_key, aid, val):
+                    results[short_key] = True
+                    filled = True
+                    break
+            if filled:
+                results[f"cert_{idx}"] = True
                 continue
-            if self._fill_workday_input(short_key, aid, val):
-                results[short_key] = True
+            for root in self._workday_fill_roots():
+                for rx in (
+                    r"certification\s*name",
+                    r"name\s*of\s*certification",
+                    r"^license(\s*name)?$",
+                    r"certificate(\s*name)?",
+                ):
+                    try:
+                        loc = root.get_by_label(re.compile(rx, re.I)).last
+                        if loc.is_visible(timeout=500):
+                            self.humanized_fill(loc, c)
+                            results[f"cert_{idx}"] = True
+                            filled = True
+                            if self.logger:
+                                self.logger.info(
+                                    f"Workday: certification {idx + 1} via label {rx!r}",
+                                    phase=ExecutionPhase.RULES,
+                                )
+                            break
+                    except Exception:
+                        continue
+                if filled:
+                    break
 
     def _fill_workday_input(
         self, short_key: str, automation_id: str, value: str
@@ -520,7 +1069,7 @@ class WorkdayHandler(GenericATSHandler):
                         continue
                     if not loc.is_visible(timeout=900):
                         continue
-                    loc.fill(value, timeout=5000)
+                    self.humanized_fill(loc, value)
                     if self.logger:
                         self.logger.info(
                             f"Filled Workday '{short_key}'",
@@ -698,7 +1247,8 @@ class WorkdayHandler(GenericATSHandler):
                 phase=ExecutionPhase.RULES,
             )
 
-        if self._proceed_past_start_application_modal():
+        rpf = getattr(self, "resume_path_for_workday_modal", None)
+        if self._proceed_past_start_application_modal(rpf):
             return True
 
         for root in self._workday_fill_roots():

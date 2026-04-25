@@ -94,7 +94,7 @@ class TaleoHandler(GenericATSHandler):
             try:
                 el = self.page.query_selector(selector)
                 if el:
-                    self.page.fill(selector, value, timeout=3000)
+                    self.humanized_fill(self.page.locator(selector).first, value)
                     results[key] = True
                     if self.logger:
                         self.logger.info(f"Filled Taleo '{key}'", phase=ExecutionPhase.RULES, selector=selector)

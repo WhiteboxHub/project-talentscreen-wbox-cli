@@ -1,3 +1,4 @@
+from jobcli.core.human_interaction import humanized_fill
 """Rule-based locators for form fields with confidence scoring.
 
 Ported intelligence from genericStrategy.js (Chrome extension):
@@ -442,7 +443,7 @@ class FormFieldLocator:
         if result:
             selector, confidence = result
             try:
-                self.page.fill(selector, value, timeout=3000)
+                humanized_fill(self.page, self.page.locator(selector).first, value)
                 if self.logger:
                     self.logger.info(
                         f"Filled '{field_key}' via confidence scoring ({confidence})",
@@ -575,7 +576,7 @@ class FormFieldLocator:
             selector = self.find_field_by_label(labels, "textarea")
         if selector:
             try:
-                self.page.fill(selector, value, timeout=3000)
+                humanized_fill(self.page, self.page.locator(selector).first, value)
                 if self.logger:
                     self.logger.info(
                         f"Filled field: {labels[0]}",
@@ -698,7 +699,7 @@ class FormFiller:
                     continue  # Don't overwrite 
                 
                 try:
-                    self.page.fill(selector, value, timeout=3000)
+                    humanized_fill(self.page, self.page.locator(selector).first, value)
                     used_selectors.add(selector)
                     results[short_key] = True
                 except Exception:

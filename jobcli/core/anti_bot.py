@@ -109,6 +109,14 @@ class AntiBotManager:
         "iframe[title*='security check' i]",
         # Turnstile form input appears only when interactive challenge shows.
         "input[name='cf-turnstile-response']:not([value=''])",
+        # GeeTest CAPTCHA — drag-the-icon / slide-puzzle used by Lever,
+        # some Workday tenants, and Chinese-market ATS platforms.
+        ".geetest_panel_box",
+        ".geetest_widget",
+        ".geetest_holder",
+        ".geetest_popup_wrap",
+        "div[class*='geetest'][class*='panel']",
+        "div[class*='geetest'][class*='box']",
     ]
 
     #: Page text indicators for bot / human-verification interstitials.
@@ -135,6 +143,20 @@ class AntiBotManager:
         "ddos protection by cloudflare",
         "performance & security by cloudflare",
         "attention required! cloudflare",
+    ]
+
+    #: Extremely specific CAPTCHA phrases (like puzzle instructions)
+    #: that have virtually zero chance of being false positives in normal
+    #: ATS content. These are checked regardless of page body size, which
+    #: is required for in-page overlays like GeeTest on long Lever forms.
+    HIGH_SIGNAL_CHALLENGE_PATTERNS = [
+        "please drag the icon",
+        "drag the icon on the left",
+        "slide to verify",
+        "drag the slider",
+        "choose everything that you can see in the sample",
+        "select all images with",
+        "please click each image containing",
     ]
 
     def detect_captcha(self, page: Page) -> bool:
@@ -200,16 +222,38 @@ class AntiBotManager:
             except Exception:
                 pass
 
-            # Body-text check (small pages only — challenges are usually
-            # interstitial with very little content).
+            # Body-text check (scan all frames since CAPTCHAs use iframes)
             try:
-                body = (page.text_content("body") or "").strip().lower()
-                if 0 < len(body) < 4000:
+                frame_texts = []
+                for frame in page.frames:
+                    try:
+                        frame_texts.append((frame.text_content("body", timeout=500) or "").strip().lower())
+                    except Exception:
+                        pass
+                
+                body = " ".join(frame_texts)
+                if not body.strip():
+                    return False
+                
+                # Check high-signal (unmistakable) phrases regardless of page size
+                # because in-page CAPTCHA modals load on top of the full form.
+                for pattern in self.HIGH_SIGNAL_CHALLENGE_PATTERNS:
+                    if pattern in body:
+                        if self.logger:
+                            self.logger.warning(
+                                f"High-signal CAPTCHA text detected: '{pattern}'"
+                            )
+                        return True
+
+                # For generic terms (verify human, etc.), only check if the
+                # page is small (interstitial challenge page) to prevent
+                # false positives against privacy policy legalese.
+                if len(body) < 4000:
                     for pattern in self.CHALLENGE_TEXT_PATTERNS:
                         if pattern in body:
                             if self.logger:
                                 self.logger.warning(
-                                    f"CAPTCHA/verification text detected: '{pattern}'"
+                                    f"CAPTCHA interstitial text detected: '{pattern}'"
                                 )
                             return True
             except Exception:

@@ -104,6 +104,7 @@ class GenericATSHandler(BaseATSHandler):
             "[data-automation-id='applyNowButton']",
             "[data-automation-id='applyButton']",
             ".apply-button",
+            ".apply-now-button",
             "#apply-button",
             "[class*='apply'][class*='btn']",
             "[class*='apply-btn']",
@@ -111,33 +112,36 @@ class GenericATSHandler(BaseATSHandler):
             "button[type='submit']",
         ]
 
-        for selector in selectors:
-            for attempt in range(2):
-                try:
-                    element = self.page.query_selector(selector)
-                    if element and element.is_visible():
-                        element.click(timeout=3000)
-                        if self.logger:
-                            self.logger.info(
-                                "Clicked apply button (generic)",
-                                phase=ExecutionPhase.RULES,
-                                selector=selector,
+        for pass_count in range(3):
+            for selector in selectors:
+                for attempt in range(2):
+                    try:
+                        element = self.page.query_selector(selector)
+                        if element and element.is_visible():
+                            element.click(timeout=3000)
+                            if self.logger:
+                                self.logger.info(
+                                    "Clicked apply button (generic)",
+                                    phase=ExecutionPhase.RULES,
+                                    selector=selector,
+                                )
+                            self.wait_for_page_load()
+                            return True
+                    except Exception as e:
+                        err = str(e).lower()
+                        if attempt == 0 and "intercepts pointer" in err:
+                            dismiss_blocking_overlays(
+                                self.page, self.logger, phase=ExecutionPhase.RULES
                             )
-                        self.wait_for_page_load()
-                        return True
-                except Exception as e:
-                    err = str(e).lower()
-                    if attempt == 0 and "intercepts pointer" in err:
-                        dismiss_blocking_overlays(
-                            self.page, self.logger, phase=ExecutionPhase.RULES
-                        )
-                        continue
-                    if self.logger:
-                        self.logger.warning(
-                            f"Apply button selector failed '{selector}': {e}",
-                            phase=ExecutionPhase.RULES,
-                        )
-                    break
+                            continue
+                        if self.logger:
+                            self.logger.warning(
+                                f"Apply button selector failed '{selector}': {e}",
+                                phase=ExecutionPhase.RULES,
+                            )
+                        break
+            if pass_count < 2:
+                self.page.wait_for_timeout(2000)
 
         if self.logger:
             self.logger.warning(
@@ -181,6 +185,11 @@ class GenericATSHandler(BaseATSHandler):
         filler = self._get_filler()
         results = filler.fill_all(resume_path)
 
+        # Fill repeating sections (Work Experience, Education) via the
+        # shared ATS-agnostic filler.  This is best-effort — if the page
+        # doesn't contain those sections it's a silent no-op.
+        self._fill_generic_repeating_sections(results)
+
         filled = sum(1 for v in results.get("personal_info", {}).values() if v)
         total = len(results.get("personal_info", {}))
         if self.logger:
@@ -189,6 +198,69 @@ class GenericATSHandler(BaseATSHandler):
                 phase=ExecutionPhase.RULES,
             )
         return results
+
+    def _fill_generic_repeating_sections(self, results: dict[str, Any]) -> None:
+        """Attempt repeating Work Experience + Education fills on the page.
+
+        Runs AFTER the heuristic personal-info fill so we don't conflict
+        with any top-level inline "Work Experience" row the heuristic
+        engine already typed into.  Exceptions are swallowed because
+        this is a best-effort enrichment pass.
+        """
+        try:
+            from jobcli.locators.repeating_sections import (
+                EDUCATION_FIELD_LABELS,
+                EDUCATION_SECTION_HEADINGS,
+                EXPERIENCE_FIELD_LABELS,
+                EXPERIENCE_SECTION_HEADINGS,
+                RepeatingSectionFiller,
+                education_entries_from_resume,
+                experience_entries_from_resume,
+            )
+        except Exception:
+            return
+
+        experience_entries = experience_entries_from_resume(self.resume)
+        if experience_entries:
+            try:
+                filler = RepeatingSectionFiller(
+                    roots=[self.page],
+                    section_name="work experience",
+                    section_heading_patterns=EXPERIENCE_SECTION_HEADINGS,
+                    logger=self.logger,
+                )
+                exp_res = filler.fill_entries(
+                    experience_entries, EXPERIENCE_FIELD_LABELS
+                )
+                if exp_res.filled_entries > 0:
+                    results["work_experience"] = True
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(
+                        f"Generic work-experience fill failed: {e}",
+                        phase=ExecutionPhase.RULES,
+                    )
+
+        education_entries = education_entries_from_resume(self.resume)
+        if education_entries:
+            try:
+                filler = RepeatingSectionFiller(
+                    roots=[self.page],
+                    section_name="education",
+                    section_heading_patterns=EDUCATION_SECTION_HEADINGS,
+                    logger=self.logger,
+                )
+                edu_res = filler.fill_entries(
+                    education_entries, EDUCATION_FIELD_LABELS
+                )
+                if edu_res.filled_entries > 0:
+                    results["education"] = True
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(
+                        f"Generic education fill failed: {e}",
+                        phase=ExecutionPhase.RULES,
+                    )
 
     def submit_application(self) -> bool:
         """Generic submit button detection."""
@@ -213,33 +285,36 @@ class GenericATSHandler(BaseATSHandler):
             "button:has-text('Apply')",
         ]
 
-        for selector in submit_selectors:
-            for attempt in range(2):
-                try:
-                    element = self.page.query_selector(selector)
-                    if element and element.is_visible() and not element.is_disabled():
-                        element.click(timeout=3000)
-                        if self.logger:
-                            self.logger.info(
-                                "Clicked submit button (generic)",
-                                phase=ExecutionPhase.RULES,
-                                selector=selector,
+        for pass_count in range(3):
+            for selector in submit_selectors:
+                for attempt in range(2):
+                    try:
+                        element = self.page.query_selector(selector)
+                        if element and element.is_visible() and not element.is_disabled():
+                            element.click(timeout=3000)
+                            if self.logger:
+                                self.logger.info(
+                                    "Clicked submit button (generic)",
+                                    phase=ExecutionPhase.RULES,
+                                    selector=selector,
+                                )
+                            self.wait_for_page_load()
+                            return True
+                    except Exception as e:
+                        err = str(e).lower()
+                        if attempt == 0 and "intercepts pointer" in err:
+                            dismiss_blocking_overlays(
+                                self.page, self.logger, phase=ExecutionPhase.RULES
                             )
-                        self.wait_for_page_load()
-                        return True
-                except Exception as e:
-                    err = str(e).lower()
-                    if attempt == 0 and "intercepts pointer" in err:
-                        dismiss_blocking_overlays(
-                            self.page, self.logger, phase=ExecutionPhase.RULES
-                        )
-                        continue
-                    if self.logger:
-                        self.logger.warning(
-                            f"Submit selector failed '{selector}': {e}",
-                            phase=ExecutionPhase.RULES,
-                        )
-                    break
+                            continue
+                        if self.logger:
+                            self.logger.warning(
+                                f"Submit selector failed '{selector}': {e}",
+                                phase=ExecutionPhase.RULES,
+                            )
+                        break
+            if pass_count < 2:
+                self.page.wait_for_timeout(2000)
 
         if self.logger:
             self.logger.warning(
@@ -300,32 +375,35 @@ class GenericATSHandler(BaseATSHandler):
             ".btn-next",
             "[data-automation-id='bottom-navigation-next-button']",
         ]
-        for selector in next_selectors:
-            for attempt in range(2):
-                try:
-                    element = self.page.query_selector(selector)
-                    if element and element.is_visible() and not element.is_disabled():
-                        element.click(timeout=3000)
-                        self.wait_for_page_load()
-                        if self.logger:
-                            self.logger.info(
-                                "Clicked Next/Continue (generic)",
-                                phase=ExecutionPhase.RULES,
-                                selector=selector,
+        for pass_count in range(2):
+            for selector in next_selectors:
+                for attempt in range(2):
+                    try:
+                        element = self.page.query_selector(selector)
+                        if element and element.is_visible() and not element.is_disabled():
+                            element.click(timeout=3000)
+                            self.wait_for_page_load()
+                            if self.logger:
+                                self.logger.info(
+                                    "Clicked Next/Continue (generic)",
+                                    phase=ExecutionPhase.RULES,
+                                    selector=selector,
+                                )
+                            return True
+                    except Exception as e:
+                        err = str(e).lower()
+                        if attempt == 0 and "intercepts pointer" in err:
+                            dismiss_blocking_overlays(
+                                self.page, self.logger, phase=ExecutionPhase.RULES
                             )
-                        return True
-                except Exception as e:
-                    err = str(e).lower()
-                    if attempt == 0 and "intercepts pointer" in err:
-                        dismiss_blocking_overlays(
-                            self.page, self.logger, phase=ExecutionPhase.RULES
-                        )
-                        continue
-                    if self.logger:
-                        self.logger.warning(
-                            f"Next selector failed '{selector}': {e}",
-                            phase=ExecutionPhase.RULES,
-                        )
-                    break
+                            continue
+                        if self.logger:
+                            self.logger.warning(
+                                f"Next selector failed '{selector}': {e}",
+                                phase=ExecutionPhase.RULES,
+                            )
+                        break
+            if pass_count < 1:
+                self.page.wait_for_timeout(2000)
 
         return False

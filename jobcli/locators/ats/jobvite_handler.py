@@ -113,7 +113,7 @@ class JobviteHandler(GenericATSHandler):
                 try:
                     el = self.page.query_selector(selector)
                     if el:
-                        self.page.fill(selector, value, timeout=3000)
+                        self.humanized_fill(self.page.locator(selector).first, value)
                         filled = True
                         break
                 except Exception:

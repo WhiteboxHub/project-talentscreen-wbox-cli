@@ -97,7 +97,7 @@ class AshbyHandler(GenericATSHandler):
             try:
                 el = self.page.query_selector(selector)
                 if el:
-                    self.page.fill(selector, value, timeout=3000)
+                    self.humanized_fill(self.page.locator(selector).first, value)
                     results[key] = True
             except Exception as e:
                 if self.logger:

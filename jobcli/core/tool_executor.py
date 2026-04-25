@@ -8,6 +8,7 @@ from playwright.sync_api import FrameLocator, Page
 
 from jobcli.core.logger import JobLogger
 from jobcli.core.schemas import (
+    ATSType,
     ActionType,
     BrowserAction,
     ExecutionPhase,
@@ -213,7 +214,14 @@ class ToolExecutor:
         self._warmup_page_if_needed()
 
         for i, action in enumerate(llm_response.actions):
-            if action.confidence < 0.7:
+            # Navigation and uploads must never be dropped on confidence alone —
+            # the LLM often under-scores a lone "Continue" / "Next" CLICK; skipping
+            # it leaves the user on step 1 while the engine thinks the page is
+            # complete and proceeds to submit (Workday multi-step bug).
+            if action.confidence < 0.7 and action.action not in (
+                ActionType.CLICK,
+                ActionType.UPLOAD,
+            ):
                 results[f"action_{i}"] = False
                 continue
 
@@ -352,11 +360,104 @@ class ToolExecutor:
         except Exception:
             pass
 
+    def _is_workday_ats(self) -> bool:
+        t = self.ats_type
+        if t is None:
+            return False
+        if t == ATSType.WORKDAY:
+            return True
+        if isinstance(t, str) and t.strip().lower() == "workday":
+            return True
+        return False
+
+    def _click_label_variants(self, name: str) -> List[str]:
+        """LLMs often say 'Continue Button' but a11y name is 'Continue' — try both."""
+        raw = (name or "").strip()
+        if not raw:
+            return []
+        stripped = re.sub(r"\s+button\s*$", "", raw, flags=re.I).strip() or raw
+        out: List[str] = []
+        for c in (stripped, raw):
+            if c and c not in out:
+                out.append(c)
+        return out
+
+    def _try_wizard_advance_click(self, action: BrowserAction, name: str) -> bool:
+        """Workday/ATS wizard: bottom nav and regex button names the generic path misses."""
+        n = (name or "").lower()
+        nav_like = bool(
+            re.search(
+                r"\b(continue|next|proceed|save\s+and\s+continue|save\s*&\s*continue)\b",
+                n,
+            )
+        )
+        if not nav_like and not self._is_workday_ats():
+            return False
+        roots = self._get_active_content_roots()
+        sels = (
+            "[data-automation-id='bottom-navigation-next-button']",
+            "[data-automation-id*='bottom-navigation-next']",
+            "button:has-text('Save and continue')",
+            "button:has-text('Save and Continue')",
+        )
+        for root in roots:
+            for sel in sels:
+                try:
+                    loc = root.locator(sel).first
+                    if not loc.count():
+                        continue
+                    if not loc.is_visible(timeout=1500):
+                        continue
+                    try:
+                        if loc.is_disabled():
+                            continue
+                    except Exception:
+                        pass
+                    loc.highlight()
+                    loc.click(timeout=action.timeout)
+                    if self.logger:
+                        self.logger.info(
+                            f"Click wizard advance via selector: {sel!r}",
+                            phase=ExecutionPhase.LLM,
+                        )
+                    return True
+                except Exception:
+                    continue
+        # Loose accessible-name match (handles 'Continue' when LLM said 'Continue Button')
+        try:
+            nav_re = re.compile(
+                r"^(continue|next|proceed|save and continue|save & continue)\s*$",
+                re.I,
+            )
+        except Exception:
+            nav_re = re.compile(r"continue|next", re.I)
+        for root in roots:
+            try:
+                b = root.get_by_role("button", name=nav_re).first
+                if b.is_visible(timeout=1200):
+                    try:
+                        if b.is_disabled():
+                            continue
+                    except Exception:
+                        pass
+                    b.highlight()
+                    b.click(timeout=action.timeout)
+                    if self.logger:
+                        self.logger.info(
+                            "Click wizard advance via button role (regex name)",
+                            phase=ExecutionPhase.LLM,
+                        )
+                    return True
+            except Exception:
+                continue
+        return False
+
     def _execute_click(self, action: BrowserAction) -> bool:
         # Use field_label when the raw selector is just the answer ("Yes"/"No")
         # — otherwise the ATS handler searches for a fieldset containing "Yes"
         # and never finds the right question.
         name = self._question_for(action)
+        name_candidates = self._click_label_variants(name) or [name]
         selector_type = action.selector_type
 
         # SAFETY: Block clicks on upload areas
@@ -426,23 +527,56 @@ class ToolExecutor:
 
         # Try semantic selectors across all roots
         for root in roots:
-            attempts = [
-                ("role button", lambda r=root: r.get_by_role("button", name=name, exact=False).first),
-                ("role link", lambda r=root: r.get_by_role("link", name=name, exact=False).first),
-                ("label", lambda r=root: r.get_by_label(name, exact=False).first),
-                ("text", lambda r=root: r.get_by_text(name, exact=False).first),
-                ("aria-labelledby", lambda r=root: r.locator(f"[aria-labelledby*='{name}']").first),
-            ]
-            for label, get_loc in attempts:
-                try:
-                    loc = get_loc()
-                    if loc.is_visible(timeout=1000):
-                        loc.highlight()
-                        loc.click(timeout=action.timeout)
-                        if self.logger: self.logger.info(f"Click executed via {label} in frame", phase=ExecutionPhase.LLM)
-                        return True
-                except Exception: continue
+            for sem_name in name_candidates:
+                attempts = [
+                    (
+                        "role button",
+                        lambda r=root, n=sem_name: r.get_by_role(
+                            "button", name=n, exact=False
+                        ).first,
+                    ),
+                    (
+                        "role link",
+                        lambda r=root, n=sem_name: r.get_by_role(
+                            "link", name=n, exact=False
+                        ).first,
+                    ),
+                    (
+                        "label",
+                        lambda r=root, n=sem_name: r.get_by_label(
+                            n, exact=False
+                        ).first,
+                    ),
+                    (
+                        "text",
+                        lambda r=root, n=sem_name: r.get_by_text(
+                            n, exact=False
+                        ).first,
+                    ),
+                    (
+                        "aria-labelledby",
+                        lambda r=root, n=sem_name: r.locator(
+                            f"[aria-labelledby*='{n}']"
+                        ).first,
+                    ),
+                ]
+                for label, get_loc in attempts:
+                    try:
+                        loc = get_loc()
+                        if loc.is_visible(timeout=1000):
+                            loc.highlight()
+                            loc.click(timeout=action.timeout)
+                            if self.logger:
+                                self.logger.info(
+                                    f"Click executed via {label} in frame (name={sem_name!r})",
+                                    phase=ExecutionPhase.LLM,
+                                )
+                            return True
+                    except Exception:
+                        continue
 
+        if self._try_wizard_advance_click(action, name):
+            return True
         return False
 
     def _looks_like_dropdown(self, loc) -> bool:
@@ -547,6 +681,23 @@ class ToolExecutor:
 
                 loc.highlight()
                 try:
+                    # Avoid typing if the existing value is already a
+                    # reasonable match. Important for ATS forms where a
+                    # resume upload triggers autofill _after_ the LLM plan.
+                    try:
+                        current_val = (loc.input_value() or "").strip()
+                        target_val = str(action.value).strip()
+                        # Allow fuzzy match (e.g. "San Francisco" vs "San Francisco, CA")
+                        if target_val and current_val and (target_val in current_val or current_val in target_val):
+                            if self.logger:
+                                self.logger.info(
+                                    f"Skipping fill for '{name}' — already matches '{current_val}'",
+                                    phase=ExecutionPhase.LLM,
+                                )
+                            return True
+                    except Exception:
+                        pass
+
                     # Humanised entry path — every step mirrors what a real
                     # user does, with randomised timing so ATS spam
                     # classifiers (Ashby, Greenhouse, Cloudflare) don't
@@ -1076,6 +1227,16 @@ class ToolExecutor:
                     if loc.count() == 0:
                         continue
                     try:
+                        # Skip if already selected correctly to avoid overwriting user edits or autofill
+                        try:
+                            current_text = loc.evaluate("el => el.options[el.selectedIndex]?.textContent || ''").strip()
+                            if current_text and value and (value.lower() in current_text.lower() or current_text.lower() in value.lower()):
+                                if self.logger:
+                                    self.logger.info(f"Skipping select for '{name}' — already matches '{current_text}'", phase=ExecutionPhase.LLM)
+                                return True
+                        except Exception:
+                            pass
+
                         loc.select_option(value, timeout=2000)
                         if self.logger: self.logger.info(f"Select via label (exact={exact})", phase=ExecutionPhase.LLM)
                         return True
@@ -1096,6 +1257,16 @@ class ToolExecutor:
                 loc = root.get_by_role("combobox", name=name, exact=False).first
                 if loc.count() > 0:
                     try:
+                        # Skip if already selected
+                        try:
+                            current_text = (loc.text_content() or loc.input_value() or "").strip()
+                            if current_text and value and (value.lower() in current_text.lower() or current_text.lower() in value.lower()):
+                                if self.logger:
+                                    self.logger.info(f"Skipping select for '{name}' (combobox) — already matches '{current_text}'", phase=ExecutionPhase.LLM)
+                                return True
+                        except Exception:
+                            pass
+
                         loc.scroll_into_view_if_needed(timeout=1500)
                     except Exception:
                         pass
@@ -1501,6 +1672,9 @@ class ToolExecutor:
             "button:has-text('Upload')",
             "button:has-text('Browse')",
             "button:has-text('Choose File')",
+            "button:has-text('Select File')",
+            "button:has-text('Select from')",
+            "button:has-text('Device')",
             "[role='button']:has-text('attach')",
             "[role='button']:has-text('upload')",
         ]
@@ -1516,6 +1690,9 @@ class ToolExecutor:
             trigger_selectors_category = [
                 "[data-automation-id='resumeUpload']",
                 "[data-automation-id*='resume' i] button",
+                "button:has-text('Resume')",
+                "button:has-text('CV')",
+                "[class*='resume' i] button",
             ]
         elif target_category == "portfolio":
             trigger_selectors_category = [
@@ -1538,7 +1715,7 @@ class ToolExecutor:
                 with self.page.expect_file_chooser(timeout=6000) as fc_info:
                     trigger.click(timeout=3000)
                 fc_info.value.set_files(file_path)
-                self.page.wait_for_timeout(2500)
+                self.page.wait_for_timeout(5500)
                 if self.logger:
                     self.logger.info(
                         f"Upload via file chooser '{sel}' (target='{target_label}')",
@@ -1592,7 +1769,7 @@ class ToolExecutor:
                 if loc.count() == 0:
                     return False
                 loc.first.set_input_files(file_path, timeout=8000)
-                self.page.wait_for_timeout(2500)
+                self.page.wait_for_timeout(5500)
                 if self.logger:
                     self.logger.info(
                         f"Upload via set_input_files '{sel}' (target='{target_label}')",

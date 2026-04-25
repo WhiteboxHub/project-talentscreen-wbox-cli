@@ -96,7 +96,7 @@ class BambooHRHandler(GenericATSHandler):
             try:
                 el = self.page.query_selector(selector)
                 if el:
-                    self.page.fill(selector, value, timeout=3000)
+                    self.humanized_fill(self.page.locator(selector).first, value)
                     results[key] = True
                     if self.logger:
                         self.logger.info(f"Filled BambooHR '{key}'", phase=ExecutionPhase.RULES)
@@ -118,7 +118,7 @@ class BambooHRHandler(GenericATSHandler):
         # Cover letter textarea
         if hasattr(self.resume, "cover_letter") and self.resume.cover_letter:
             try:
-                self.page.fill("textarea[name='coverletter']", self.resume.cover_letter, timeout=3000)
+                self.humanized_fill(self.page.locator("textarea[name='coverletter']").first, self.resume.cover_letter)
                 results["cover_letter"] = True
             except Exception:
                 results["cover_letter"] = False

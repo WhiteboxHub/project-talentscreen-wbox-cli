@@ -452,6 +452,9 @@ class ApplicationStateMachine:
 
             if handler:
                 logger.info(f"Using {ats_type.value} fallback handler", phase=ExecutionPhase.RULES)
+                p = resume_pdf_path
+                if p and str(p).strip() and handler.__class__.__name__ == "WorkdayHandler":
+                    setattr(handler, "resume_path_for_workday_modal", str(p))
 
                 n0 = len(page.context.pages)
                 u0 = page.url

@@ -1,0 +1,131 @@
+{"job_id": 50, "phase": "rules", "selector": "button:has-text('Accept')", "event": "Dismissed blocking overlay", "level": "info", "timestamp": "2026-04-23T23:31:34.400427Z"}
+{"job_id": 50, "phase": "rules", "screenshot_path": "logs/job_50/screenshots/001_20260423_163134_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-23T23:31:34.887279Z"}
+{"job_id": 50, "phase": "rules", "url": "https://fa-ewmy-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/2920", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-23T23:31:34.887617Z"}
+{"job_id": 50, "phase": "rules", "event": "Could not detect ATS type, using UNKNOWN", "level": "warning", "timestamp": "2026-04-23T23:31:35.031353Z"}
+{"job_id": 50, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-23T23:31:35.148846Z"}
+{"job_id": 50, "phase": "rules", "event": "Using unknown handler", "level": "info", "timestamp": "2026-04-23T23:31:35.149911Z"}
+{"job_id": 50, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-23T23:31:35.150127Z"}
+{"job_id": 50, "phase": "rules", "event": "No apply button found (generic)", "level": "warning", "timestamp": "2026-04-23T23:31:35.403103Z"}
+{"job_id": 50, "phase": "human", "url_before": "https://fa-ewmy-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/2920", "url_after": "https://fa-ewmy-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/2920", "advanced": false, "reason": "Could not find a native Apply button on this page.", "event": "human_handoff_resumed", "level": "info", "timestamp": "2026-04-23T23:34:53.411877Z"}
+{"job_id": 50, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-23T23:34:53.413501Z"}
+{"job_id": 50, "phase": "llm", "event": "Agent loop failed: Page.wait_for_timeout: Target page, context or browser has been closed", "level": "error", "timestamp": "2026-04-23T23:34:53.418629Z"}
+{"job_id": 50, "phase": "llm", "success": false, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-23T23:34:53.419054Z"}
+{"job_id": 50, "phase": "rules", "event": "Starting phase: rules", "level": "info", "timestamp": "2026-04-23T23:34:53.419799Z"}
+{"job_id": 50, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-23T23:34:53.420031Z"}
+{"job_id": 50, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-23T23:34:53.420490Z"}
+{"job_id": 50, "phase": "rules", "event": "Filling form (generic handler)", "level": "info", "timestamp": "2026-04-23T23:34:53.420761Z"}
+{"job_id": 50, "phase": "rules", "event": "Starting form fill", "level": "info", "timestamp": "2026-04-23T23:34:53.469027Z"}
+{"job_id": 50, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-23T23:34:53.474755Z"}
+{"job_id": 50, "phase": "rules", "event": "No confident match for 'personal.first_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-23T23:34:53.483669Z"}
+{"job_id": 50, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-23T23:34:53.504561Z"}
+{"job_id": 50, "phase": "rules", "event": "No confident match for 'personal.last_name' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-23T23:34:53.504893Z"}
+{"job_id": 50, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Target page, context or browser has been closed", "level": "warning", "timestamp": "2026-04-23T23:34:53.523412Z"}
+{"job_id": 50, "phase": "rules", "event": "No confident match for 'personal.email' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-23T23:34:53.523826Z"}
+{"job_id": 50, "phase": "rules", "event": "Failed to collect form features: Page.evaluate: Connection closed while reading from the driver", "level": "warning", "timestamp": "2026-04-23T23:34:53.559116Z"}
+{"job_id": 50, "phase": "rules", "event": "No confident match for 'personal.phone' (best=0, threshold=70)", "level": "info", "timestamp": "2026-04-23T23:34:53.559496Z"}
+{"job_id": 50, "phase": "rules", "selector": "button:has-text('Accept')", "event": "Dismissed blocking overlay", "level": "info", "timestamp": "2026-04-23T23:37:16.018534Z"}
+{"job_id": 50, "phase": "rules", "screenshot_path": "logs/job_50/screenshots/001_20260423_163716_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-23T23:37:16.580999Z"}
+{"job_id": 50, "phase": "rules", "url": "https://fa-ewmy-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/2920", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-23T23:37:16.581353Z"}
+{"job_id": 50, "phase": "rules", "event": "Could not detect ATS type, using UNKNOWN", "level": "warning", "timestamp": "2026-04-23T23:37:16.722727Z"}
+{"job_id": 50, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-23T23:37:16.913706Z"}
+{"job_id": 50, "phase": "rules", "event": "Using unknown handler", "level": "info", "timestamp": "2026-04-23T23:37:16.915105Z"}
+{"job_id": 50, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-23T23:37:16.915334Z"}
+{"job_id": 50, "phase": "rules", "selector": "button:has-text('Apply Now')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-23T23:37:19.178364Z"}
+{"job_id": 50, "phase": "rules", "screenshot_path": "logs/job_50/screenshots/002_20260423_163744_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-23T23:37:44.554639Z"}
+{"job_id": 50, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-23T23:37:46.628490Z"}
+{"job_id": 50, "phase": "llm", "dom_path": "logs/job_50/dom_snapshots/001_20260423_163748_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-23T23:37:48.797897Z"}
+{"job_id": 50, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-23T23:37:48.801440Z"}
+{"job_id": 50, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-23T23:37:49.048151Z"}
+{"job_id": 50, "phase": "llm", "tokens": 5133, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-23T23:37:51.735404Z"}
+{"job_id": 50, "phase": "llm", "action_count": 2, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-23T23:37:51.737249Z"}
+{"job_id": 50, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-23T23:37:54.246530Z"}
+{"job_id": 50, "phase": "llm", "event": "Fill executed via label['Email Address']", "level": "info", "timestamp": "2026-04-23T23:37:58.231560Z"}
+{"job_id": 50, "phase": "llm", "selector": "Next", "field_label": "Next Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-23T23:37:58.598789Z"}
+{"job_id": 50, "phase": "llm", "event": "Click executed via role button in frame (name='Next')", "level": "info", "timestamp": "2026-04-23T23:37:58.673734Z"}
+{"job_id": 50, "phase": "llm", "event": "All required fields satisfied on first pass \u2014 skipping multi-page loop.", "level": "info", "timestamp": "2026-04-23T23:38:20.984264Z"}
+{"job_id": 50, "phase": "rules", "selector": "button:has-text('Accept')", "event": "Dismissed blocking overlay", "level": "info", "timestamp": "2026-04-23T23:40:29.653500Z"}
+{"job_id": 50, "phase": "rules", "screenshot_path": "logs/job_50/screenshots/001_20260423_164030_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-23T23:40:30.859570Z"}
+{"job_id": 50, "phase": "rules", "url": "https://fa-ewmy-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/2920", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-23T23:40:30.860322Z"}
+{"job_id": 50, "phase": "rules", "event": "Could not detect ATS type, using UNKNOWN", "level": "warning", "timestamp": "2026-04-23T23:40:31.192352Z"}
+{"job_id": 50, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-23T23:40:31.370903Z"}
+{"job_id": 50, "phase": "rules", "event": "Using unknown handler", "level": "info", "timestamp": "2026-04-23T23:40:31.375848Z"}
+{"job_id": 50, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-23T23:40:31.376496Z"}
+{"job_id": 50, "phase": "rules", "selector": "button:has-text('Apply Now')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-23T23:40:33.674468Z"}
+{"job_id": 50, "phase": "rules", "screenshot_path": "logs/job_50/screenshots/002_20260423_164057_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-23T23:40:58.078939Z"}
+{"job_id": 50, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-23T23:41:00.152323Z"}
+{"job_id": 50, "phase": "llm", "dom_path": "logs/job_50/dom_snapshots/001_20260423_164102_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-23T23:41:02.320348Z"}
+{"job_id": 50, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-23T23:41:02.324027Z"}
+{"job_id": 50, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-23T23:41:02.526797Z"}
+{"job_id": 50, "phase": "llm", "tokens": 5128, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-23T23:41:04.817982Z"}
+{"job_id": 50, "phase": "llm", "action_count": 2, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-23T23:41:04.819388Z"}
+{"job_id": 50, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-23T23:41:07.951047Z"}
+{"job_id": 50, "phase": "llm", "event": "Fill executed via label['Email Address']", "level": "info", "timestamp": "2026-04-23T23:41:12.762694Z"}
+{"job_id": 50, "phase": "llm", "selector": "Next", "field_label": "Next Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-23T23:41:13.207787Z"}
+{"job_id": 50, "phase": "llm", "event": "Click executed via role button in frame (name='Next')", "level": "info", "timestamp": "2026-04-23T23:41:13.285275Z"}
+{"job_id": 50, "phase": "llm", "event": "Required fields look satisfied, but a Next/Continue button is present \u2014 running the wizard pass.", "level": "info", "timestamp": "2026-04-23T23:41:35.461869Z"}
+{"job_id": 50, "phase": "llm", "dom_path": "logs/job_50/dom_snapshots/002_20260423_164150_ax_tree_page_2.json", "name": "ax_tree_page_2", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-23T23:41:50.861057Z"}
+{"job_id": 50, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-23T23:41:50.866643Z"}
+{"job_id": 50, "phase": "llm", "tokens": 5209, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-23T23:41:54.666856Z"}
+{"job_id": 50, "phase": "llm", "action_count": 2, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-23T23:41:54.668657Z"}
+{"job_id": 50, "phase": "llm", "selector": "Import your profile from resume", "field_label": "Import Profile", "event": "Executing click action", "level": "info", "timestamp": "2026-04-23T23:41:54.673360Z"}
+{"job_id": 50, "phase": "llm", "event": "Blocking click on 'Import your profile from resume' upload area. Use UPLOAD action instead.", "level": "warning", "timestamp": "2026-04-23T23:41:54.674168Z"}
+{"job_id": 50, "phase": "llm", "selector": "Drop your resume here", "field_label": "Resume Upload", "event": "Executing upload action", "level": "info", "timestamp": "2026-04-23T23:41:54.675491Z"}
+{"job_id": 50, "phase": "llm", "event": "Upload scan: file_inputs=1 wd_selectors=0 attach_buttons=0 selector='Drop your resume here'", "level": "info", "timestamp": "2026-04-23T23:41:54.702769Z"}
+{"job_id": 50, "phase": "llm", "event": "Upload via set_input_files 'input[type='file'][accept*='pdf']' (target='Resume Upload')", "level": "info", "timestamp": "2026-04-23T23:42:00.527237Z"}
+{"job_id": 50, "phase": "rules", "selector": "button:has-text('Accept')", "event": "Dismissed blocking overlay", "level": "info", "timestamp": "2026-04-23T23:48:06.297228Z"}
+{"job_id": 50, "phase": "rules", "screenshot_path": "logs/job_50/screenshots/001_20260423_164806_initial.png", "name": "initial", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-23T23:48:06.874571Z"}
+{"job_id": 50, "phase": "rules", "url": "https://fa-ewmy-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/2920", "event": "Starting ATS detection", "level": "info", "timestamp": "2026-04-23T23:48:06.874906Z"}
+{"job_id": 50, "phase": "rules", "event": "Could not detect ATS type, using UNKNOWN", "level": "warning", "timestamp": "2026-04-23T23:48:07.106081Z"}
+{"job_id": 50, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-23T23:48:07.236523Z"}
+{"job_id": 50, "phase": "rules", "event": "Using unknown handler", "level": "info", "timestamp": "2026-04-23T23:48:07.237554Z"}
+{"job_id": 50, "phase": "rules", "event": "Looking for apply button (generic)", "level": "info", "timestamp": "2026-04-23T23:48:07.237779Z"}
+{"job_id": 50, "phase": "rules", "selector": "button:has-text('Apply Now')", "event": "Clicked apply button (generic)", "level": "info", "timestamp": "2026-04-23T23:48:07.929234Z"}
+{"job_id": 50, "phase": "rules", "screenshot_path": "logs/job_50/screenshots/002_20260423_164832_after_apply_click.png", "name": "after_apply_click", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-23T23:48:33.385107Z"}
+{"job_id": 50, "phase": "llm", "event": "Starting phase: llm", "level": "info", "timestamp": "2026-04-23T23:48:35.498474Z"}
+{"job_id": 50, "phase": "llm", "dom_path": "logs/job_50/dom_snapshots/001_20260423_164837_ax_tree_snapshot.json", "name": "ax_tree_snapshot", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-23T23:48:37.700656Z"}
+{"job_id": 50, "phase": null, "event": "No dedicated handler for 'unknown' \u2014 using GenericATSHandler", "level": "info", "timestamp": "2026-04-23T23:48:37.704130Z"}
+{"job_id": 50, "phase": "llm", "task": "fill_form_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-23T23:48:37.854712Z"}
+{"job_id": 50, "phase": "llm", "tokens": 5128, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-23T23:48:40.134775Z"}
+{"job_id": 50, "phase": "llm", "action_count": 2, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-23T23:48:40.136060Z"}
+{"job_id": 50, "phase": "llm", "selector": "Email Address", "field_label": "Email Address", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-23T23:48:43.695863Z"}
+{"job_id": 50, "phase": "llm", "event": "Fill executed via label['Email Address']", "level": "info", "timestamp": "2026-04-23T23:48:47.531595Z"}
+{"job_id": 50, "phase": "llm", "selector": "Next", "field_label": "Next Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-23T23:48:48.279865Z"}
+{"job_id": 50, "phase": "llm", "event": "Click executed via role button in frame (name='Next')", "level": "info", "timestamp": "2026-04-23T23:48:48.362968Z"}
+{"job_id": 50, "phase": "llm", "event": "Required fields look satisfied, but a Next/Continue button is present \u2014 running the wizard pass.", "level": "info", "timestamp": "2026-04-23T23:49:10.649116Z"}
+{"job_id": 50, "phase": "llm", "dom_path": "logs/job_50/dom_snapshots/002_20260423_165727_ax_tree_page_2.json", "name": "ax_tree_page_2", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-23T23:57:27.382313Z"}
+{"job_id": 50, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-23T23:57:27.389461Z"}
+{"job_id": 50, "phase": "llm", "tokens": 5926, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-23T23:57:31.151580Z"}
+{"job_id": 50, "phase": "llm", "action_count": 3, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-23T23:57:31.153439Z"}
+{"job_id": 50, "phase": "llm", "event": "Coerced FILL\u2192SELECT for dropdown field 'ZIP Code' (value='94103', options_known=0)", "level": "warning", "timestamp": "2026-04-23T23:57:31.154784Z"}
+{"job_id": 50, "phase": "llm", "selector": "Address Line 1", "field_label": "Address Line 1", "event": "Executing fill action", "level": "info", "timestamp": "2026-04-23T23:57:31.160258Z"}
+{"job_id": 50, "phase": "llm", "event": "Fill executed via label['Address Line 1']", "level": "info", "timestamp": "2026-04-23T23:57:33.198309Z"}
+{"job_id": 50, "phase": "llm", "selector": "ZIP Code", "field_label": "ZIP Code", "event": "Executing select action", "level": "info", "timestamp": "2026-04-23T23:57:34.226882Z"}
+{"job_id": 50, "phase": "llm", "event": "Select via combobox click+fill", "level": "info", "timestamp": "2026-04-23T23:57:35.880901Z"}
+{"job_id": 50, "phase": "llm", "selector": "Next", "field_label": "Next Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-23T23:57:36.957141Z"}
+{"job_id": 50, "phase": "llm", "event": "Click executed via role button in frame (name='Next')", "level": "info", "timestamp": "2026-04-23T23:57:37.039991Z"}
+{"job_id": 50, "phase": "llm", "dom_path": "logs/job_50/dom_snapshots/003_20260423_170615_ax_tree_page_3.json", "name": "ax_tree_page_3", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-24T00:06:15.823478Z"}
+{"job_id": 50, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-24T00:06:15.832167Z"}
+{"job_id": 50, "phase": "llm", "tokens": 5891, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-24T00:06:21.644322Z"}
+{"job_id": 50, "phase": "llm", "action_count": 2, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-24T00:06:21.647056Z"}
+{"job_id": 50, "phase": "llm", "selector": "Bachelor\u2019s degree", "field_label": "Degree", "event": "Executing click action", "level": "info", "timestamp": "2026-04-24T00:06:21.648632Z"}
+{"job_id": 50, "phase": "llm", "event": "Click executed via role button in frame (name='Bachelor\u2019s degree')", "level": "info", "timestamp": "2026-04-24T00:06:22.070487Z"}
+{"job_id": 50, "phase": "llm", "selector": "Next", "field_label": "Next Button", "event": "Executing click action", "level": "info", "timestamp": "2026-04-24T00:06:23.072244Z"}
+{"job_id": 50, "phase": "llm", "event": "Click executed via role button in frame (name='Next')", "level": "info", "timestamp": "2026-04-24T00:06:23.165937Z"}
+{"job_id": 50, "phase": "llm", "dom_path": "logs/job_50/dom_snapshots/004_20260423_171059_ax_tree_page_4.json", "name": "ax_tree_page_4", "event": "Structured DOM saved", "level": "info", "timestamp": "2026-04-24T00:10:59.281521Z"}
+{"job_id": 50, "phase": "llm", "task": "fill_empty_fields_only", "event": "Requesting LLM analysis from openai using AXTree", "level": "info", "timestamp": "2026-04-24T00:10:59.288385Z"}
+{"job_id": 50, "phase": "llm", "tokens": 6899, "event": "Received OpenAI response", "level": "info", "timestamp": "2026-04-24T00:11:07.208861Z"}
+{"job_id": 50, "phase": "llm", "action_count": 10, "confidence": 0.95, "requires_human": false, "event": "LLM response validated successfully", "level": "info", "timestamp": "2026-04-24T00:11:07.212458Z"}
+{"job_id": 50, "phase": "llm", "selector": "Yes, I have reviewed the privacy policy.", "field_label": "Privacy Policy Review", "event": "Executing click action", "level": "info", "timestamp": "2026-04-24T00:11:07.220135Z"}
+{"job_id": 50, "phase": "llm", "event": "Click executed via text in frame (name='Yes, I have reviewed the privacy policy.')", "level": "info", "timestamp": "2026-04-24T00:11:07.436759Z"}
+{"job_id": 50, "phase": "llm", "selector": "Yes, I am 18 years and above.", "field_label": "Minimum Hiring Age Confirmation", "event": "Executing click action", "level": "info", "timestamp": "2026-04-24T00:11:08.010433Z"}
+{"job_id": 50, "phase": "llm", "event": "Click executed via text in frame (name='Yes, I am 18 years and above.')", "level": "info", "timestamp": "2026-04-24T00:11:08.198169Z"}
+{"job_id": 50, "phase": "llm", "selector": "No", "field_label": "Employment Visa Requirement", "event": "Executing click action", "level": "info", "timestamp": "2026-04-24T00:11:08.557469Z"}
+{"job_id": 50, "phase": "llm", "selector": "Yes", "field_label": "Right to Work Confirmation", "event": "Executing click action", "level": "info", "timestamp": "2026-04-24T00:11:09.497106Z"}
+{"job_id": 50, "phase": "llm", "selector": "Yes", "field_label": "Willingness to Relocate", "event": "Executing click action", "level": "info", "timestamp": "2026-04-24T00:11:09.918346Z"}
+{"job_id": 50, "phase": "llm", "selector": "No", "field_label": "Relatives Working at Verisk", "event": "Executing click action", "level": "info", "timestamp": "2026-04-24T00:11:10.583659Z"}
+{"job_id": 50, "phase": "llm", "selector": "No", "field_label": "Previous Employment at Verisk", "event": "Executing click action", "level": "info", "timestamp": "2026-04-24T00:11:11.514688Z"}
+{"job_id": 50, "phase": "llm", "selector": "No", "field_label": "Non-compete Agreement", "event": "Executing click action", "level": "info", "timestamp": "2026-04-24T00:11:12.602540Z"}
+{"job_id": 50, "phase": "llm", "selector": "No", "field_label": "Current or Former Deloitte Employee", "event": "Executing click action", "level": "info", "timestamp": "2026-04-24T00:11:13.648673Z"}
+{"job_id": 50, "phase": "llm", "selector": "No", "field_label": "Current Contractor at Verisk", "event": "Executing click action", "level": "info", "timestamp": "2026-04-24T00:11:14.425517Z"}
+{"job_id": 50, "phase": "llm", "event": "Page 4: 2/10 actions succeeded \u2014 handing off to human.", "level": "info", "timestamp": "2026-04-24T00:11:36.660970Z"}
+{"job_id": 50, "phase": "human", "url_before": "https://fa-ewmy-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/jobs/preview/2920/easy-apply/section/4/block/13", "url_after": "https://fa-ewmy-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/jobs/preview/2920/easy-apply/section/4/block/13", "advanced": false, "reason": "Only 2/10 auto-fills succeeded on this page. JobCLI is handing control to you to finish it.", "event": "human_handoff_resumed", "level": "info", "timestamp": "2026-04-24T00:22:06.818872Z"}
