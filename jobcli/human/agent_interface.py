@@ -16,6 +16,9 @@ Key behaviours:
 
 import sys
 import time
+import threading
+import queue
+from io import StringIO
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
@@ -59,6 +62,47 @@ class HandoffResult:
     cancelled: bool = False    # human chose to abort the application
 
 
+# ------------------------------------------------------------------
+# ProxyConsole: Captures Rich output and relays it to the API
+# ------------------------------------------------------------------
+
+class ProxyConsole:
+    """Wraps rich.console.Console to capture ANSI output for the web dashboard."""
+    def __init__(self, logger=None):
+        # The real terminal console
+        self._real_console = Console()
+        # A virtual console to capture ANSI-formatted strings
+        self._capture_buffer = StringIO()
+        self._capture_console = Console(
+            file=self._capture_buffer,
+            force_terminal=True,
+            color_system="standard", # standard is safer for many terminal emulators
+            width=min(self._real_console.width or 80, 80), # Cap width for UI dashboard
+        )
+        self.logger = logger
+
+    def print(self, *args, **kwargs) -> None:
+        """Print to local terminal AND capture for the web UI."""
+        # 1. Real output
+        self._real_console.print(*args, **kwargs)
+        
+        # 2. Capture output
+        self._capture_buffer.seek(0)
+        self._capture_buffer.truncate(0)
+        self._capture_console.print(*args, **kwargs)
+        ansi_text = self._capture_buffer.getvalue()
+        
+        # 3. Relay to logger
+        if self.logger and hasattr(self.logger, "emit_event"):
+            # We emit a 'terminal' event for high-fidelity output.
+            # We SKIP calling logger.info here to avoid double-logs in the UI.
+            self.logger.emit_event({"type": "terminal", "message": ansi_text})
+
+    @property
+    def width(self) -> int:
+        return self._real_console.width or 80
+
+
 class AgentInterface:
     """Single entry-point for every human-facing interaction during the agent loop.
 
@@ -68,7 +112,6 @@ class AgentInterface:
                    missing mandatory info, low-confidence actions).
     * MANUAL     – blocks at every checkpoint for explicit approval.
     """
-
     def __init__(
         self,
         page: Page,
@@ -78,6 +121,7 @@ class AgentInterface:
         memory: Optional["AgentMemory"] = None,
         resume: Optional[ResumeData] = None,
         ats_type: ATSType = ATSType.UNKNOWN,
+        is_server: bool = False,
     ) -> None:
         self.page = page
         self.locator_repo = locator_repo
@@ -86,10 +130,59 @@ class AgentInterface:
         self.memory = memory
         self.resume = resume
         self.ats_type = ats_type
-        self.console = Console()
+        self.is_server = is_server
+        self.console = ProxyConsole(logger=logger)
         # Track which (label, value) pairs we already saved this session — avoids
         # re-saving the same answer many times during multi-page form loops.
         self._saved_this_session: set[tuple[str, str]] = set()
+        
+        # Remote interaction support
+        self._input_event = threading.Event()
+        self._input_value: Optional[str] = None
+        self._is_waiting = False
+
+    def remote_resume(self, value: str) -> None:
+        """Signal the waiting agent to resume with the given value."""
+        if self._is_waiting:
+            self._input_value = value
+            self._input_event.set()
+
+    def _get_user_input(self, prompt_text: str, default: str = "") -> str:
+        """Wait for input from either the local terminal or a remote signal."""
+        self._is_waiting = True
+        self._input_event.clear()
+        self._input_value = None
+
+        if self.logger:
+            self.logger.info(f"Agent waiting for input: {prompt_text}", phase=ExecutionPhase.HUMAN)
+            # We assume the API/Server will call resume() when it gets WebSocket input
+
+        # To keep local CLI working, we'd normally want to call input() here.
+        # But if we are in "Remote" mode (server mode), we might want to ONLY wait for the event.
+        # For a truly unified experience, we can run input() in a daemon thread.
+        
+        # Make sure the prompt text is relayed over WebSocket to the dashboard UI
+        self.console.print(prompt_text, end="")
+
+        if self.is_server:
+            self._input_event.wait()
+        else:
+            def local_input_thread():
+                try:
+                    # We already printed the prompt, so pass empty string to input()
+                    val = input()
+                    self.remote_resume(val)
+                except (EOFError, KeyboardInterrupt):
+                    self.remote_resume("cancel")
+
+            thread = threading.Thread(target=local_input_thread, daemon=True)
+            thread.start()
+
+            # Block until either the thread or a remote call sets the event
+            self._input_event.wait()
+            
+        self._is_waiting = False
+        return self._input_value or default
 
     # ------------------------------------------------------------------
     # DB integration helpers (memory-aware)
@@ -456,7 +549,8 @@ class AgentInterface:
         )
         self.get_attention()
         try:
-            return Confirm.ask("  Submit now?", default=True)
+            res = self._get_user_input("  Submit now? (y/n) [y]: ", default="y")
+            return res.lower().startswith("y") or res == ""
         finally:
             self.clear_browser_overlay()
 
@@ -467,10 +561,7 @@ class AgentInterface:
             return
         self.console.print(f"\n  [dim]{message}[/dim]")
         if self.mode == InteractionMode.MANUAL or timeout_seconds == 0:
-            try:
-                input("  Press ENTER to continue...")
-            except (EOFError, KeyboardInterrupt):
-                pass
+            self._get_user_input("  Press ENTER to continue...")
             return
         # SUPERVISED: auto-continue after timeout, but allow early Enter
         self.console.print(f"  [dim]Auto-continuing in {timeout_seconds}s (press ENTER to skip wait)...[/dim]")
@@ -510,7 +601,7 @@ class AgentInterface:
         except Exception:
             pass
 
-        if self.mode == InteractionMode.AUTO:
+        if self.mode == InteractionMode.AUTO and not self.is_server:
             self.show_error(
                 f"Agent stuck ({reason}) but running in AUTO mode — cannot block."
             )
@@ -522,6 +613,11 @@ class AgentInterface:
                 advanced=False,
                 cancelled=True,
             )
+
+        if self.mode == InteractionMode.AUTO and self.is_server:
+             self.show_warning(
+                f"Agent is stuck ({reason}). Pausing for manual intervention (Dashboard mode)."
+             )
 
         body_lines: list[str] = []
         body_lines.append(f"[bold]Reason:[/bold] {reason}")
@@ -558,10 +654,7 @@ class AgentInterface:
         )
         self.get_attention()
 
-        try:
-            response = input("  Press ENTER when done (or type 'cancel'): ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            response = ""
+        response = self._get_user_input("  Press ENTER when done (or type 'cancel'): ").strip().lower()
 
         # Clear the in-page banner now that the human has handed control back.
         self.clear_browser_overlay()
@@ -649,9 +742,8 @@ class AgentInterface:
             "\n  [bold red]CAPTCHA or verification detected.[/bold red]"
         )
         self.console.print("  Please solve it in the browser window.")
-        try:
-            input("  Press ENTER when done: ")
-        except (EOFError, KeyboardInterrupt):
+        res = self._get_user_input("  Press ENTER when done: ")
+        if res == "cancel":
             self.clear_browser_overlay()
             return False
         self.clear_browser_overlay()
@@ -690,7 +782,7 @@ class AgentInterface:
                 )
             return cached
 
-        if self.mode == InteractionMode.AUTO:
+        if self.mode == InteractionMode.AUTO and not self.is_server:
             return None
 
         # 2. Show a clear modal-style block — the agent has paused.
@@ -726,7 +818,7 @@ class AgentInterface:
         )
         self.get_attention()
 
-        answer = Prompt.ask("  Your answer", default="")
+        answer = self._get_user_input("  Your answer: ")
         answer = answer.strip()
         self.clear_browser_overlay()
         if not answer:

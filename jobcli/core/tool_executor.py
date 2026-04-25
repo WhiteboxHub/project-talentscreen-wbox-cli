@@ -458,6 +458,15 @@ class ToolExecutor:
         # and never finds the right question.
         name = self._question_for(action)
         name_candidates = self._click_label_variants(name) or [name]
+        
+        # Add a fuzzy cleaned attempt if it contains hallucinated suffixes
+        clean_name = name.lower()
+        for suffix in [" button", " checkbox", " radio", " link", " dropdown"]:
+            if suffix in clean_name:
+                clean_name = clean_name.replace(suffix, "").strip()
+        if clean_name and clean_name != name.lower() and clean_name not in [c.lower() for c in name_candidates]:
+            name_candidates.append(clean_name)
+
         selector_type = action.selector_type
 
         # SAFETY: Block clicks on upload areas

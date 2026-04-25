@@ -21,11 +21,13 @@ class JobLogger:
         job_id: int,
         log_directory: str = "logs",
         enable_screenshots: bool = True,
+        on_event: Optional[Any] = None,
     ) -> None:
         """Initialize job logger."""
         self.job_id = job_id
         self.log_directory = Path(log_directory)
         self.enable_screenshots = enable_screenshots
+        self.on_event = on_event
 
         # Create job-specific log directory
         self.job_log_dir = self.log_directory / f"job_{job_id}"
@@ -141,6 +143,11 @@ class JobLogger:
     ) -> None:
         """Log warning message."""
         self.log("warning", message, phase, **metadata)
+
+    def emit_event(self, data: Any) -> None:
+        """Forward an event to the callback."""
+        if self.on_event:
+            self.on_event(data)
 
     def error(
         self, message: str, phase: Optional[ExecutionPhase] = None, **metadata: Any

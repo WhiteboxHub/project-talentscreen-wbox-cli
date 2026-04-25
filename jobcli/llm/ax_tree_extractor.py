@@ -66,7 +66,7 @@ class AccessibilityTreeExtractor:
             pass
 
         # Also capture any ATS iframe content and append it
-        ats_patterns = ["greenhouse.io", "lever.co", "workday.com", "icims.com", "ashby.com"]
+        ats_patterns = ["greenhouse.io", "lever.co", "workday.com", "icims.com", "ashby.com", "taleo.net"]
         for frame in self.page.frames:
             frame_url = frame.url or ""
             if any(p in frame_url for p in ats_patterns):

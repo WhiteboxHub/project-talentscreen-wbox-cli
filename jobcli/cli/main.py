@@ -40,8 +40,14 @@ def ensure_config_dir() -> None:
 
 def get_database() -> Database:
     """Get database instance."""
-    ensure_config_dir()
-    db = Database(f"sqlite:///{DATABASE_FILE}")
+    db_path_env = os.getenv("DATABASE_PATH")
+    if db_path_env:
+        db_path = Path(os.path.expandvars(os.path.expanduser(db_path_env)))
+    else:
+        ensure_config_dir()
+        db_path = DATABASE_FILE
+
+    db = Database(f"sqlite:///{db_path.as_posix()}")
     db.create_tables()
     return db
 
@@ -112,12 +118,11 @@ def save_config(config: Config) -> None:
     session.close()
 
 
-def ensure_configured(config: Config) -> None:
+def ensure_configured(config: Config, require_job_board: bool = True) -> None:
     """Ensure the user has logged in and configured required credentials."""
-    if not config.job_board_username or not config.job_board_password:
-        console.print("[red]Missing job board credentials.[/red]")
-        console.print("Please run [cyan]jobcli login[/cyan] first.")
-        raise typer.Exit(1)
+    if require_job_board and (not config.job_board_username or not config.job_board_password):
+        console.print("[yellow]Warning: Missing job board credentials.[/yellow]")
+        console.print("Run [cyan]jobcli login[/cyan] if you need to discover jobs of view Whitebox-hosted listings.")
         
     has_llm = config.openai_api_key or config.anthropic_api_key or config.gemini_api_key
     if not has_llm:
@@ -387,7 +392,7 @@ def apply(
     console.print("[bold cyan]Job Application[/bold cyan]\n")
 
     config = get_config()
-    ensure_configured(config)
+    ensure_configured(config, require_job_board=False)
 
     # Apply interaction mode
     try:
@@ -662,6 +667,26 @@ def sync_cmd() -> None:
     finally:
         session.close()
 
+
+
+@app.command()
+def server() -> None:
+    """Start the JobCLI web UI server."""
+    import uvicorn
+    def _env_bool(key: str, default: bool) -> bool:
+        raw = os.getenv(key)
+        if raw is None:
+            return default
+        return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+    host = os.getenv("JOBCLI_API_HOST", "0.0.0.0")
+    port = int(os.getenv("JOBCLI_API_PORT", "8000"))
+    reload = _env_bool("JOBCLI_API_RELOAD", True)
+
+    console.print("[bold cyan]Starting JobCLI Web UI...[/bold cyan]")
+    dashboard_host = "localhost" if host in {"0.0.0.0", "::"} else host
+    console.print(f"Access the dashboard at: [green]http://{dashboard_host}:{port}[/green]")
+    uvicorn.run("jobcli.api.main:app", host=host, port=port, reload=reload)
 
 @app.command("serve")
 def serve_cmd(

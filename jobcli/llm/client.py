@@ -1,11 +1,11 @@
-"""LLM client with structured output for OpenAI, Anthropic, and Gemini."""
+"""LLM client with structured output for OpenAI, Anthropic, Gemini, and Claude."""
 
 import json
 import time
 from typing import Literal, Optional, Any
 
 import anthropic
-import google.generativeai as genai
+from google import genai
 import openai
 from pydantic import ValidationError
 
@@ -17,7 +17,7 @@ from jobcli.llm.ax_tree_extractor import AccessibilityTree
 
 
 class LLMClient:
-    """LLM client with structured output validation."""
+    """LLM client with structured output validation supporting multiple providers."""
 
     SYSTEM_PROMPT = """You are an expert autonomous UI/UX agent automating job applications.
 Your task: Parse the provided Accessibility Snapshot and output the correct sequence of Playwright actions.
@@ -55,7 +55,7 @@ Your task: Parse the provided Accessibility Snapshot and output the correct sequ
 
     def __init__(
         self,
-        provider: Literal["openai", "anthropic", "gemini"],
+        provider: Literal["openai", "anthropic", "gemini", "claude"],
         api_key: str,
         logger: Optional[JobLogger] = None,
     ) -> None:
@@ -71,9 +71,12 @@ Your task: Parse the provided Accessibility Snapshot and output the correct sequ
             self.client = anthropic.Anthropic(api_key=api_key)
             self.model = "claude-3-5-sonnet-20241022"
         elif provider == "gemini":
-            genai.configure(api_key=api_key)
-            self.client = genai.GenerativeModel("gemini-1.5-pro")
+            self.client = genai.Client(api_key=api_key)
             self.model = "gemini-1.5-pro"
+        elif provider == "claude":
+            # Claude provider (using Anthropic SDK with same config)
+            self.client = anthropic.Anthropic(api_key=api_key)
+            self.model = "claude-3-5-sonnet-20241022"
 
     def analyze_page(
         self,
@@ -166,16 +169,17 @@ Remember to return valid JSON matching the schema in the system prompt.
 
         return prompt
 
-    def _call_openai(self, user_prompt: str) -> str:
+    def _call_openai(self, user_prompt: str, system_prompt: Optional[str] = None, json_mode: bool = True) -> str:
         """Call OpenAI API."""
+        s_prompt = system_prompt if system_prompt is not None else self.SYSTEM_PROMPT
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": self.SYSTEM_PROMPT},
+                {"role": "system", "content": s_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.1,
-            response_format={"type": "json_object"},
+            temperature=0.1 if json_mode else 0.7,
+            response_format={"type": "json_object"} if json_mode else None,
         )
 
         content = response.choices[0].message.content
@@ -191,13 +195,14 @@ Remember to return valid JSON matching the schema in the system prompt.
 
         return content
 
-    def _call_anthropic(self, user_prompt: str) -> str:
+    def _call_anthropic(self, user_prompt: str, system_prompt: Optional[str] = None, json_mode: bool = True) -> str:
         """Call Anthropic API."""
+        s_prompt = system_prompt if system_prompt is not None else self.SYSTEM_PROMPT
         response = self.client.messages.create(
             model=self.model,
             max_tokens=4096,
-            temperature=0.1,
-            system=self.SYSTEM_PROMPT,
+            temperature=0.1 if json_mode else 0.7,
+            system=s_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
 
@@ -215,29 +220,49 @@ Remember to return valid JSON matching the schema in the system prompt.
 
         return content
 
-    def _call_gemini(self, user_prompt: str) -> str:
+    def _call_gemini(self, user_prompt: str, system_prompt: Optional[str] = None, json_mode: bool = True) -> str:
         """Call Gemini API."""
-        full_prompt = f"{self.SYSTEM_PROMPT}\n\n{user_prompt}"
+        # Use provided system_prompt OR the default one, but don't mix them for chat.
+        s_prompt = system_prompt if system_prompt is not None else self.SYSTEM_PROMPT
+        
+        # Merge if it's the default prompt, otherwise just use the override
+        if system_prompt is None:
+            full_prompt = f"{s_prompt}\n\n{user_prompt}"
+        else:
+            full_prompt = f"SYSTEM: {s_prompt}\n\nUSER: {user_prompt}"
 
-        response = self.client.generate_content(
-            full_prompt,
-            generation_config=genai.GenerationConfig(
-                temperature=0.1,
-                response_mime_type="application/json",
-            ),
+        config = genai.types.GenerateContentConfig(
+            temperature=0.1 if json_mode else 0.7,
+        )
+        if json_mode:
+            config.response_mime_type = "application/json"
+
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=full_prompt,
+            config=config,
         )
 
         content = response.text
         if not content:
             raise ValueError("Empty response from Gemini")
 
-        if self.logger:
-            self.logger.info(
-                "Received Gemini response",
-                phase=ExecutionPhase.LLM,
-            )
-
         return content
+
+    def general_chat(self, message: str) -> str:
+        """General non-structured chat with the agent."""
+        system_prompt = (
+            "You are JobCLI, an advanced AI job application assistant. "
+            "Help the user with job search strategy, profile optimization, or just general conversation. "
+            "Keep responses concise and terminal-friendly (use ANSI colors if helpful, but sparingly)."
+        )
+        if self.provider == "gemini":
+            return self._call_gemini(message, system_prompt=system_prompt, json_mode=False)
+        elif self.provider == "openai":
+            return self._call_openai(message, system_prompt=system_prompt, json_mode=False)
+        elif self.provider in ("anthropic", "claude"):
+            return self._call_anthropic(message, system_prompt=system_prompt, json_mode=False)
+        return "Chat not implemented for this provider yet."
 
     def _validate_response(self, response_text: str) -> Optional[LLMActionResponse]:
         """Validate and parse LLM response."""

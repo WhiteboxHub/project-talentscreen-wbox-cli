@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Live smoke test against the real ~/.jobcli/jobcli.db database."""
+import os
 import sys, io
+from pathlib import Path
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 from jobcli.storage.models import Database
@@ -8,8 +10,9 @@ from jobcli.storage.repositories import FieldAnswerRepository, SyncMetadataRepos
 from jobcli.core.schemas import ATSType
 import uuid
 
-DB_PATH = "C:/Users/sampa/.jobcli/jobcli.db"
-db = Database(f"sqlite:///{DB_PATH}")
+DB_PATH = os.getenv("DATABASE_PATH") or str(Path.home() / ".jobcli" / "jobcli.db")
+DB_PATH = os.path.expandvars(os.path.expanduser(DB_PATH))
+db = Database(f"sqlite:///{Path(DB_PATH).as_posix()}")
 db.create_tables()
 session = db.get_session()
 
