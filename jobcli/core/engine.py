@@ -1041,10 +1041,18 @@ class ApplicationEngine:
                 CONTEXT_OPTIONS,
                 apply_stealth,
             )
+            
+            # Load extension if configured
+            launch_args = list(LAUNCH_ARGS)
+            if self.config.extension_path:
+                launch_args.extend([
+                    f"--disable-extensions-except={self.config.extension_path}",
+                    f"--load-extension={self.config.extension_path}"
+                ])
 
             browser = p.chromium.launch(
-                headless=self.config.headless,
-                args=LAUNCH_ARGS,
+                headless=self.config.headless if not self.config.extension_path else False, # Extensions require headed or new headless
+                args=launch_args,
                 ignore_default_args=IGNORE_DEFAULT_ARGS,
             )
             context = browser.new_context(
@@ -1256,6 +1264,15 @@ class ApplicationEngine:
                     logger.error("Application failed")
                     self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
                     status = ApplicationStatus.FAILED
+
+                # Increment the local apps-since-sync counter regardless of
+                # outcome — the sync extractor will filter by confidence anyway.
+                try:
+                    from jobcli.core.memory import AgentMemory as _AM
+                    _mem = _AM(self.session, job_id=job.id)
+                    _mem.increment_apps_since_sync()
+                except Exception:
+                    pass
 
                 # ── 6. Final browser pause ──────────────────────────────
                 if not self.config.headless:
@@ -1519,6 +1536,29 @@ class ApplicationEngine:
                     page.wait_for_timeout(500)
                 except Exception:
                     pass
+
+            # ── Trigger Chrome Extension Autofill ─────────────────────────
+            try:
+                agent.show_status("Triggering Chrome Extension autofill...", phase=ExecutionPhase.RULES)
+                page.evaluate("window.dispatchEvent(new CustomEvent('JOBCLI_START_FILL'))")
+                # Wait for completion event with 15s timeout
+                ext_result = page.evaluate("""
+                    () => new Promise(resolve => {
+                        const handler = (e) => {
+                            window.removeEventListener('JOBCLI_FILL_COMPLETE', handler);
+                            resolve(e.detail || { status: 'success' });
+                        };
+                        window.addEventListener('JOBCLI_FILL_COMPLETE', handler);
+                        setTimeout(() => resolve({ error: 'timeout' }), 15000);
+                    })
+                """)
+                if ext_result and ext_result.get("error"):
+                    logger.warning(f"Extension autofill finished with error/timeout: {ext_result['error']}", phase=ExecutionPhase.RULES)
+                else:
+                    agent.show_success("Extension autofill completed.")
+            except Exception as e:
+                logger.warning(f"Failed to trigger extension: {e}", phase=ExecutionPhase.RULES)
+            # ──────────────────────────────────────────────────────────────
 
             extractor = AccessibilityTreeExtractor(page)
             ax_tree = extractor.extract()
@@ -1968,6 +2008,18 @@ class ApplicationEngine:
                         except Exception as e:
                             logger.debug(f"locator persist skipped: {e}", phase=ExecutionPhase.LLM)
                         state.step_count += 1
+                        # Record successful execution back into memory so
+                        # confidence scores reflect real browser outcomes.
+                        if action.field_label and action.value:
+                            try:
+                                memory.record_field_outcome(
+                                    field_label=action.field_label,
+                                    value=action.value,
+                                    success=True,
+                                    ats_type=state.detected_ats,
+                                )
+                            except Exception:
+                                pass
                     elif action.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT) and not action_success:
                         # Track failures too so confidence scoring stays honest.
                         try:
@@ -1982,6 +2034,17 @@ class ApplicationEngine:
                             )
                         except Exception:
                             pass
+                        # Record failed execution so confidence degrades correctly.
+                        if action.field_label and action.value:
+                            try:
+                                memory.record_field_outcome(
+                                    field_label=action.field_label,
+                                    value=action.value,
+                                    success=False,
+                                    ats_type=state.detected_ats,
+                                )
+                            except Exception:
+                                pass
 
                 # ── Handle failed fields ──────────────────────────────────
                 # There are two distinct buckets of failure:

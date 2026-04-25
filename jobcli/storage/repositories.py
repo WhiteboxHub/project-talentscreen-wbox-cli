@@ -16,6 +16,7 @@ from jobcli.core.schemas import (
     ExecutionPhase,
     Job,
     ResumeData,
+    SelectorType,
 )
 from jobcli.core.url_normalize import normalize_job_url
 from jobcli.storage.models import (
@@ -26,8 +27,22 @@ from jobcli.storage.models import (
     InteractionLogModel,
     JobModel,
     LearnedLocatorModel,
+    SyncMetadataModel,
     UserDataModel,
 )
+from jobcli.sync.constants import CONFIDENCE_THRESHOLD, MIN_SUCCESS_COUNT
+
+# Source values considered "high trust" — they cannot be silently overwritten
+# by low-trust (LLM / auto-learned) sources.
+_HIGH_TRUST_SOURCES: frozenset[str] = frozenset({"human", "user"})
+
+
+def _compute_confidence(success_count: int, failure_count: int) -> float:
+    """Return Bayesian-style confidence ratio, clamped to [0.0, 1.0]."""
+    total = success_count + failure_count
+    if total <= 0:
+        return 0.0
+    return max(0.0, min(1.0, success_count / total))
 
 
 class JobRepository:
@@ -283,7 +298,7 @@ class LearnedLocatorRepository:
         domain: Optional[str],
         purpose: str,
         selector: str,
-        selector_type,
+        selector_type: Any,
         success: bool = True,
         notes: Optional[str] = None,
         job_id: Optional[int] = None,
@@ -351,6 +366,9 @@ class LearnedLocatorRepository:
     ) -> Optional[LearnedLocator]:
         """Look up the best learned locator for a (purpose) on this ATS / domain.
 
+        Only returns records that meet the confidence threshold AND the minimum
+        success count — preventing low-data or unlucky rows from being used.
+
         Search order:
           1. Same ATS  +  same domain  (most specific)
           2. Same ATS  (any domain)    (cross-employer reuse on same ATS)
@@ -365,6 +383,9 @@ class LearnedLocatorRepository:
             return (
                 self.session.query(LearnedLocatorModel)
                 .filter(LearnedLocatorModel.purpose == purpose)
+                # Confidence gate — only return records above threshold with enough evidence
+                .filter(LearnedLocatorModel.confidence_score >= CONFIDENCE_THRESHOLD)
+                .filter(LearnedLocatorModel.success_count >= MIN_SUCCESS_COUNT)
                 .order_by(
                     LearnedLocatorModel.confidence_score.desc(),
                     LearnedLocatorModel.success_count.desc(),
@@ -560,7 +581,26 @@ class ConfigRepository:
 
 
 class FieldAnswerRepository:
-    """Repository for managing field-level answer memory."""
+    """Repository for managing field-level answer memory.
+
+    Confidence system
+    -----------------
+    Every row stores a ``confidence`` float = success_count / (success_count +
+    failure_count).  Retrieval methods apply two gates from ``sync.constants``:
+
+    * ``confidence >= CONFIDENCE_THRESHOLD``  (default 0.6)
+    * ``success_count >= MIN_SUCCESS_COUNT``   (default 3)
+
+    A record that does not meet both gates is still stored (learning keeps
+    happening) but is treated as "not yet trustworthy" — the caller falls
+    through to the LLM instead.
+
+    Merge protection
+    ----------------
+    High-trust sources ("human", "user") can never be silently overwritten
+    by low-trust sources ("auto", "local").  The value is only replaced when
+    the incoming source is of equal or higher trust.
+    """
 
     def __init__(self, session: Session) -> None:
         """Initialize repository."""
@@ -576,13 +616,17 @@ class FieldAnswerRepository:
         source: str = "human",
         job_id: Optional[int] = None,
     ) -> None:
-        """Save or update an answer with success tracking.
+        """Save or update an answer with confidence tracking and merge protection.
 
         The answer is stored keyed by ``(normalized_label, ats_type)`` so the
-        *next* job on the same ATS can reuse it automatically.  We also
-        stamp the originating ``first_job_id`` and the latest ``last_job_id``
-        so it's possible to trace (or purge) answers learned on a specific
-        job without breaking cross-job reuse.
+        *next* job on the same ATS can reuse it automatically.
+
+        Merge-protection rules
+        ~~~~~~~~~~~~~~~~~~~~~~
+        1. If a high-trust row exists and the incoming source is low-trust,
+           the *value* is kept as-is; only success/failure counts are updated.
+        2. Confidence is recomputed on every write.
+        3. ``first_job_id`` is stamped once; ``last_job_id`` is always updated.
         """
         existing = (
             self.session.query(FieldAnswerModel)
@@ -594,24 +638,41 @@ class FieldAnswerRepository:
         )
 
         if existing:
-            existing.value = value
-            existing.source = source
+            # ── Merge protection ──────────────────────────────────────────
+            # Only overwrite the stored value when the incoming source is at
+            # least as trusted as the existing one.
+            existing_is_high_trust = existing.source in _HIGH_TRUST_SOURCES
+            incoming_is_high_trust = source in _HIGH_TRUST_SOURCES
+            if not existing_is_high_trust or incoming_is_high_trust:
+                # Safe to update the value
+                existing.value = value
+                existing.source = source
+
+            # Always update counts and recompute confidence
             if success:
                 existing.success_count += 1
             else:
                 existing.failure_count += 1
+            existing.confidence = _compute_confidence(
+                existing.success_count, existing.failure_count
+            )
+            existing.updated_at = datetime.now()
+
             if job_id is not None:
                 if getattr(existing, "first_job_id", None) is None:
                     existing.first_job_id = job_id
                 existing.last_job_id = job_id
         else:
+            initial_success = 1 if success else 0
+            initial_failure = 0 if success else 1
             new_answer = FieldAnswerModel(
                 field_label=field_label,
                 normalized_label=normalized_label,
                 value=value,
                 ats_type=ats_type,
-                success_count=1 if success else 0,
-                failure_count=0 if success else 1,
+                success_count=initial_success,
+                failure_count=initial_failure,
+                confidence=_compute_confidence(initial_success, initial_failure),
                 source=source,
                 first_job_id=job_id,
                 last_job_id=job_id,
@@ -620,24 +681,89 @@ class FieldAnswerRepository:
 
         self.session.commit()
 
-    def get_by_normalized_label(self, normalized_label: str, ats_type: ATSType) -> Optional[FieldAnswerModel]:
-        """Get best known answer for a normalized label on specific ATS."""
+    def record_outcome(
+        self,
+        normalized_label: str,
+        ats_type: ATSType,
+        success: bool,
+    ) -> None:
+        """Increment success/failure and recompute confidence without changing the value.
+
+        Called after an answer retrieved from memory is actually executed in the
+        browser so the record reflects real-world effectiveness, not just the
+        source that wrote it.
+        """
+        existing = (
+            self.session.query(FieldAnswerModel)
+            .filter(
+                FieldAnswerModel.normalized_label == normalized_label,
+                FieldAnswerModel.ats_type == ats_type,
+            )
+            .first()
+        )
+        if not existing:
+            return
+        if success:
+            existing.success_count += 1
+        else:
+            existing.failure_count += 1
+        existing.confidence = _compute_confidence(
+            existing.success_count, existing.failure_count
+        )
+        existing.updated_at = datetime.now()
+        self.session.commit()
+
+    def get_by_normalized_label(
+        self, normalized_label: str, ats_type: ATSType
+    ) -> Optional[FieldAnswerModel]:
+        """Get best known answer for a normalized label on specific ATS.
+
+        Returns ``None`` if no record meets the confidence gate — the caller
+        should fall through to the LLM in that case.
+        """
+        return (
+            self.session.query(FieldAnswerModel)
+            .filter(
+                FieldAnswerModel.normalized_label == normalized_label,
+                FieldAnswerModel.ats_type == ats_type,
+                FieldAnswerModel.confidence >= CONFIDENCE_THRESHOLD,
+                FieldAnswerModel.success_count >= MIN_SUCCESS_COUNT,
+            )
+            .order_by(FieldAnswerModel.confidence.desc(), FieldAnswerModel.success_count.desc())
+            .first()
+        )
+
+    def get_raw_by_label(
+        self, normalized_label: str, ats_type: ATSType
+    ) -> Optional[FieldAnswerModel]:
+        """Get any existing record without the confidence gate.
+
+        Used by AgentMemory for deduplication checks — we need to know if the
+        value *exists* in the DB even when it hasn't yet earned enough trust to
+        be returned by ``get_by_normalized_label``.
+        """
         return (
             self.session.query(FieldAnswerModel)
             .filter(
                 FieldAnswerModel.normalized_label == normalized_label,
                 FieldAnswerModel.ats_type == ats_type,
             )
-            .order_by(FieldAnswerModel.success_count.desc())
             .first()
         )
 
     def get_universal(self, normalized_label: str) -> Optional[FieldAnswerModel]:
-        """Get universal answer across all ATS types."""
+        """Get universal answer across all ATS types.
+
+        Returns ``None`` if no record meets the confidence gate.
+        """
         return (
             self.session.query(FieldAnswerModel)
-            .filter(FieldAnswerModel.normalized_label == normalized_label)
-            .order_by(FieldAnswerModel.success_count.desc())
+            .filter(
+                FieldAnswerModel.normalized_label == normalized_label,
+                FieldAnswerModel.confidence >= CONFIDENCE_THRESHOLD,
+                FieldAnswerModel.success_count >= MIN_SUCCESS_COUNT,
+            )
+            .order_by(FieldAnswerModel.confidence.desc(), FieldAnswerModel.success_count.desc())
             .first()
         )
 
@@ -761,3 +887,49 @@ class DropdownStrategyRepository:
             .order_by(DropdownStrategyModel.success_count.desc())
             .first()
         )
+
+
+class SyncMetadataRepository:
+    """Repository for tracking local sync state.
+
+    Only one row (id=1) ever exists.  All methods are idempotent.
+
+    Phase 2 will add a ``push_to_server()`` method that reads the rows
+    produced by ``jobcli.sync.extractor`` and POSTs them; the schema here
+    will not change.
+    """
+
+    def __init__(self, session: Session) -> None:
+        """Initialize repository."""
+        self.session = session
+
+    def get_or_create(self) -> SyncMetadataModel:
+        """Return the singleton sync-metadata row, creating it if absent."""
+        row = self.session.query(SyncMetadataModel).filter(SyncMetadataModel.id == 1).first()
+        if not row:
+            row = SyncMetadataModel(id=1, apps_since_sync=0, last_version="0.0.0")
+            self.session.add(row)
+            self.session.commit()
+            self.session.refresh(row)
+        return row
+
+    def increment_apps_since_sync(self) -> None:
+        """Increment the counter of applications completed since the last sync."""
+        row = self.get_or_create()
+        row.apps_since_sync = (row.apps_since_sync or 0) + 1
+        row.updated_at = datetime.now()
+        self.session.commit()
+
+    def record_sync(self, version: str = "0.0.0") -> None:
+        """Record that a sync has just completed (called by Phase 2 sync client)."""
+        row = self.get_or_create()
+        row.last_sync_at = datetime.now()
+        row.last_version = version
+        row.apps_since_sync = 0
+        row.updated_at = datetime.now()
+        self.session.commit()
+
+    def get_apps_since_sync(self) -> int:
+        """Return the number of applications completed since the last sync."""
+        row = self.get_or_create()
+        return row.apps_since_sync or 0
