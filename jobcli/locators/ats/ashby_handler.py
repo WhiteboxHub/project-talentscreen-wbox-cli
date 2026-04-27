@@ -104,15 +104,10 @@ class AshbyHandler(GenericATSHandler):
                     self.logger.warning(f"Ashby fill failed '{key}': {e}", phase=ExecutionPhase.RULES)
                 results.setdefault(key, False)
 
-        if resume_path:
-            try:
-                self.page.set_input_files("input[name='resume'], input[type='file']", resume_path)
-                results["resume"] = True
-                self.page.wait_for_load_state("domcontentloaded", timeout=5000)
-            except Exception as e:
-                if self.logger:
-                    self.logger.warning(f"Ashby resume upload failed: {e}", phase=ExecutionPhase.RULES)
-                results["resume"] = False
+        # We intentionally skip uploading the resume here via set_input_files.
+        # Ashby's bot detection flags programmatic set_input_files calls.
+        # By leaving the resume field unfilled in the pre-pass, the LLM phase
+        # will handle it using the humanized file-chooser click strategy instead.
 
         results = self.generic_fill_failed_fields(results)
         if self.logger:

@@ -418,7 +418,7 @@ Remember to return valid JSON matching the schema in the system prompt.
             "button available is third-party, output action=\"ask\" with a clarifying "
             "question instead of clicking it.\n"
             "1. You are filling out a job application. Check if the Apply button should be clicked first.\n"
-            "2. Fill EVERY SINGLE visible form field with user info. DO NOT GUESS mandatory field values.\n"
+            "2. Fill EVERY SINGLE visible form field. **CRITICAL**: If a field already has a non-empty `value` in the snapshot (meaning it was autofilled), DO NOT emit an action for it. Leave it alone! Only fill fields that are empty. DO NOT GUESS mandatory field values.\n"
             "3. **DATA PRIORITY CHAIN:** First use 'User Information'. If missing, use 'Known Answers from Agent Memory'.\n"
             "4. For dropdowns, your value MUST exactly match an option from 'Pre-extracted Dropdown Options' or be a valid option string.\n"
             "5. If a mandatory field answer is entirely missing, output action=\"ask\", selector=\"<exact field label>\", and value=\"<clarifying question>\".\n"
@@ -435,7 +435,7 @@ Remember to return valid JSON matching the schema in the system prompt.
             "If there is a dedicated *Location* search or typeahead, use that string; if there are separate address fields, "
             "distribute the same data across address line, city, state, postal, country. Never leave Location empty when city "
             "or state exists in the JSON.\n"
-            "9. **FILE UPLOAD fields**: For Resume/Cover Letter upload fields, use action=\"upload\" with the selector being the field label and value being the resume_file_path from User Information.\n"
+            "9. **FILE UPLOAD fields**: For required Resume/Cover Letter upload fields (usually near the bottom), use action=\"upload\" with the selector being the field label and value being the resume_file_path from User Information. **NEVER** upload a resume to a button labelled 'Autofill with Resume', 'Parse Resume', or 'Upload file' if it is inside an 'Autofill' section — these are for extracting text, which we already have in JSON. Only upload where the actual file attachment is requested (usually labeled 'Resume/CV' or 'Resume' with a required asterisk).\n"
             "10. **COMPLIANCE SECTIONS**: You MUST look for and fill: Gender, Ethnicity/Race, Veteran Status, Disability Status, and Work Authorization questions. These are often at the bottom of the form.\n"
             "11. **REQUIRED FIELDS**: Look for 'required' or asterisk (*) markers. You MUST fill ALL required fields.\n"
             "12. After filling all fields, click 'Next', 'Continue', 'Submit', or 'Apply' button if visible.\n"
@@ -468,10 +468,11 @@ Remember to return valid JSON matching the schema in the system prompt.
             "   those exact values.\n"
             "16. **LinkedIn (optional)**: Only fill if `personal.linkedin` is a full `https://www.linkedin.com/in/.../` URL in User Information. "
             "If it is null or missing, leave the LinkedIn field **blank** — do not type placeholders or partial handles (ATS validation will fail).\n"
-            "17. **COMMON SENSE DEDUCTION**: Act as a human proxy using aggressive common sense. "
-            "If a form asks for a value that is NOT explicitly in the exact form in the JSON, intelligently deduce it. "
+            "17. **COMMON SENSE DEDUCTION & LONG-FORM ANSWERS**: Act as a human proxy using aggressive common sense.\n"
+            "   a. If a form asks for a value that is NOT explicitly in the exact form in the JSON, intelligently deduce it. "
             "For example: derive Country (United States) from City (San Francisco); logically deduce pronouns (he/him) & sexual orientation (heterosexual/straight) from Gender (Male); "
             "map raw boolean work auth JSON to exact phrase requirements ('Yes, I am authorized', 'No, I do not need sponsorship'). Do NOT be overly strict.\n"
+            "   b. If the form asks an open-ended long-form question (e.g., 'Describe a project you are proud of', 'Why do you want to work here?', 'What are your career goals?'), DO NOT write the same generic robotic answer every time. Tailor a unique, compelling, professional, and thoughtful 2-4 sentence response specifically addressing the exact prompt. Write from the first-person perspective, draw organically upon the user's specific skills and experience from the JSON, and make it sound like a real human wrote it. Do not hallucinate experience that isn't in the JSON.\n"
         )
         if task == "fill_form_fields_only":
             instructions = "IMPORTANT - Target the Form directly. DO NOT CLICK APPLY.\n" + instructions

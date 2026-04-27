@@ -6,6 +6,7 @@ whose behaviour adapts to the configured ``InteractionMode`` (auto / supervised
 / manual) — similar to how Claude Code integrates approval into its tool loop.
 """
 
+import os
 import random
 import time
 import re
@@ -420,6 +421,11 @@ _AUTH_URL_PATTERNS = (
     "/authenticate", "/auth", "/oauth", "/sso",
     "/account/create", "/createaccount", "/create-account",
     "/myaccount", "/my-account",
+    # Oracle HCM candidate experience — the "enter email" gate
+    "/candidateexperience/",
+    "/hcmui/candidateexperience",
+    # Workday identity / sign-in
+    "/wday/authgwy", "/wd5/",
 )
 
 # Phrases that, when they appear as a *field label* on the form being
@@ -530,6 +536,35 @@ def _is_auth_form(
             f"Page shows auth action buttons ({auth_buttons[:2]}) and "
             "no application form fields."
         )
+
+    # ── Signal 5: Single-email-field gate ────────────────────────
+    # Oracle HCM / some ATSes show a page with ONLY an email input
+    # (+ maybe a checkbox) before the real application.  The email
+    # is used to look up / create a candidate profile.  If the
+    # human hasn't logged in yet, we should not auto-fill it.
+    email_only_fields = [lbl for lbl in labels if "email" in lbl]
+    non_email_fields = [
+        lbl for lbl in labels
+        if lbl and "email" not in lbl
+        and not any(kw in lbl for kw in _AUTH_LABEL_KEYWORDS)
+    ]
+    if email_only_fields and len(non_email_fields) < 2:
+        # Check page text for gate-like language
+        try:
+            page_text = (page.inner_text("body") or "")[:3000].lower()
+        except Exception:
+            page_text = ""
+        gate_phrases = (
+            "enter your email", "create a profile", "create an account",
+            "sign in", "log in", "terms and conditions",
+            "already have an account", "returning candidate",
+            "create your profile",
+        )
+        if any(phrase in page_text for phrase in gate_phrases):
+            return True, (
+                "Single email field with gate language detected "
+                "(likely a profile/login step)."
+            )
 
     return False, ""
 
@@ -1084,26 +1119,56 @@ class ApplicationEngine:
                 apply_stealth,
             )
             
-            # Load extension if configured
+            # Load bundled extension
+            extension_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "extension"))
             launch_args = list(LAUNCH_ARGS)
-            if self.config.extension_path:
+            
+            if os.path.exists(extension_dir):
                 launch_args.extend([
-                    f"--disable-extensions-except={self.config.extension_path}",
-                    f"--load-extension={self.config.extension_path}"
+                    f"--disable-extensions-except={extension_dir}",
+                    f"--load-extension={extension_dir}"
                 ])
-
-            browser = p.chromium.launch(
-                headless=self.config.headless if not self.config.extension_path else False, # Extensions require headed or new headless
-                args=launch_args,
-                ignore_default_args=IGNORE_DEFAULT_ARGS,
-            )
-            context = browser.new_context(
-                user_agent=self.config.user_agent or self.anti_bot.get_random_user_agent(),
-                **CONTEXT_OPTIONS,
-            )
-            apply_stealth(context, logger=logger)
-            page = context.new_page()
+                import tempfile
+                user_data_dir = tempfile.mkdtemp(prefix="jobcli_ext_profile_")
+                context = p.chromium.launch_persistent_context(
+                    user_data_dir,
+                    headless=False,
+                    args=launch_args,
+                    ignore_default_args=IGNORE_DEFAULT_ARGS,
+                    **CONTEXT_OPTIONS,
+                )
+                page = context.pages[0] if context.pages else context.new_page()
+            else:
+                browser = p.chromium.launch(
+                    headless=self.config.headless,
+                    args=launch_args,
+                    ignore_default_args=IGNORE_DEFAULT_ARGS,
+                )
+                context = browser.new_context(
+                    **CONTEXT_OPTIONS,
+                )
+                page = context.new_page()
+            
+            if self.config.headless:
+                apply_stealth(context, logger=logger)
             self.anti_bot.logger = logger
+
+            # Inject resume context via a DOM attribute so the extension's
+            # content script (which runs in an isolated JS world) can read it.
+            # Page-world window properties are invisible to content scripts,
+            # but the DOM is shared between both worlds.
+            import json as _json
+            context_json = _json.dumps({
+                "resume": self.resume.model_dump(),
+                "memory": {}
+            })
+            # Escape backticks/backslashes for the template literal
+            safe_json = context_json.replace("\\", "\\\\").replace("`", "\\`")
+            context.add_init_script(f"""
+                document.addEventListener('DOMContentLoaded', () => {{
+                    document.documentElement.setAttribute('data-jobcli-context', `{safe_json}`);
+                }});
+            """)
 
             # AgentInterface is created once and used throughout the loop.
             # Memory + ATS type are populated as soon as we know them so every
@@ -1114,7 +1179,7 @@ class ApplicationEngine:
                 mode=mode,
                 logger=logger,
                 resume=self.resume,
-                is_server=not self.config.headless,
+                is_server=self.on_event is not None,
             )
             self.active_agent = agent
             self.stop_requested = False # Reset for new job
@@ -1192,29 +1257,51 @@ class ApplicationEngine:
                 agent.show_status(f"Detected ATS: {ats_type.value}", phase=ExecutionPhase.RULES)
 
                 # ── 3. Click Apply (auto, with inline human fallback) ───
-                agent.show_phase_banner("Finding and clicking Apply button")
+                # First, check if the page already IS the application form
+                # (e.g. file:// test pages, direct application links, or
+                # sites that land directly on the form without an Apply button).
+                page_already_has_form = False
+                try:
+                    visible_inputs = page.locator(
+                        "input[type='text']:visible, input[type='email']:visible, "
+                        "input[type='tel']:visible, select:visible, textarea:visible"
+                    ).count()
+                    if visible_inputs >= 2:
+                        page_already_has_form = True
+                        logger.info(
+                            f"Detected {visible_inputs} visible form fields — "
+                            f"skipping Apply button search, page is already a form.",
+                            phase=ExecutionPhase.RULES,
+                        )
+                except Exception:
+                    pass
 
-                # A verification challenge may appear *between* pages (job
-                # board → ATS redirect) — check again right before we touch
-                # the DOM looking for an Apply button.
-                if not self._freeze_if_verification(
-                    page, agent, logger, context_label="pre_apply_click"
-                ):
-                    self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
-                    return ApplicationStatus.FAILED
+                if page_already_has_form:
+                    apply_clicked = True
+                else:
+                    agent.show_phase_banner("Finding and clicking Apply button")
 
-                apply_clicked, page = self._click_apply_button(page, state, logger, ats_type)
-                # Page may have changed (new tab) — update agent's reference
-                agent.page = page
-
-                # Clicking Apply often takes us to a gated ATS page that
-                # itself shows a CAPTCHA. Freeze before moving on.
-                if apply_clicked:
+                    # A verification challenge may appear *between* pages (job
+                    # board → ATS redirect) — check again right before we touch
+                    # the DOM looking for an Apply button.
                     if not self._freeze_if_verification(
-                        page, agent, logger, context_label="post_apply_click"
+                        page, agent, logger, context_label="pre_apply_click"
                     ):
                         self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
                         return ApplicationStatus.FAILED
+
+                    apply_clicked, page = self._click_apply_button(page, state, logger, ats_type)
+                    # Page may have changed (new tab) — update agent's reference
+                    agent.page = page
+
+                    # Clicking Apply often takes us to a gated ATS page that
+                    # itself shows a CAPTCHA. Freeze before moving on.
+                    if apply_clicked:
+                        if not self._freeze_if_verification(
+                            page, agent, logger, context_label="post_apply_click"
+                        ):
+                            self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
+                            return ApplicationStatus.FAILED
 
                 if not apply_clicked:
                     agent.show_warning("Could not find Apply button automatically.")
@@ -1583,32 +1670,101 @@ class ApplicationEngine:
                 except Exception:
                     pass
 
-            # ── Trigger Chrome Extension Autofill ─────────────────────────
+            # ── Click Extension Autofill Button ────────────────────────────
+            # The extension injects a floating "⚡ Autofill" button on every page.
+            # The agent CLICKS it only when it's sure we're on an application form
+            # (not a login page, job board, or redirect). This prevents the
+            # extension from accidentally filling login fields or causing issues
+            # on non-application pages.
             try:
-                agent.show_status("Triggering Chrome Extension autofill...", phase=ExecutionPhase.RULES)
-                page.evaluate("window.dispatchEvent(new CustomEvent('JOBCLI_START_FILL'))")
-                # Wait for completion event with 15s timeout
-                ext_result = page.evaluate("""
-                    () => new Promise(resolve => {
-                        const handler = (e) => {
-                            window.removeEventListener('JOBCLI_FILL_COMPLETE', handler);
-                            resolve(e.detail || { status: 'success' });
-                        };
-                        window.addEventListener('JOBCLI_FILL_COMPLETE', handler);
-                        setTimeout(() => resolve({ error: 'timeout' }), 15000);
-                    })
-                """)
-                if ext_result and ext_result.get("error"):
-                    logger.warning(f"Extension autofill finished with error/timeout: {ext_result['error']}", phase=ExecutionPhase.RULES)
+                autofill_btn = page.locator('#jobcli-autofill-btn')
+                # Skip the untrusted-event JS extension on strictly monitored platforms.
+                # We will rely entirely on the native Python rules_handler for these to ensure isTrusted: true events.
+                strict_platforms = (ATSType.ASHBY, ATSType.GREENHOUSE, ATSType.WORKDAY, ATSType.LEVER)
+                
+                if autofill_btn.count() > 0 and state.detected_ats not in strict_platforms:
+                    agent.show_status("Clicking Extension Autofill button...", phase=ExecutionPhase.RULES)
+                    
+                    # Clear any previous result
+                    page.evaluate("document.documentElement.removeAttribute('data-jobcli-fill-result')")
+                    
+                    # Click the button (agent action, not auto-trigger)
+                    autofill_btn.click()
+                    
+                    # Wait for the extension to write back its result
+                    ext_result = page.evaluate("""
+                        () => new Promise(resolve => {
+                            const check = () => {
+                                const result = document.documentElement.getAttribute('data-jobcli-fill-result');
+                                if (result) {
+                                    document.documentElement.removeAttribute('data-jobcli-fill-result');
+                                    resolve(JSON.parse(result));
+                                }
+                            };
+                            const interval = setInterval(check, 200);
+                            setTimeout(() => { clearInterval(interval); resolve({ error: 'timeout' }); }, 10000);
+                            check();
+                        })
+                    """)
+                    if ext_result and ext_result.get("error"):
+                        logger.warning(f"Extension autofill: {ext_result['error']}", phase=ExecutionPhase.RULES)
+                    else:
+                        filled = ext_result.get("filled", 0)
+                        agent.show_success(f"Extension filled {filled} fields.")
+                        # Wait for DOM to settle after extension fill
+                        page.wait_for_timeout(1500)
                 else:
-                    agent.show_success("Extension autofill completed.")
+                    logger.info("Skipping extension autofill (not on application form yet).", phase=ExecutionPhase.RULES)
             except Exception as e:
-                logger.warning(f"Failed to trigger extension: {e}", phase=ExecutionPhase.RULES)
+                logger.warning(f"Extension autofill skipped: {e}", phase=ExecutionPhase.RULES)
             # ──────────────────────────────────────────────────────────────
 
+            # Extract AFTER extension fill so the LLM sees updated field values
             extractor = AccessibilityTreeExtractor(page)
             ax_tree = extractor.extract()
             logger.save_structured_dom(ax_tree.model_dump(), "ax_tree_snapshot", ExecutionPhase.LLM)
+
+            # Build a list of fields already filled (by extension or pre-populated)
+            # so the LLM knows NOT to re-fill them.
+            prefilled_fields = []
+            placeholders = ["select", "choose", "please choose", "select...", "select an option", "-- select --"]
+            
+            # 1. Grab actual live values directly from the DOM (most reliable for JS-filled inputs)
+            try:
+                live_vals = page.evaluate("""
+                    () => {
+                        const res = [];
+                        document.querySelectorAll('input, select, textarea').forEach(el => {
+                            let val = el.value;
+                            if (el.tagName === 'SELECT' && el.selectedIndex >= 0) {
+                                val = el.options[el.selectedIndex].text;
+                            }
+                            if (val && val.trim() !== '') {
+                                const label = el.name || el.id || el.getAttribute('aria-label') || '';
+                                if (label) {
+                                    res.push({ label: label, value: val.trim() });
+                                }
+                            }
+                        });
+                        return res;
+                    }
+                """)
+                for f in live_vals:
+                    val = f.get('value', '')
+                    label = f.get('label', '')
+                    if val.lower() not in placeholders and label:
+                        prefilled_fields.append(f"- {label}: already has value '{val}'")
+            except Exception:
+                pass
+
+            # 2. Add any others from ax_tree that weren't caught
+            for field in ax_tree.form_fields:
+                val = str(field.get("value", "")).strip()
+                label = field.get("name") or field.get("label") or "unknown"
+                if val and val.lower() not in placeholders:
+                    entry = f"- {label}: already has value '{val}'"
+                    if entry not in prefilled_fields:
+                        prefilled_fields.append(entry)
 
             # ── AUTH / LOGIN GATE DETECTION ───────────────────────────────
             # Before letting the LLM touch the form, verify we are NOT on a
@@ -1682,11 +1838,7 @@ class ApplicationEngine:
             # Lever…) with hardcoded, battle-tested selectors for the
             # common fields (firstName, lastName, email, phone, linkedin,
             # resume upload) AND for the common "click option" patterns
-            # (Yes/No radios, custom dropdowns).  We:
-            #   1. Run ``fill_form`` as a pre-pass for known text fields.
-            #   2. Keep the handler around so the ``ToolExecutor`` can
-            #      consult it during the LLM loop for click_option /
-            #      select_dropdown_option (see tool_executor.py).
+            # (Yes/No radios, custom dropdowns).
             rules_handler = None
             try:
                 rules_handler = ATSHandlerFactory.create_handler(
@@ -1789,7 +1941,13 @@ class ApplicationEngine:
                 except Exception:
                     pass
 
-                memory_context = memory.build_llm_context(state.detected_ats)
+                memory_context = memory.build_llm_context(state.detected_ats) or ""
+                # Include fields already filled by the extension autofill
+                if prefilled_fields:
+                    memory_context += (
+                        "\n\n## ALREADY FILLED FIELDS (DO NOT re-fill these — they were set by the autofill extension):\n"
+                        + "\n".join(prefilled_fields)
+                    )
                 llm_response = llm_client.analyze_page_from_axtree(
                     ax_tree, self.resume, task=task,
                     memory_context=memory_context,
@@ -2420,7 +2578,7 @@ class ApplicationEngine:
                     new_empty = _empty_required_fields(new_ax_tree)
                 except Exception:
                     new_empty = []
-                if not url_changed and not new_empty:
+                if not url_changed and not new_empty and not is_wizard:
                     agent.show_status(
                         "Form complete on this page — no required fields left.",
                         phase=ExecutionPhase.LLM,
@@ -2491,11 +2649,72 @@ class ApplicationEngine:
                     ax_tree = extractor.extract()
 
                 agent.show_status(f"Running AI on page {page_count}...", phase=ExecutionPhase.LLM)
+
+                # ── Click Extension Autofill on each new page ──────────
+                # Sequential flow: Extension → LLM → Human
+                try:
+                    autofill_btn = page.locator('#jobcli-autofill-btn')
+                    if autofill_btn.count() > 0:
+                        agent.show_status(f"Clicking Autofill on page {page_count}...", phase=ExecutionPhase.RULES)
+                        page.evaluate("document.documentElement.removeAttribute('data-jobcli-fill-result')")
+                        autofill_btn.click()
+                        ext_result = page.evaluate("""
+                            () => new Promise(resolve => {
+                                const check = () => {
+                                    const result = document.documentElement.getAttribute('data-jobcli-fill-result');
+                                    if (result) {
+                                        document.documentElement.removeAttribute('data-jobcli-fill-result');
+                                        resolve(JSON.parse(result));
+                                    }
+                                };
+                                const interval = setInterval(check, 200);
+                                setTimeout(() => { clearInterval(interval); resolve({ error: 'timeout' }); }, 8000);
+                                check();
+                            })
+                        """)
+                        if ext_result and not ext_result.get("error"):
+                            filled = ext_result.get("filled", 0)
+                            agent.show_success(f"Extension filled {filled} fields on page {page_count}.")
+                            page.wait_for_timeout(1500)
+                            
+                            # Grab live values explicitly
+                            try:
+                                live_vals = page.evaluate("""
+                                    () => {
+                                        const res = [];
+                                        document.querySelectorAll('input, select, textarea').forEach(el => {
+                                            let val = el.value;
+                                            if (el.tagName === 'SELECT' && el.selectedIndex >= 0) {
+                                                val = el.options[el.selectedIndex].text;
+                                            }
+                                            if (val && val.trim() !== '') {
+                                                const label = el.name || el.id || el.getAttribute('aria-label') || '';
+                                                if (label) {
+                                                    res.push({ label: label, value: val.trim() });
+                                                }
+                                            }
+                                        });
+                                        return res;
+                                    }
+                                """)
+                                placeholders = ["select", "choose", "please choose", "select...", "select an option", "-- select --"]
+                                for f in live_vals:
+                                    val = f.get('value', '')
+                                    label = f.get('label', '')
+                                    if val.lower() not in placeholders and label:
+                                        filled_fields.add(f"- {label}: already has value '{val}'")
+                            except Exception:
+                                pass
+
+                            ax_tree = extractor.extract()
+                except Exception as ext_err:
+                    logger.warning(f"Extension on page {page_count}: {ext_err}", phase=ExecutionPhase.RULES)
+
                 logger.save_structured_dom(ax_tree.model_dump(), f"ax_tree_page_{page_count}", ExecutionPhase.LLM)
 
                 filled_context = ""
                 if filled_fields:
-                    filled_context = "\n## ALREADY FILLED FIELDS (DO NOT re-fill these):\n" + "\n".join(filled_fields)
+                    filled_context = "\n\n## ALREADY FILLED FIELDS (DO NOT re-fill these — they were set by the autofill extension):\n" + "\n".join(filled_fields)
                 memory_context = (memory.build_llm_context(state.detected_ats) or "") + filled_context
 
                 llm_response = llm_client.analyze_page_from_axtree(

@@ -1,0 +1,241 @@
+{
+    "basics": {
+        "name": "Sampath Velupula",
+        "label": "AI Agents, Machine Learning, MLOps, Full stack",
+        "image": "",
+        "phone": "925-998-3725",
+        "email": "sampath.velupula@gmail.com",
+        "url": "https://github.com/sampath-velupula",
+        "summary": "Principal Engineer utilizing deep expertise in software development, AI Engineering, and data analytics to design robust AI/ML systems and MLOps workflows.",
+        "location": {
+            "address": "4652 Corday Ct",
+            "postalCode": "CA 94588",
+            "city": "Pleasanton",
+            "countryCode": "US",
+            "region": "California"
+        },
+        "profiles": [
+            {
+                "network": "LinkedIN",
+                "username": "sampath-velupula",
+                "url": "https://www.linkedin.com/in/sampath-velupula/"
+            },
+            {
+                "network": "Github",
+                "username": "whiteboxhub",
+                "url": "https://github.com/whiteboxhub"
+            }
+        ]
+    },
+    "work": [
+        {
+            "name": "Lucid Motors",
+            "position": "Lucid Motors Principal ML Engineer",
+            "url": "https://lucidmotors.com",
+            "startDate": "2023-11-20",
+            "endDate": "",
+            "summary": "As a Principal Machine Learning Engineer, I design and architect enterprise grade AI systems with a strong focus on AI agents, agentic workflows, RAG based applications, and scalable MLOps platforms. My work spans end to end system design, from model development and fine tuning to production infrastructure, CI CD pipelines, and observability, enabling reliable and secure AI adoption across the organization.",
+            "highlights": [
+                "Architected LucidGPT, an internal AI assistant framework that serves as the foundation for building and deploying multiple domain specific assistants across the enterprise.",
+                "Designed and implemented Smart Diagnostics as a multi agent system using agentic AI workflows, enabling coordinated reasoning and task execution across diagnostic and technical support use cases.",
+                "Built agent orchestration workflows leveraging Google ADK and MCP patterns to support extensible, modular, and maintainable agent based systems.",
+                "Architected and delivered SalesGPT and Customer Care 360 as AI driven agent platforms to support customer acquisition, feedback analysis, and intelligent customer interactions.",
+                "Designed and fine tuned intent classification models, including logging, monitoring, and continuous improvement pipelines, with full MLOps lifecycle management for training, evaluation, deployment, and retraining.",
+                "Established scalable MLOps and CI CD pipelines using Databricks, MLflow, and cloud native services to support model versioning, automated testing, deployment, and rollback.",
+                "Led AI infrastructure design for production workloads, including model serving, data pipelines, security controls, and performance optimization to support high availability and enterprise scale AI systems."
+            ]
+        },
+        {
+            "name": "NinjaTrader",
+            "position": "NinjaTrader Principal Software Engineer",
+            "url": "https://ninjatrader.com",
+            "startDate": "2023-06-01",
+            "endDate": "2023-10-01",
+            "summary": "At NinjaTrader, drove impactful solutions, architected systems, fostered excellence, and mentored engineers for growth.",
+            "highlights": [
+                "Architected Market API for options trading."
+            ]
+        },
+        {
+            "name": "Yahoo Inc.",
+            "position": "Yahoo Inc. Principal and Lead Engineer",
+            "url": "https://dev.flurry.com",
+            "startDate": "2019-04-15",
+            "endDate": "2023-05-30",
+            "summary": "Principal and Lead Engineer at Flurry Mobile Analytics responsible for designing, deploying, and operating large scale machine learning systems that power fraud detection, ad targeting, and user engagement analytics across Yahoo platforms.",
+            "highlights": [
+                "Designed and owned end to end MLOps platforms for training, validating, deploying, and serving classic machine learning and deep learning models in production environments.",
+                "Architected and operated real time and batch model serving systems supporting fraud detection, click through fraud prevention, ad targeting, and audience segmentation use cases.",
+                "Built feature engineering pipelines and offline and online feature stores to support model consistency across training and inference workflows.",
+                "Led production deployment pipelines for machine learning models, including automated rollout, monitoring, alerting, and continuous retraining strategies.",
+                "Owned reliability and performance of mission critical ML services, ensuring low latency inference, high availability, and graceful degradation under peak traffic.",
+                "Designed scalable data platforms across data lakes and data warehouses to support structured, semi structured, and unstructured data for analytics and machine learning.",
+                "Worked extensively with large scale data processing systems including Spark, Hive, Airflow, Hadoop, and streaming pipelines to support near real time decision making."
+            ]
+        },
+        {
+            "name": "Yahoo Inc.",
+            "position": "Yahoo Inc. Senior Software Engineer",
+            "url": "https://www.adtech.yahooinc.com/",
+            "startDate": "2016-05-01",
+            "endDate": "2019-04-15",
+            "summary": "At YAP (Yahoo's supply-side platform), I developed a VPAID JavaScript player for video ads, designed an API gateway for comprehensive functionality, and built microservices to enhance system performance. Additionally, I worked on a SPA application and built scalable data pipelines, optimizing processes and managing data storage. I also utilized modern deployment and management tools for efficient operations."
+        },
+        {
+            "name": "TalentScreen",
+            "position": "TalentScreen - Founder & Lead Software Engineer",
+            "summary": "TalentScreen.io specializes in managing job applications, tracking applications, and skill development, utilizing technologies like NLP, Druid, React Native, ElasticSearch, Node.js, MongoDB, React, and Python.",
+            "url": "https://talentscreen.io",
+            "startDate": "2015-01-01",
+            "endDate": "2016-04-30"
+        },
+        {
+            "name": "InnovaPath, INC.",
+            "position": "InnovaPath, INC. - Founder",
+            "url": "http://www.innova-path.com/",
+            "startDate": "2010-02-01",
+            "endDate": "2016-02-28",
+            "summary": "Founded and operated a $20M IT software training/consulting company, leading teams in QE/SDET, CICD, and full stack development."
+        },
+        {
+            "name": "Certent Inc.",
+            "position": "Certent Inc. Senior Software Engineer",
+            "url": "https://insightsoftware.com/certent/",
+            "startDate": "2007-02-10",
+            "endDate": "2016-04-30",
+            "summary": "At Certent (formerly Equity Administration Solutions Inc.), I designed and developed a comprehensive platform for financial and SEC reporting, grant delivery, stock transactions, and notifications. This included a UI/UX makeover, development of a notifications module, a robust report engine, and an automation framework. I also implemented Section 16 Reporting, revolutionizing the way companies manage and report on equity compensation."
+        },
+        {
+            "name": "Marlabs, Inc.",
+            "position": "Marlabs, Inc. Software Engineer",
+            "url": "https://www.builderhomesite.com/",
+            "startDate": "2006-05-10",
+            "endDate": "2007-02-01",
+            "summary": "Designed and developed the Connection Time Website (CTW) for client BuilderHomesite to integrate with service provider systems and develop partnership deals, including modules for business logic, data models, and service models. Created administration and consumer web interfaces, a service for processing provider information, and a report generation module."
+        },
+        {
+            "name": "Stratum Global Inc.",
+            "position": "Stratum Global Inc. Application Developer",
+            "url": "https://www.stratumglobal.com",
+            "startDate": "2005-06-15",
+            "endDate": "2006-04-30",
+            "summary": "Developed and implemented integrated enterprise RFID solutions at Stratum Global, including the TagNet suite, TagMap for handheld RFID readers, and TagTrack for inventory management."
+        }
+    ],
+    "education": [
+        {
+            "institution": "North Dakota State University",
+            "url": "https://ndsu.edu/",
+            "area": "Computer Science",
+            "studyType": "Masters",
+            "startDate": "2003-01-01",
+            "endDate": "2006-01-01",
+            "score": "3.6",
+            "courses": []
+        }
+    ],
+    "awards": [
+        {
+            "title": "AMF (All Member Focused) Award",
+            "date": "2019-01-01",
+            "awarder": "Yahoo, Inc.",
+            "summary": "Live NFL Streaming Project."
+        }
+    ],
+    "certificates": [
+        {
+            "name": "SCJP",
+            "date": "2006-01-01",
+            "issuer": "Sun Microsystems"
+        },
+        {
+            "name": "MCAD",
+            "date": "2006-01-01",
+            "issuer": "Microsoft"
+        },
+        {
+            "name": "AWS",
+            "date": "2023-01-01",
+            "issuer": "AWS"
+        }
+    ],
+    "publications": [
+        {
+            "name": "Tools to Aid Knowledge Management for Conference Resources",
+            "publisher": "North Dakota State University",
+            "releaseDate": "2006-10-01",
+            "url": "https://books.google.com/books/about/Tools_to_Aid_Knowledge_Management_for_Co.html?id=0Y4nOAAACAAJ",
+            "summary": "This paper proposes a Conference Knowledge Management System that enhances PDF-based research papers with RDF metadata for better organization, parsing, storage, querying, and access."
+        }
+    ],
+    "skills": [
+        {
+            "name": "ML",
+            "keywords": [
+                "NumPy",
+                "Pandas",
+                "Scikit Learn",
+                "Pytorch",
+                "RAG",
+                "Agentic AI"
+            ]
+        },
+        {
+            "name": "Data Engineering",
+            "keywords": [
+                "Hadoop",
+                "Spark",
+                "Kafka",
+                "Airflow",
+                "Databricks"
+            ]
+        },
+        {
+            "name": "Full Stack",
+            "keywords": [
+                "Front-end",
+                "FastAPI",
+                "Node.js",
+                "Java"
+            ]
+        },
+        {
+            "name": "Programming Languages",
+            "keywords": [
+                "Python",
+                "Javascript",
+                "Java",
+                "C++"
+            ]
+        },
+        {
+            "name": "Infrastructure",
+            "keywords": [
+                "AWS",
+                "GCP",
+                "Docker",
+                "Jenkins",
+                "Kubernetes"
+            ]
+        }
+    ],
+    "languages": [
+        {
+            "language": "English",
+            "fluency": "Fluent"
+        },
+        {
+            "language": "Telugu",
+            "fluency": "Native-speaker"
+        },
+        {
+            "language": "Hindi",
+            "fluency": "Fluent"
+        }
+    ],
+    "references": [
+        {
+            "reference": "Available on request"
+        }
+    ]
+}

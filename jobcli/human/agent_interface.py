@@ -147,8 +147,9 @@ class AgentInterface:
             self._input_value = value
             self._input_event.set()
 
-    def _get_user_input(self, prompt_text: str, default: str = "") -> str:
-        """Wait for input from either the local terminal or a remote signal."""
+    def _get_user_input(self, prompt_text: str, default: str = "", timeout_seconds: Optional[int] = None) -> Optional[str]:
+        """Wait for input from either the local terminal or a remote signal.
+        If timeout_seconds is provided and the local terminal times out, returns None."""
         self._is_waiting = True
         self._input_event.clear()
         self._input_value = None
@@ -165,6 +166,7 @@ class AgentInterface:
         self.console.print(prompt_text, end="")
 
         if self.is_server:
+            # Server mode ignores the timeout parameter for now, as the dashboard handles its own state
             self._input_event.wait()
         else:
             def local_input_thread():
@@ -178,8 +180,13 @@ class AgentInterface:
             thread = threading.Thread(target=local_input_thread, daemon=True)
             thread.start()
 
-            # Block until either the thread or a remote call sets the event
-            self._input_event.wait()
+            # Block until either the thread or a remote call sets the event, or timeout occurs
+            if timeout_seconds is not None:
+                timed_out = not self._input_event.wait(timeout=timeout_seconds)
+                if timed_out:
+                    return None
+            else:
+                self._input_event.wait()
             
         self._is_waiting = False
         return self._input_value or default
@@ -654,7 +661,26 @@ class AgentInterface:
         )
         self.get_attention()
 
-        response = self._get_user_input("  Press ENTER when done (or type 'cancel'): ").strip().lower()
+        response = self._get_user_input(
+            "  Press ENTER when done (or type 'cancel') [600s timeout]: ",
+            timeout_seconds=600
+        )
+
+        if response is None:
+            self.console.print(
+                "\n  [bold yellow]⏰ No response for 600 seconds — skipping this job.[/bold yellow]"
+            )
+            self.clear_browser_overlay()
+            return HandoffResult(
+                page=self.page,
+                url_before=url_before,
+                url_after=url_before,
+                title_after="",
+                advanced=False,
+                cancelled=True,
+            )
+
+        response = response.strip().lower()
 
         # Clear the in-page banner now that the human has handed control back.
         self.clear_browser_overlay()

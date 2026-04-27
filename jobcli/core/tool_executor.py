@@ -696,8 +696,17 @@ class ToolExecutor:
                     try:
                         current_val = (loc.input_value() or "").strip()
                         target_val = str(action.value).strip()
-                        # Allow fuzzy match (e.g. "San Francisco" vs "San Francisco, CA")
-                        if target_val and current_val and (target_val in current_val or current_val in target_val):
+                        # Allow exact matches, or substring matches only if the current value is a long string (like a URL or description)
+                        # We don't want to skip "Bavish Kangari" just because the field currently has "Bavish"
+                        is_match = False
+                        if target_val and current_val:
+                            tv_lower, cv_lower = target_val.lower(), current_val.lower()
+                            if tv_lower == cv_lower:
+                                is_match = True
+                            elif len(cv_lower) > 15 and (tv_lower in cv_lower or cv_lower in tv_lower):
+                                is_match = True
+                                
+                        if is_match:
                             if self.logger:
                                 self.logger.info(
                                     f"Skipping fill for '{name}' — already matches '{current_val}'",
@@ -1184,7 +1193,7 @@ class ToolExecutor:
                                     loc.scroll_into_view_if_needed(timeout=1500)
                                 except Exception:
                                     pass
-                                loc.click(timeout=3000, force=True)
+                                loc.click(timeout=3000)
                                 # Re-verify
                                 verified = target.evaluate(
                                     f"() => {{ const el = document.querySelector('[{marker}]'); return el && (el.checked === true || el.getAttribute('aria-checked') === 'true'); }}"
@@ -1250,9 +1259,9 @@ class ToolExecutor:
                         if self.logger: self.logger.info(f"Select via label (exact={exact})", phase=ExecutionPhase.LLM)
                         return True
                     except Exception:
-                        # Try force=True for hidden backing <select> elements
+                        # Try normal select first for hidden backing <select> elements
                         try:
-                            loc.select_option(value, timeout=2000, force=True)
+                            loc.select_option(value, timeout=2000)
                             if self.logger: self.logger.info(f"Select via label force (exact={exact})", phase=ExecutionPhase.LLM)
                             return True
                         except Exception:
@@ -1590,34 +1599,64 @@ class ToolExecutor:
             return False
 
         # ──────────────────────────────────────────────────────────────
-        # Dedupe: if this exact file was already uploaded successfully
-        # in this session, confirm the form still shows an attachment
-        # and skip the re-upload. This prevents the form from ending
-        # up with 3+ copies of the resume attached (which some ATS
-        # systems treat as a validation error).
+        # Anti-Bot Guard: Refuse to upload to "Autofill" or "Parse" 
         # ──────────────────────────────────────────────────────────────
-        dedupe_key = f"{(target_label or '').lower().strip()}::{file_path}"
-        if dedupe_key in self._completed_uploads:
-            try:
-                still_attached = self._verify_upload_present(file_path)
-            except Exception:
-                still_attached = True
-            if still_attached:
-                if self.logger:
-                    self.logger.info(
-                        f"Upload for '{name}' already completed this session — "
-                        "skipping re-upload.",
-                        phase=ExecutionPhase.LLM,
-                    )
-                return True
-            # File got removed somehow → let it re-upload.
+        lower_label = target_label.lower()
+        if any(word in lower_label for word in ("autofill", "parse", "extract", "populate", "import")):
             if self.logger:
-                self.logger.info(
-                    f"Upload for '{name}' was previously completed but the "
-                    "attachment is gone — re-uploading.",
+                self.logger.warning(
+                    f"Refusing to upload to parser field '{target_label}' to avoid spam flags.",
                     phase=ExecutionPhase.LLM,
                 )
-            self._completed_uploads.discard(dedupe_key)
+            return True
+
+        # Check if the button is generically named "upload file" but belongs to an autofill section
+        if "upload" in lower_label:
+            try:
+                scoped_root = self._scoped_container_for_label(target_label)
+                if scoped_root:
+                    root_text = (scoped_root.text_content(timeout=500) or "").lower()
+                    if "autofill" in root_text or "parse" in root_text:
+                        if self.logger:
+                            self.logger.warning(
+                                f"Refusing to upload to generic '{target_label}' because its container mentions autofill/parse.",
+                                phase=ExecutionPhase.LLM,
+                            )
+                        return True
+            except Exception:
+                pass
+
+        # ──────────────────────────────────────────────────────────────
+        # Global Dedupe: Never upload the exact same file twice in one session.
+        # This prevents the bot from uploading the resume to both the
+        # "Autofill" button and the actual "Resume/CV" attachment zone.
+        # ──────────────────────────────────────────────────────────────
+        for completed_key in self._completed_uploads:
+            if file_path in completed_key:
+                try:
+                    still_attached = self._verify_upload_present(file_path)
+                except Exception:
+                    still_attached = True
+                
+                if still_attached:
+                    if self.logger:
+                        self.logger.info(
+                            f"File '{file_path}' was already uploaded this session. "
+                            f"Skipping redundant upload to '{name}' to avoid bot flags.",
+                            phase=ExecutionPhase.LLM,
+                        )
+                    return True
+
+                if self.logger:
+                    self.logger.info(
+                        f"File '{file_path}' was previously uploaded but the "
+                        "attachment is gone — allowing re-upload.",
+                        phase=ExecutionPhase.LLM,
+                    )
+                break
+        
+        # Add to completed uploads
+        dedupe_key = f"{(target_label or '').lower().strip()}::{file_path}"
 
         # All roots: main page + actual child Frame objects
         search_roots = [self.page]
@@ -1701,6 +1740,8 @@ class ToolExecutor:
                 "[data-automation-id*='resume' i] button",
                 "button:has-text('Resume')",
                 "button:has-text('CV')",
+                "button:has-text('Attach')",
+                "[role='button']:has-text('Attach')",
                 "[class*='resume' i] button",
             ]
         elif target_category == "portfolio":
@@ -1715,6 +1756,31 @@ class ToolExecutor:
                 trigger = root.locator(sel).first
                 if trigger.count() == 0:
                     return False
+                
+                # Anti-bot check: if this button is inside an Autofill section, skip it!
+                is_trap = trigger.evaluate("""el => {
+                    let node = el;
+                    // Only go up 3 levels to avoid hitting the global <form> which contains the whole page text
+                    for (let depth = 0; depth < 3 && node; depth++) {
+                        const text = (node.textContent || '').toLowerCase();
+                        if (text.includes('autofill') || text.includes('parse') || text.includes('extract')) {
+                            // ensure we are looking at the widget's own text, not the global page text
+                            if (text.length < 500) {
+                                return true;
+                            }
+                        }
+                        // Also check attributes
+                        const attrs = [...node.attributes].map(a => (a.value || '').toLowerCase());
+                        if (attrs.some(v => v.includes('autofill') || v.includes('parse'))) {
+                            return true;
+                        }
+                        node = node.parentElement;
+                    }
+                    return false;
+                }""")
+                if is_trap:
+                    return False
+                    
                 try:
                     trigger.scroll_into_view_if_needed(timeout=2000)
                 except Exception:
@@ -1775,17 +1841,52 @@ class ToolExecutor:
         def _try_file_input(root, sel: str) -> bool:
             try:
                 loc = root.locator(sel)
-                if loc.count() == 0:
-                    return False
-                loc.first.set_input_files(file_path, timeout=8000)
-                self.page.wait_for_timeout(5500)
+                count = loc.count()
                 if self.logger:
-                    self.logger.info(
-                        f"Upload via set_input_files '{sel}' (target='{target_label}')",
-                        phase=ExecutionPhase.LLM,
-                    )
-                self._completed_uploads.add(dedupe_key)
-                return True
+                    self.logger.info(f"[DEBUG] _try_file_input selector='{sel}' count={count}", phase=ExecutionPhase.LLM)
+                if count == 0:
+                    return False
+                
+                for i in range(count):
+                    element = loc.nth(i)
+                    # Anti-bot check: if this file input is inside an Autofill section, skip it!
+                    is_trap = element.evaluate("""el => {
+                        let node = el;
+                        for (let depth = 0; depth < 4 && node; depth++) {
+                            const text = (node.textContent || '').toLowerCase();
+                            if (text.includes('autofill') || text.includes('parse') || text.includes('extract')) {
+                                if (text.length < 500) return true;
+                            }
+                            const attrs = [...node.attributes].map(a => (a.value || '').toLowerCase());
+                            if (attrs.some(v => v.includes('autofill') || v.includes('parse'))) {
+                                return true;
+                            }
+                            node = node.parentElement;
+                        }
+                        return false;
+                    }""")
+                    
+                    if self.logger:
+                        self.logger.info(f"[DEBUG] _try_file_input i={i} is_trap={is_trap}", phase=ExecutionPhase.LLM)
+                        
+                    if is_trap:
+                        if self.logger:
+                            self.logger.warning(
+                                f"Skipping file input {i} because it belongs to an autofill/parse widget.",
+                                phase=ExecutionPhase.LLM,
+                            )
+                        continue
+
+                    element.set_input_files(file_path, timeout=8000)
+                    self.page.wait_for_timeout(5500)
+                    if self.logger:
+                        self.logger.info(
+                            f"Upload via set_input_files '{sel}' (target='{target_label}')",
+                            phase=ExecutionPhase.LLM,
+                        )
+                    self._completed_uploads.add(dedupe_key)
+                    return True
+                return False
             except Exception as e:
                 if self.logger:
                     self.logger.debug(

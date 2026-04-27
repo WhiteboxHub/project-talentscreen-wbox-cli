@@ -688,23 +688,5 @@ def server() -> None:
     console.print(f"Access the dashboard at: [green]http://{dashboard_host}:{port}[/green]")
     uvicorn.run("jobcli.api.main:app", host=host, port=port, reload=reload)
 
-@app.command("serve")
-def serve_cmd(
-    host: str = typer.Option("127.0.0.1", help="Host to bind the server to"),
-    port: int = typer.Option(8080, help="Port to bind the server to"),
-) -> None:
-    """Start the FastAPI bridge server for the Chrome extension."""
-    console.print("[bold cyan]JobCLI Bridge Server[/bold cyan]\n")
-    
-    config = get_config()
-    db = get_database()
-    
-    from jobcli.bridge.server import start_server
-    try:
-        start_server(host=host, port=port)
-    except KeyboardInterrupt:
-        console.print("\n[yellow]Server stopped.[/yellow]")
-
-
 if __name__ == "__main__":
     app()
