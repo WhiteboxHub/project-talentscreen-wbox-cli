@@ -120,7 +120,7 @@ class JobLogger:
                 msg += f"  [dim]— {message}[/dim]"
             self.console.print(msg)
         elif "success" in metadata:
-             status = "[green]✓[/green]" if metadata["success"] else "[red]✗[/red]"
+             status = "[green][OK][/green]" if metadata.get("success", True) else "[red][X][/red]"
              self.console.print(f"{prefix} {status} {message}")
         else:
             self.console.print(f"{prefix} {message}")

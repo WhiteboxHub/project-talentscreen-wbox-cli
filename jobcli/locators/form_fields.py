@@ -412,7 +412,7 @@ class FormFieldLocator:
         if best_confidence >= self.CONFIDENCE_THRESHOLD and best_selector:
             if self.logger:
                 self.logger.info(
-                    f"Matched '{field_key}' → '{best_selector}' "
+                    f"Matched '{field_key}' -> '{best_selector}' "
                     f"(confidence {best_confidence})",
                     phase=ExecutionPhase.RULES,
                 )

@@ -159,27 +159,34 @@ async def websocket_endpoint(websocket: WebSocket):
 async def handle_dashboard_command(cmd_text: str):
     """Handle commands typed in the terminal when the agent ISN'T waiting."""
     global should_stop
-    cmd_text = cmd_text.strip().lower()
+    cmd_text = cmd_text.strip()
     if not cmd_text:
         return
 
-    if cmd_text == "help":
+    # ── Auto-detect raw URLs: treat them exactly like "apply <url>" ──
+    raw = cmd_text.lower()
+    is_url = raw.startswith("http://") or raw.startswith("https://")
+    if is_url:
+        cmd_text = f"apply {cmd_text}"
+        raw = cmd_text.lower()
+
+    if raw == "help":
         msg = "\r\n\x1b[33mAvailable Commands:\x1b[0m\r\n"
-        msg += "  \x1b[1mapply <url>\x1b[0m - Process a manual job URL\r\n"
+        msg += "  \x1b[1mapply <url>\x1b[0m - Apply to a job URL (or just paste the URL)\r\n"
         msg += "  \x1b[1mbatch\x1b[0m       - Start batch application\r\n"
         msg += "  \x1b[1mdiscover\x1b[0m    - Start job discovery\r\n"
         msg += "  \x1b[1mstop / cancel\x1b[0m - Stop ongoing tasks\r\n"
         msg += "  \x1b[1mhelp\x1b[0m        - Show this help\r\n"
         await manager.broadcast({"type": "terminal", "message": msg})
-    elif cmd_text.startswith("apply "):
-        url = cmd_text.replace("apply ", "").strip()
+    elif raw.startswith("apply "):
+        url = cmd_text[6:].strip()  # everything after "apply "
         await manager.broadcast({"type": "log", "message": f"\x1b[33m[SYSTEM] Executing: apply {url}\x1b[0m"})
         
         engine = get_engine()
         def run_single():
             try:
                 job = Job(url=url, company="Manual", title="Manual Submission")
-                get_engine_callback({"type": "log", "message": f"\x1b[36m[SYSTEM] Starting CLI manual submission: {url}\x1b[0m"})
+                get_engine_callback({"type": "log", "message": f"\x1b[36m[SYSTEM] Starting application: {url}\x1b[0m"})
                 engine.apply_to_job(job)
             except Exception as e:
                 get_engine_callback({"type": "error", "message": str(e)})

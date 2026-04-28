@@ -688,5 +688,31 @@ def server() -> None:
     console.print(f"Access the dashboard at: [green]http://{dashboard_host}:{port}[/green]")
     uvicorn.run("jobcli.api.main:app", host=host, port=port, reload=reload)
 
+@app.command()
+def agent(
+    prompt: str = typer.Argument(..., help="The task you want the agent to perform"),
+    max_steps: int = typer.Option(12, help="Maximum number of steps the agent can take"),
+) -> None:
+    """Launch the autonomous coding agent (Claude Code style)."""
+    from jobcli.coder.agent import CodingAgent
+    
+    console.print(f"[bold cyan]JobCLI Autonomous Coder[/bold cyan]\n")
+    
+    config = get_config()
+    ensure_configured(config, require_job_board=False)
+    
+    if not config.default_llm_provider:
+        console.print("[red]No default LLM provider configured. Run 'jobcli login' to set one.[/red]")
+        raise typer.Exit(1)
+        
+    try:
+        agent = CodingAgent(config)
+        agent.run(prompt, max_steps=max_steps)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Agent stopped by user.[/yellow]")
+    except Exception as e:
+        console.print(f"\n[red]Fatal Error: {e}[/red]")
+
+
 if __name__ == "__main__":
     app()
