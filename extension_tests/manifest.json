@@ -1,0 +1,131 @@
+{
+  "manifest_version": 3,
+  "name": "AutoFill Job Applications",
+  "version": "1.5",
+  "description": "Auto-fills job application forms and generates AI answers.",
+  "author": "Sampath Velupula, Ravi Kumar Rayapalli, Jafar vali, Ramana gangarao, Bavish Kangari, jatin Thakur",
+  "permissions": [
+    "storage",
+    "contextMenus",
+    "sidePanel",
+    "activeTab"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://api.anthropic.com https://api.whitebox-learning.com;"
+  },
+  "host_permissions": [
+    "https://api.openai.com/*",
+    "https://api.anthropic.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "*://*.myworkdayjobs.com/*",
+    "*://*.greenhouse.io/*",
+    "*://boards.greenhouse.io/*",
+    "*://jobs.lever.co/*",
+    "*://*.smartrecruiters.com/*",
+    "*://*.applytojob.com/*",
+    "*://*.bamboohr.com/*",
+    "*://*.icims.com/*",
+    "*://*.indeed.com/*",
+    "*://*.linkedin.com/*",
+    "*://*.workable.com/*",
+    "*://*.taleo.net/*",
+    "*://*.successfactors.com/*",
+    "*://*.successfactors.eu/*",
+    "*://*.personio.com/*",
+    "*://*.personio.de/*",
+    "*://*.recruitee.com/*",
+    "*://*.teamtailor.com/*",
+    "*://*.ultipro.com/*",
+    "*://*.myultipro.com/*",
+    "*://*.ukg.com/*",
+    "*://*.paycomonline.net/*",
+    "*://*.paychex.com/*",
+    "*://*.oraclecloud.com/*",
+    "*://*.brassring.com/*",
+    "*://*.ashbyhq.com/*",
+    "*://workforcenow.adp.com/*",
+    "*://jobs.jobvite.com/*",
+    "*://*.rippling-ats.com/*",
+    "https://api.whitebox-learning.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Open side panel"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.myworkdayjobs.com/*",
+        "*://*.greenhouse.io/*",
+        "*://boards.greenhouse.io/*",
+        "*://jobs.lever.co/*",
+        "*://*.smartrecruiters.com/*",
+        "*://*.applytojob.com/*",
+        "*://*.bamboohr.com/*",
+        "*://*.icims.com/*",
+        "*://*.indeed.com/*",
+        "*://*.linkedin.com/*",
+        "*://*.workable.com/*",
+        "*://*.taleo.net/*",
+        "*://*.successfactors.com/*",
+        "*://*.successfactors.eu/*",
+        "*://*.personio.com/*",
+        "*://*.personio.de/*",
+        "*://*.recruitee.com/*",
+        "*://*.teamtailor.com/*",
+        "*://*.ultipro.com/*",
+        "*://*.myultipro.com/*",
+        "*://*.ukg.com/*",
+        "*://*.paycomonline.net/*",
+        "*://*.paychex.com/*",
+        "*://*.oraclecloud.com/*",
+        "*://*.brassring.com/*",
+        "*://*.ashbyhq.com/*",
+        "*://workforcenow.adp.com/*",
+        "*://jobs.jobvite.com/*",
+        "*://*.rippling-ats.com/*"
+      ],
+      "js": [
+        "resumeProcessor.js",
+        "atsStrategies/genericStrategy.js",
+        "atsStrategies/strategyRegistry.js",
+        "atsStrategies/adpStrategy.js",
+        "atsStrategies/applytojobStrategy.js",
+        "atsStrategies/ashbyStrategy.js",
+        "atsStrategies/bamboohrStrategy.js",
+        "atsStrategies/brassringStrategy.js",
+        "atsStrategies/greenhouseStrategy.js",
+        "atsStrategies/icimsStrategy.js",
+        "atsStrategies/indeedStrategy.js",
+        "atsStrategies/jobviteStrategy.js",
+        "atsStrategies/leverStrategy.js",
+        "atsStrategies/linkedinStrategy.js",
+        "atsStrategies/oraclecloudStrategy.js",
+        "atsStrategies/paychexStrategy.js",
+        "atsStrategies/paycomStrategy.js",
+        "atsStrategies/personioStrategy.js",
+        "atsStrategies/recruiteeStrategy.js",
+        "atsStrategies/ripplingStrategy.js",
+        "atsStrategies/smartrecruitersStrategy.js",
+        "atsStrategies/successfactorsStrategy.js",
+        "atsStrategies/taleoStrategy.js",
+        "atsStrategies/teamtailorStrategy.js",
+        "atsStrategies/ultiproStrategy.js",
+        "atsStrategies/workableStrategy.js",
+        "atsStrategies/workdayStrategy.js",
+        "content.js"
+      ],
+      "all_frames": true
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

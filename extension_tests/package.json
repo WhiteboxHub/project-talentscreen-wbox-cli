@@ -1,0 +1,19 @@
+{
+  "name": "talent-direct-autofill-tests",
+  "version": "1.0.0",
+  "description": "Unit tests for Talent Direct Auto fill v1.5",
+  "scripts": {
+    "test": "jest --verbose --no-coverage",
+    "test:coverage": "jest --coverage"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "setupFiles": ["./setup/chrome-mock.js"],
+    "testMatch": ["**/unit/**/*.test.js", "**/integration/**/*.test.js"],
+    "testTimeout": 10000
+  }
+}
