@@ -34,7 +34,6 @@ langchain-core>=0.1.0
 
 # Security
 cryptography>=41.0.0
-python-dotenv>=1.0.0
 
 # Development dependencies (optional)
 pytest>=7.4.0

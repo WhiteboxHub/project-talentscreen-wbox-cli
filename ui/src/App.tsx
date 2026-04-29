@@ -13,7 +13,7 @@ const App = () => {
     index: number;
     fields: any[];
   }>(null);
-  
+
   // Keep state for rendering if needed, but use ref for the terminal loop
   const [formSession, setFormSessionState] = useState<null | any>(null);
 
@@ -39,8 +39,7 @@ const App = () => {
     formValuesRef.current[field.name] = input;
 
     term.current?.writeln(
-      `\x1b[90m[UI] ${field.name} = ${
-        field.type === 'password' ? '*****' : input
+      `\x1b[90m[UI] ${field.name} = ${field.type === 'password' ? '*****' : input
       }\x1b[0m`
     );
 
@@ -121,7 +120,7 @@ const App = () => {
         t.writeln('\x1b[90m[ws] \x1b[32mConnected to engine.\x1b[0m');
       }
     };
-    
+
     printWelcome();
 
     // ── INPUT SYSTEM (READLINE) ─────────────
@@ -143,11 +142,11 @@ const App = () => {
       if (data === '\r') {
         t.writeln('');
         const input = buffer.trim();
-        
+
         if (input) {
           history.push(input);
         }
-        
+
         historyIndex = -1;
         buffer = '';
         cursorIndex = 0;
@@ -174,7 +173,7 @@ const App = () => {
           }
           showPrompt();
         }
-      } 
+      }
       // Backspace
       else if (data === '\u007f' || data === '\b') {
         if (cursorIndex > 0) {
@@ -182,7 +181,7 @@ const App = () => {
           cursorIndex--;
           redrawInput();
         }
-      } 
+      }
       // Ctrl+C
       else if (data === '\x03') {
         t.writeln('^C');
@@ -242,7 +241,7 @@ const App = () => {
           if (history.length > 0) {
             if (historyIndex === -1) historyIndex = history.length - 1;
             else if (historyIndex > 0) historyIndex--;
-            
+
             buffer = history[historyIndex];
             cursorIndex = buffer.length;
             redrawInput();
@@ -270,29 +269,29 @@ const App = () => {
             t.write('\x1b[C');
           }
         }
-      } 
+      }
       // Alt+Left / Alt+Right (Jump word)
       else if (data === '\x1bb' || data === '\x1b[1;3D' || data === '\x1b[1;5D') { // Alt+Left
-         if (cursorIndex > 0) {
-            const before = buffer.slice(0, cursorIndex);
-            const match = before.match(/\S+\s*$/);
-            const jump = match ? match[0].length : 1;
-            cursorIndex -= jump;
-            redrawInput();
-         }
+        if (cursorIndex > 0) {
+          const before = buffer.slice(0, cursorIndex);
+          const match = before.match(/\S+\s*$/);
+          const jump = match ? match[0].length : 1;
+          cursorIndex -= jump;
+          redrawInput();
+        }
       }
       else if (data === '\x1bf' || data === '\x1b[1;3C' || data === '\x1b[1;5C') { // Alt+Right
-         if (cursorIndex < buffer.length) {
-            const after = buffer.slice(cursorIndex);
-            const match = after.match(/^\s*\S+/);
-            const jump = match ? match[0].length : 1;
-            cursorIndex += jump;
-            redrawInput();
-         }
+        if (cursorIndex < buffer.length) {
+          const after = buffer.slice(cursorIndex);
+          const match = after.match(/^\s*\S+/);
+          const jump = match ? match[0].length : 1;
+          cursorIndex += jump;
+          redrawInput();
+        }
       }
       // Ignore other control sequences
       else if (data < '\x20') {
-        return; 
+        return;
       }
       // Printable characters
       else {
@@ -304,7 +303,7 @@ const App = () => {
 
     // ── WEBSOCKET ────────────────────────────
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.hostname}:8080/ws`);
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {

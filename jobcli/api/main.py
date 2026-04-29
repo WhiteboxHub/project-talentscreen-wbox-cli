@@ -228,7 +228,6 @@ async def handle_dashboard_command(cmd_text: str):
 
         from jobcli.llm.client import LLMClient
         try:
-            await manager.broadcast({"type": "terminal", "message": f"\r\n\x1b[31m[ERR] Unknown command: {cmd_text}. Falling back to AI chat...\x1b[0m\r\n"})
             # Show thinking...
             await manager.broadcast({"type": "terminal", "message": "\r\n\x1b[90mJobCLI is thinking...\x1b[0m\r"})
             
