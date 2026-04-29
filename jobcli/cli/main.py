@@ -2,8 +2,13 @@
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Optional
+
+# Fix UnicodeEncodeError on Windows terminals when printing checkmarks/symbols
+if sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
 
 import typer
 from rich.console import Console

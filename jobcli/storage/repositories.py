@@ -673,7 +673,15 @@ class FieldAnswerRepository:
                     existing.first_job_id = job_id
                 existing.last_job_id = job_id
         else:
-            initial_success = 1 if success else 0
+            # ── Seed counts for new rows ──────────────────────────────────
+            # High-trust sources (human / user) are treated as immediately
+            # reliable: seed at MIN_SUCCESS_COUNT so the row passes the
+            # confidence gate on the very first run.  Low-trust sources
+            # (LLM / auto) still start at 1 and must accumulate evidence.
+            if source in _HIGH_TRUST_SOURCES and success:
+                initial_success = MIN_SUCCESS_COUNT
+            else:
+                initial_success = 1 if success else 0
             initial_failure = 0 if success else 1
             new_answer = FieldAnswerModel(
                 field_label=field_label,
@@ -690,6 +698,36 @@ class FieldAnswerRepository:
             self.session.add(new_answer)
 
         self.session.commit()
+
+    @classmethod
+    def repair_confidence_column(cls, session: Session) -> int:
+        """Backfill confidence=0.0 rows that have a non-zero success_count.
+
+        These rows were created before the ``confidence`` column existed (the
+        SQLite migration adds it with DEFAULT 0.0).  Since ``save_answer`` dedupes
+        on ``(normalized_label, ats_type)`` before re-inserting, these rows are
+        never re-written and their confidence stays stuck at 0.0 forever.
+
+        Returns the number of rows fixed.
+        """
+        rows = (
+            session.query(FieldAnswerModel)
+            .filter(
+                FieldAnswerModel.confidence == 0.0,
+                FieldAnswerModel.success_count > 0,
+            )
+            .all()
+        )
+        fixed = 0
+        for row in rows:
+            new_conf = _compute_confidence(row.success_count or 0, row.failure_count or 0)
+            if new_conf != row.confidence:
+                row.confidence = new_conf
+                row.updated_at = datetime.now()
+                fixed += 1
+        if fixed:
+            session.commit()
+        return fixed
 
     def record_outcome(
         self,

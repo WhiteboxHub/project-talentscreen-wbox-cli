@@ -197,9 +197,19 @@ class Database:
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
 
     def create_tables(self) -> None:
-        """Create all tables."""
+        """Create all tables and run one-time data repairs."""
         Base.metadata.create_all(bind=self.engine)
         self._migrate_sqlite_schema()
+        self._repair_confidence_backfill()
+
+    def _repair_confidence_backfill(self) -> None:
+        """Silently repair any rows stuck at confidence=0.0 due to migration."""
+        try:
+            from jobcli.storage.repositories import FieldAnswerRepository
+            with self.SessionLocal() as session:
+                FieldAnswerRepository.repair_confidence_column(session)
+        except Exception:
+            pass
 
     def _migrate_sqlite_schema(self) -> None:
         """Lightweight additive migrations for SQLite (no Alembic)."""
