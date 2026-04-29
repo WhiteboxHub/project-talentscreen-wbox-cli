@@ -64,7 +64,7 @@ jobcli questions
 jobcli discover
 
 # 6. Start the FastAPI bridge server for the Chrome Extension
-jobcli serve --port 8080
+jobcli server
 
 # 7. Apply — single job
 jobcli apply --url https://boards.greenhouse.io/company/jobs/123
@@ -104,7 +104,7 @@ jobcli apply --url <url> --mode manual
 | `jobcli discover` | Fetch job links from your Whitebox Learning dashboard |
 | `jobcli open-dashboard` | Launch an interactive browser window logged into Wbox |
 | `jobcli apply` | Apply to jobs (single `--url` or `--batch` mode) |
-| `jobcli serve` | Start the FastAPI bridge server for Chrome Extension integration |
+| `jobcli server` | Start the FastAPI bridge server for Chrome Extension integration |
 | `jobcli sync` | Push local learned patterns to server and pull aggregated updates |
 | `jobcli doctor` | Validate Playwright, SQLite, config, and resume JSON |
 
@@ -138,16 +138,31 @@ jobcli/
 
 ---
 
-## Hybrid System & Chrome Extension (Phase 3)
+### Dashboard UI (Advanced mode)
+The JobCLI Dashboard provides a high-fidelity, interactive terminal experience for monitoring and controlling your job applications in real-time.
 
-JobCLI now supports a hybrid execution model that bridges the Python Playwright engine with a Manifest V3 Chrome Extension.
+- **Real-time Streaming**: WebSocket integration for live status updates and AI thought process visibility.
+- **Interactive Terminal**: Full keyboard control, supporting manual intervention pauses and resume-on-ENTER.
+- **Premium Dark Aesthetics**: A modern, Claude-style interface designed for productivity.
 
-### Why a Hybrid System?
-Certain ATS platforms use complex React/Angular states that are difficult to automate reliably from outside the DOM (via Playwright). The Chrome Extension runs *inside* the browser context, hooking directly into native JS events, while the Python CLI acts as the "Brain" orchestrating navigation, memory, and LLM reasoning.
+To start the dashboard:
+1. Ensure the engine bridge is running: `jobcli server`
+2. Start the UI: `cd ui && npm install && npm run dev`
+3. Open `http://localhost:3000`
 
-### How it works
-1. **Bridge Server**: `jobcli serve` runs a local FastAPI server exposing `/api/v1/context` and `/api/v1/report`.
-2. **Event Trigger**: During `jobcli apply`, Playwright injects a `JOBCLI_START_FILL` event into the page.
+---
+
+## 5-Phase Interaction Strategy
+JobCLI now follows a 5-phase strategy to ensure application success:
+
+1. **Phase 1: Discovery** — URL normalization and ATS platform detection.
+2. **Phase 2: Extension Autofill** — High-speed DOM-native filling of standard fields.
+3. **Phase 3: AI Reasoning (LLM)** — Accessibility Tree analysis for complex/custom fields and questionnaires.
+4. **Phase 4: Human-in-the-Loop** — Dashboard-mode pause for validation or missing information.
+5. **Phase 5: Submission & Verification** — Final checks and behavioral outcome detection.
+
+---
+
 3. **Extension Execution**: The extension listens for the trigger, fetches the parsed resume + memory from the bridge server, and executes native DOM autofill strategies.
 4. **Feedback Loop**: The extension posts a report back to the CLI with what it filled, allowing the Python engine to seamlessly fall back to LLM processing for any missed fields.
 

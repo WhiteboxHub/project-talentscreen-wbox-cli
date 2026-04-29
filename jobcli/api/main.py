@@ -192,6 +192,25 @@ async def handle_dashboard_command(cmd_text: str):
                 get_engine_callback({"type": "error", "message": str(e)})
                 
         asyncio.get_running_loop().run_in_executor(None, run_single)
+    elif raw == "start":
+        # Trigger a guided start flow in the UI: ask for credentials via a structured form
+        await manager.broadcast({
+            "type": "log",
+            "message": "\x1b[36m[SYSTEM] Starting guided setup flow...\x1b[0m"
+        })
+        await manager.broadcast({
+            "type": "ui_form",
+            "form": "login",
+            "title": "JobCLI - Enter credentials",
+            "fields": [
+                {"name": "job_board_username", "label": "Job board username", "type": "text", "placeholder": "email@example.com"},
+                {"name": "job_board_password", "label": "Job board password", "type": "password", "placeholder": "Password"},
+                {"name": "openai_api_key", "label": "OpenAI API key", "type": "password", "placeholder": "sk-..."},
+                {"name": "anthropic_api_key", "label": "Anthropic API key", "type": "password", "placeholder": "sk-... (optional)"},
+                {"name": "gemini_api_key", "label": "Google Gemini API key", "type": "password", "placeholder": "(optional)"},
+                {"name": "default_llm_provider", "label": "Default LLM provider", "type": "text", "placeholder": "openai|anthropic|gemini"}
+            ]
+        })
     else:
         # ── Chat Fallback ──
         engine = get_engine()
@@ -204,11 +223,12 @@ async def handle_dashboard_command(cmd_text: str):
         elif provider == "gemini": api_key = config.gemini_api_key
         
         if not api_key:
-            await manager.broadcast({"type": "terminal", "message": f"\r\x1b[31mCommand not recognized: {cmd_text}. (No LLM API key configured for chat fallback)\x1b[0m\r\n"})
+            await manager.broadcast({"type": "terminal", "message": f"\r\x1b[31m[ERR] Command not recognized: {cmd_text}. (No LLM API key configured for chat fallback)\x1b[0m\r\n"})
             return
 
         from jobcli.llm.client import LLMClient
         try:
+            await manager.broadcast({"type": "terminal", "message": f"\r\n\x1b[31m[ERR] Unknown command: {cmd_text}. Falling back to AI chat...\x1b[0m\r\n"})
             # Show thinking...
             await manager.broadcast({"type": "terminal", "message": "\r\n\x1b[90mJobCLI is thinking...\x1b[0m\r"})
             
@@ -278,7 +298,7 @@ async def apply_with_ui(request: ApplyRequest, background_tasks: BackgroundTasks
                 "session_id": session_id,
                 "event": "started",
                 "url": request.url,
-                "message": f"🚀 Starting application to {request.url}"
+                "message": f"[LOG] Starting application to {request.url}"
             })
             
             # Run the application
@@ -290,7 +310,7 @@ async def apply_with_ui(request: ApplyRequest, background_tasks: BackgroundTasks
                 "type": "application_event",
                 "session_id": session_id,
                 "event": "completed",
-                "message": "✅ Application submitted successfully!"
+                "message": "[OK] Application submitted successfully!"
             })
             
         except Exception as e:
@@ -377,6 +397,48 @@ async def apply_batch(background_tasks: BackgroundTasks):
     
     background_tasks.add_task(run_batch)
     return {"message": "Batch application started in background"}
+
+
+class LoginRequest(BaseModel):
+    job_board_username: Optional[str] = None
+    job_board_password: Optional[str] = None
+    openai_api_key: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    default_llm_provider: Optional[str] = None
+
+
+@app.post("/api/ui/login")
+async def ui_login(request: LoginRequest):
+    """Accept credentials from the UI and save them to the config repository."""
+    try:
+        db_path = os.getenv("DATABASE_PATH", "~/.jobcli/jobcli.db")
+        db_path = os.path.expandvars(os.path.expanduser(db_path))
+        db = Database(f"sqlite:///{Path(db_path).as_posix()}")
+        session = db.get_session()
+        config_repo = ConfigRepository(session)
+
+        # Persist each provided field
+        if request.job_board_username:
+            config_repo.set("job_board_username", request.job_board_username)
+        if request.job_board_password:
+            config_repo.set("job_board_password", request.job_board_password)
+        if request.openai_api_key:
+            config_repo.set("openai_api_key", request.openai_api_key)
+        if request.anthropic_api_key:
+            config_repo.set("anthropic_api_key", request.anthropic_api_key)
+        if request.gemini_api_key:
+            config_repo.set("gemini_api_key", request.gemini_api_key)
+        if request.default_llm_provider:
+            config_repo.set("default_llm_provider", request.default_llm_provider)
+
+        session.close()
+        # Inform UI
+        await manager.broadcast({"type": "log", "message": "\x1b[32m[SYSTEM] Credentials saved successfully.\x1b[0m"})
+        return {"status": "ok", "message": "Credentials saved"}
+    except Exception as e:
+        await manager.broadcast({"type": "error", "message": str(e)})
+        return {"status": "error", "message": str(e)}
 
 @app.post("/api/discover")
 async def discover_jobs(background_tasks: BackgroundTasks):

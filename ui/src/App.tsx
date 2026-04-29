@@ -1,332 +1,365 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 
-const s = {
-    // Main container
-    root: { 
-        display: 'flex', 
-        flexDirection: 'column' as const, 
-        height: '100vh', 
-        width: '100vw', 
-        background: '#1a1a1a', 
-        color: '#e0e0e0', 
-        fontFamily: '"Monaco", "Menlo", Courier, monospace', 
-        overflow: 'hidden' 
-    } as React.CSSProperties,
-    
-    // Welcome box at top
-    welcomeBox: { 
-        border: '1px solid #d4a574', 
-        background: '#1a1a1a',
-        margin: '12px',
-        padding: '12px',
-        borderRadius: 0,
-        fontSize: 12,
-        color: '#d4a574',
-    } as React.CSSProperties,
-    
-    welcomeTitle: {
-        color: '#d4a574',
-        fontWeight: 'bold',
-        marginBottom: 8,
-        fontSize: 12,
-    } as React.CSSProperties,
-    
-    welcomeCommand: {
-        color: '#888',
-        fontSize: 11,
-        marginBottom: 4,
-        fontStyle: 'italic' as const,
-    } as React.CSSProperties,
-    
-    welcomePath: {
-        color: '#666',
-        fontSize: 11,
-        marginTop: 8,
-    } as React.CSSProperties,
-    
-    // Tips section
-    tipsContainer: {
-        padding: '12px',
-        background: '#1a1a1a',
-        color: '#e0e0e0',
-        fontSize: 11,
-        borderBottom: '1px solid #333',
-    } as React.CSSProperties,
-    
-    tipTitle: {
-        color: '#d4a574',
-        fontWeight: 'bold',
-        marginBottom: 8,
-        fontSize: 11,
-    } as React.CSSProperties,
-    
-    tipList: {
-        margin: 0,
-        paddingLeft: 16,
-        color: '#aaa',
-        lineHeight: 1.6,
-        fontSize: 11,
-    } as React.CSSProperties,
-    
-    // Terminal area
-    terminalContainer: {
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column' as const,
-        overflow: 'hidden',
-        background: '#0a0a0a',
-        borderLeft: '4px solid #1a1a1a',
-    } as React.CSSProperties,
-    
-    termDiv: { 
-        flex: 1, 
-        overflow: 'auto',
-        padding: '12px',
-    } as React.CSSProperties,
-    
-    // Input area at bottom
-    inputContainer: {
-        display: 'flex',
-        gap: 8,
-        padding: '12px',
-        background: '#1a1a1a',
-        borderTop: '1px solid #333',
-        alignItems: 'center',
-        flexShrink: 0,
-    } as React.CSSProperties,
-    
-    inputIcon: {
-        color: '#d4a574',
-        fontSize: 14,
-        fontWeight: 'bold',
-    } as React.CSSProperties,
-    
-    inputField: {
-        flex: 1,
-        background: '#0a0a0a',
-        border: '1px solid #333',
-        borderRadius: 4,
-        padding: '8px 12px',
-        fontSize: 12,
-        color: '#e0e0e0',
-        outline: 'none',
-        fontFamily: 'inherit',
-    } as React.CSSProperties,
-    
-    statusIndicator: {
-        width: 10,
-        height: 10,
-        borderRadius: '50%',
-        background: '#4caf50',
-        flexShrink: 0,
-    } as React.CSSProperties,
-};
-
 const App = () => {
-    const termRef = useRef<HTMLDivElement>(null);
-    const term = useRef<XTerm | null>(null);
-    const wsRef = useRef<WebSocket | null>(null);
-    const [connected, setConnected] = useState(false);
-    const [manualUrl, setManualUrl] = useState('');
-    const [lastAction, setLastAction] = useState('No recent activity');
+  const termRef = useRef<HTMLDivElement>(null);
+  const term = useRef<XTerm | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
-    const sendCommand = (data: any) => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify(data));
-        }
-    };
+  const formSessionRef = useRef<null | {
+    title: string;
+    index: number;
+    fields: any[];
+  }>(null);
+  
+  // Keep state for rendering if needed, but use ref for the terminal loop
+  const [formSession, setFormSessionState] = useState<null | any>(null);
 
-    // ── Terminal init ──────────────────────────────────────────────────────
-    useEffect(() => {
-        if (!termRef.current) return;
+  const setFormSession = (session: any) => {
+    formSessionRef.current = session;
+    setFormSessionState(session);
+  };
 
-        const t = new XTerm({
-            theme: {
-                background: 'transparent',
-                foreground: '#e0e0e0',
-                cursor: '#ff6b35',
-                black: '#1a1a1a',
-                red: '#ff4444',
-                green: '#4caf50',
-                yellow: '#ffb74d',
-                blue: '#4dabf7',
-                magenta: '#ba68c8',
-                cyan: '#26c6da',
-                white: '#e0e0e0',
-                brightYellow: '#ffd54f',
-                brightGreen: '#81c784',
-                brightBlue: '#64b5f6',
-            },
-            fontFamily: '"Monaco", "Menlo", "Consolas", monospace',
-            fontSize: 12,
-            lineHeight: 1.5,
-            allowTransparency: true,
-            cursorBlink: true,
-            cursorStyle: 'bar',
-        });
-        term.current = t;
+  const formValuesRef = useRef<Record<string, string>>({});
 
-        const fit = new FitAddon();
-        t.loadAddon(fit);
-        t.open(termRef.current);
-        fit.fit();
+  const showPrompt = () => {
+    term.current?.write('\x1b[36m> \x1b[0m');
+  };
 
-        // ── Welcome panel ────────────────────────────────────────────────
-        t.writeln('\x1b[33m┌─ JobCLI Agent v2.0 ──────────────────────────────────── Welcome ─┐\x1b[0m');
-        t.writeln('\x1b[33m│                                                                 │\x1b[0m');
-        t.writeln('\x1b[33m│  🤖 CLAUDE AGENT STRATEGIES                                      │\x1b[0m');
-        t.writeln('\x1b[33m│                                                                 │\x1b[0m');
-        t.writeln('\x1b[33m│  DECISION → Plan before acting. Assess if tools are needed.    │\x1b[0m');
-        t.writeln('\x1b[33m│  PLAN → Break down complex tasks into clear, actionable steps. │\x1b[0m');
-        t.writeln('\x1b[33m│  ACTION → Execute tools strategically. Read before writing.    │\x1b[0m');
-        t.writeln('\x1b[33m│  OBSERVE → Analyze results. Update plan if needed.             │\x1b[0m');
-        t.writeln('\x1b[33m│  REPEAT → Continue until task is complete or blocked.          │\x1b[0m');
-        t.writeln('\x1b[33m│  FINAL → Validate results. No unintended side effects.         │\x1b[0m');
-        t.writeln('\x1b[33m│                                                                 │\x1b[0m');
-        t.writeln('\x1b[33m│  🛡️  SAFETY PRINCIPLES                                           │\x1b[0m');
-        t.writeln('\x1b[33m│  • Never execute destructive commands without confirmation    │\x1b[0m');
-        t.writeln('\x1b[33m│  • Always read files before modifying them                     │\x1b[0m');
-        t.writeln('\x1b[33m│  • If uncertain → ask user instead of guessing                 │\x1b[0m');
-        t.writeln('\x1b[33m│                                                                 │\x1b[0m');
-        t.writeln('\x1b[33m│  🧠 CORE STRATEGIES                                              │\x1b[0m');
-        t.writeln('\x1b[33m│  1. Precision over speed - Be accurate and thorough           │\x1b[0m');
-        t.writeln('\x1b[33m│  2. Verification is mandatory - Always check your work         │\x1b[0m');
-        t.writeln('\x1b[33m│  3. Context matters - Analyze before implementing             │\x1b[0m');
-        t.writeln('\x1b[33m│  4. Tool-first approach - Use tools, not assumptions           │\x1b[0m');
-        t.writeln('\x1b[33m│  5. Clear communication - Structure output for readability     │\x1b[0m');
-        t.writeln('\x1b[33m│                                                                 │\x1b[0m');
-        t.writeln('\x1b[33m└─────────────────────────────────────────────────────────────────┘\x1b[0m');
-        t.writeln('');
-        t.write('\x1b[36m> \x1b[0m');
+  // ── FORM HANDLER ───────────────────────────────
+  const processFormInput = async (input: string) => {
+    const currentSession = formSessionRef.current;
+    if (!currentSession) return;
 
-        // ── Keyboard input ─────────────────────────────────────────────────
-        let buf = '';
-        t.onData((data) => {
-            if (data === '\x03') {         // Ctrl+C
-                t.writeln('\x1b[31m^C\x1b[0m');
-                t.write('\x1b[36m> \x1b[0m');
-                buf = '';
-                sendCommand({ type: 'input', data: 'cancel\r' });
-            } else if (data === '\r') {    // Enter
-                t.writeln('');
-                sendCommand({ type: 'input', data: buf + '\r' });
-                buf = '';
-                t.write('\x1b[36m> \x1b[0m');
-            } else if (data === '\u007f') { // Backspace
-                if (buf.length) { buf = buf.slice(0, -1); t.write('\b \b'); }
-            } else {
-                buf += data;
-                t.write(data);
-            }
-        });
+    const { index, fields, title } = currentSession;
+    const field = fields[index];
 
-        // ── WebSocket ──────────────────────────────────────────────────────
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-        wsRef.current = ws;
+    formValuesRef.current[field.name] = input;
 
-        ws.onopen = () => {
-            setConnected(true);
-            t.writeln('\x1b[90m[ws] \x1b[32mConnected to engine.\x1b[0m');
-            t.write('\x1b[36m> \x1b[0m');
-        };
-        ws.onclose = () => {
-            setConnected(false);
-            t.writeln('\r\x1b[31m[ws] Disconnected. Refresh to reconnect.\x1b[0m');
-        };
-        ws.onmessage = (ev) => {
-            try {
-                const d = JSON.parse(ev.data);
-                if (d.type === 'terminal') {
-                    const msg = d.message.replace(/(?<!\r)\n/g, '\r\n');
-                    t.write(msg);
-                } else if (d.type === 'log') {
-                    t.writeln(`\r\x1b[90m[LOG] ${d.message}\x1b[0m`);
-                } else if (d.type === 'phase_start') {
-                    t.writeln(`\r\x1b[33m── ${(d.phase ?? 'phase').toUpperCase()} ──\x1b[0m`);
-                } else if (d.type === 'error') {
-                    t.writeln(`\r\x1b[31m[ERR] ${d.message}\x1b[0m`);
-                }
-            } catch {
-                t.writeln(`\r${ev.data}`);
-            }
-        };
-
-        const onResize = () => fit.fit();
-        window.addEventListener('resize', onResize);
-
-        return () => {
-            window.removeEventListener('resize', onResize);
-            ws.close();
-            t.dispose();
-        };
-    }, []);
-
-    // ── Sidebar actions ────────────────────────────────────────────────────
-    const applyUrl = async () => {
-        if (!manualUrl.trim()) return;
-        const url = manualUrl.trim();
-        setManualUrl('');
-        setLastAction(`Processing: ${url}`);
-        term.current?.writeln(`\r\x1b[36m[SYSTEM]\x1b[0m Processing: ${url}`);
-        term.current?.write('\x1b[36m> \x1b[0m');
-        try {
-            await fetch('/api/apply/single', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url }),
-            });
-        } catch (e) {
-            term.current?.writeln(`\r\x1b[31m[ERROR]\x1b[0m ${e}\x1b[0m`);
-        }
-    };
-
-    return (
-        <div style={s.root}>
-            {/* Welcome Box */}
-            <div style={s.welcomeBox}>
-                <div style={s.welcomeTitle}>❖ Welcome to Claude Code!</div>
-                <div style={s.welcomeCommand}>/help for help, /status for your current setup</div>
-                <div style={s.welcomePath}>Server: {window.location.host}</div>
-            </div>
-
-            {/* Tips Section */}
-            <div style={s.tipsContainer}>
-                <div style={s.tipTitle}>Tips for getting started:</div>
-                <ul style={s.tipList}>
-                    <li>Run /init to create a CLAUDE.md file with instructions for Claude</li>
-                    <li>Run /terminal-setup to set up terminal integration</li>
-                    <li>Use Claude to help with file analysis, editing, bash commands and git</li>
-                    <li>Be as specific as you would with another engineer for the best results</li>
-                </ul>
-                <div style={{ fontSize: 11, color: '#888', marginTop: 12 }}>
-                    💡 Tip: Send messages to Claude while it works to steer Claude in real-time
-                </div>
-            </div>
-
-            {/* Terminal Area */}
-            <div style={s.terminalContainer}>
-                <div style={s.termDiv} ref={termRef} />
-            </div>
-
-            {/* Input Area */}
-            <div style={s.inputContainer}>
-                <span style={s.inputIcon}>💬</span>
-                <input
-                    style={s.inputField}
-                    type="text"
-                    placeholder="write a test for package.json"
-                    value={manualUrl}
-                    onChange={e => setManualUrl(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && applyUrl()}
-                />
-                <div style={{ ...s.statusIndicator, background: connected ? '#4caf50' : '#cc3333' }} />
-            </div>
-        </div>
+    term.current?.writeln(
+      `\x1b[90m[UI] ${field.name} = ${
+        field.type === 'password' ? '*****' : input
+      }\x1b[0m`
     );
+
+    const nextIndex = index + 1;
+
+    if (nextIndex >= fields.length) {
+      // submit
+      try {
+        const res = await fetch('/api/ui/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formValuesRef.current),
+        });
+
+        const text = await res.text();
+        term.current?.writeln(`\x1b[32m[OK] ${text}\x1b[0m`);
+      } catch (e) {
+        term.current?.writeln(`\x1b[31m[ERR] ${e}\x1b[0m`);
+      }
+
+      setFormSession(null);
+      formValuesRef.current = {};
+      showPrompt();
+      return;
+    }
+
+    // next question
+    setFormSession({ title, index: nextIndex, fields });
+
+    const next = fields[nextIndex];
+    term.current?.writeln(
+      `\x1b[90m${nextIndex + 1}) ${next.name}: ${next.label} (${next.type})\x1b[0m`
+    );
+
+    showPrompt();
+  };
+
+  useEffect(() => {
+    if (!termRef.current) return;
+
+    const t = new XTerm({
+      theme: {
+        background: '#0a0a0a',
+        foreground: '#e0e0e0',
+        cursor: '#ff6b35',
+        selectionBackground: 'rgba(255, 107, 53, 0.3)',
+        black: '#1a1a1a',
+        red: '#ff5555',
+        green: '#50fa7b',
+        yellow: '#f1fa8c',
+        blue: '#bd93f9',
+        magenta: '#ff79c6',
+        cyan: '#8be9fd',
+        white: '#f8f8f2',
+      },
+      fontSize: 14,
+      fontFamily: '"Fira Code", "Source Code Pro", monospace',
+      cursorBlink: true,
+      allowTransparency: true,
+      lineHeight: 1.2,
+    });
+
+    term.current = t;
+
+    const fit = new FitAddon();
+    t.loadAddon(fit);
+    t.open(termRef.current);
+    fit.fit();
+
+    // ── WELCOME ───────────────────────────────
+    const printWelcome = () => {
+      t.write('\x1b[H\x1b[2J'); // Move to top-left and clear viewport
+      t.writeln('\x1b[1;33m❖ Welcome to JobCLI!\x1b[0m');
+      t.writeln('\x1b[3m/help for help, /status for your current setup\x1b[0m');
+      t.writeln(`\x1b[90mServer: ${window.location.host}\x1b[0m`);
+      t.writeln('');
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        t.writeln('\x1b[90m[ws] \x1b[32mConnected to engine.\x1b[0m');
+      }
+    };
+    
+    printWelcome();
+
+    // ── INPUT SYSTEM (READLINE) ─────────────
+    let buffer = '';
+    let cursorIndex = 0;
+    let history: string[] = [];
+    let historyIndex = -1;
+
+    const redrawInput = () => {
+      // Clear current line, reprint prompt and buffer, move cursor to correct position
+      t.write('\x1b[2K\r\x1b[36m> \x1b[0m' + buffer);
+      if (cursorIndex < buffer.length) {
+        t.write(`\x1b[${buffer.length - cursorIndex}D`);
+      }
+    };
+
+    t.onData((data) => {
+      // Enter
+      if (data === '\r') {
+        t.writeln('');
+        const input = buffer.trim();
+        
+        if (input) {
+          history.push(input);
+        }
+        
+        historyIndex = -1;
+        buffer = '';
+        cursorIndex = 0;
+
+        // "clear" and "cls" handled locally
+        if (input.toLowerCase() === 'clear' || input.toLowerCase() === 'cls') {
+          t.clear();
+          printWelcome();
+          showPrompt();
+          return;
+        }
+
+        const isFormActive = !!formSessionRef.current;
+
+        if (isFormActive) {
+          processFormInput(input);
+        } else {
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(
+              JSON.stringify({ type: 'input', data: input + '\r' })
+            );
+          } else {
+            t.writeln('\r\n\x1b[31m[ws] Error: Not connected to engine\x1b[0m');
+          }
+          showPrompt();
+        }
+      } 
+      // Backspace
+      else if (data === '\u007f' || data === '\b') {
+        if (cursorIndex > 0) {
+          buffer = buffer.slice(0, cursorIndex - 1) + buffer.slice(cursorIndex);
+          cursorIndex--;
+          redrawInput();
+        }
+      } 
+      // Ctrl+C
+      else if (data === '\x03') {
+        t.writeln('^C');
+        buffer = '';
+        cursorIndex = 0;
+        historyIndex = -1;
+        if (formSessionRef.current) {
+          processFormInput('/cancel');
+        } else {
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: 'input', data: 'cancel\r' }));
+          }
+        }
+      }
+      // Ctrl+L (Clear)
+      else if (data === '\x0c') {
+        t.clear();
+        printWelcome();
+        redrawInput();
+      }
+      // Ctrl+A (Home)
+      else if (data === '\x01') {
+        cursorIndex = 0;
+        redrawInput();
+      }
+      // Ctrl+E (End)
+      else if (data === '\x05') {
+        cursorIndex = buffer.length;
+        redrawInput();
+      }
+      // Ctrl+U (Clear line before cursor)
+      else if (data === '\x15') {
+        buffer = buffer.slice(cursorIndex);
+        cursorIndex = 0;
+        redrawInput();
+      }
+      // Ctrl+K (Clear to end of line)
+      else if (data === '\x0b') {
+        buffer = buffer.slice(0, cursorIndex);
+        redrawInput();
+      }
+      // Ctrl+W (Delete previous word)
+      else if (data === '\x17') {
+        if (cursorIndex > 0) {
+          const before = buffer.slice(0, cursorIndex);
+          const after = buffer.slice(cursorIndex);
+          const match = before.match(/\S+\s*$/);
+          const deleteCount = match ? match[0].length : 1;
+          buffer = before.slice(0, -deleteCount) + after;
+          cursorIndex -= deleteCount;
+          redrawInput();
+        }
+      }
+      // Navigation: Up/Down/Left/Right
+      else if (data.startsWith('\x1b[')) {
+        if (data === '\x1b[A') { // Up
+          if (history.length > 0) {
+            if (historyIndex === -1) historyIndex = history.length - 1;
+            else if (historyIndex > 0) historyIndex--;
+            
+            buffer = history[historyIndex];
+            cursorIndex = buffer.length;
+            redrawInput();
+          }
+        } else if (data === '\x1b[B') { // Down
+          if (historyIndex !== -1) {
+            if (historyIndex < history.length - 1) {
+              historyIndex++;
+              buffer = history[historyIndex];
+            } else {
+              historyIndex = -1;
+              buffer = '';
+            }
+            cursorIndex = buffer.length;
+            redrawInput();
+          }
+        } else if (data === '\x1b[D') { // Left
+          if (cursorIndex > 0) {
+            cursorIndex--;
+            t.write('\x1b[D');
+          }
+        } else if (data === '\x1b[C') { // Right
+          if (cursorIndex < buffer.length) {
+            cursorIndex++;
+            t.write('\x1b[C');
+          }
+        }
+      } 
+      // Alt+Left / Alt+Right (Jump word)
+      else if (data === '\x1bb' || data === '\x1b[1;3D' || data === '\x1b[1;5D') { // Alt+Left
+         if (cursorIndex > 0) {
+            const before = buffer.slice(0, cursorIndex);
+            const match = before.match(/\S+\s*$/);
+            const jump = match ? match[0].length : 1;
+            cursorIndex -= jump;
+            redrawInput();
+         }
+      }
+      else if (data === '\x1bf' || data === '\x1b[1;3C' || data === '\x1b[1;5C') { // Alt+Right
+         if (cursorIndex < buffer.length) {
+            const after = buffer.slice(cursorIndex);
+            const match = after.match(/^\s*\S+/);
+            const jump = match ? match[0].length : 1;
+            cursorIndex += jump;
+            redrawInput();
+         }
+      }
+      // Ignore other control sequences
+      else if (data < '\x20') {
+        return; 
+      }
+      // Printable characters
+      else {
+        buffer = buffer.slice(0, cursorIndex) + data + buffer.slice(cursorIndex);
+        cursorIndex += data.length;
+        redrawInput();
+      }
+    });
+
+    // ── WEBSOCKET ────────────────────────────
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.hostname}:8080/ws`);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      t.writeln('\r\n\x1b[90m[ws] \x1b[32mConnected to engine.\x1b[0m');
+      showPrompt();
+    };
+
+    ws.onmessage = (ev) => {
+      try {
+        const d = JSON.parse(ev.data);
+
+        if (d.type === 'terminal') {
+          t.write(d.message.replace(/\n/g, '\r\n'));
+        } else if (d.type === 'log') {
+          t.writeln(`\r\n\x1b[90m[LOG] ${d.message}\x1b[0m`);
+        } else if (d.type === 'error') {
+          t.writeln(`\r\n\x1b[31m[ERR] ${d.message}\x1b[0m`);
+        } else if (d.type === 'ui_form') {
+          const { title, fields } = d;
+
+          formValuesRef.current = {};
+          setFormSession({ title, index: 0, fields });
+
+          t.writeln(`\r\n\x1b[33m[UI FORM] ${title}\x1b[0m`);
+          t.writeln(
+            '\x1b[90mAnswer step-by-step. Commands: /cancel\x1b[0m'
+          );
+
+          const f = fields[0];
+          t.writeln(
+            `\x1b[90m1) ${f.name}: ${f.label} (${f.type})\x1b[0m`
+          );
+
+          showPrompt();
+        }
+      } catch {
+        t.writeln('\r\n' + ev.data);
+      }
+    };
+
+    ws.onclose = () => {
+      t.writeln('\r\n\x1b[31m[ws] Disconnected\x1b[0m');
+    };
+
+    return () => {
+      ws.close();
+      t.dispose();
+    };
+  }, []); // Run only once
+
+  return (
+    <div style={{ height: '100vh', width: '100vw', background: '#0a0a0a' }}>
+      <div ref={termRef} style={{ height: '100%', padding: '12px' }} />
+    </div>
+  );
 };
 
 export default App;

@@ -9,11 +9,11 @@
 
       <!-- Input Section -->
       <div class="bg-white rounded-lg shadow-md p-6 mb-8">
-        <div class="flex gap-2">
+          <div class="flex gap-2">
           <input
             v-model="jobUrl"
             type="url"
-            placeholder="Paste job URL here (e.g., https://..."
+            placeholder="Paste job URL (e.g., https://...)"
             class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             @keyup.enter="startApplication"
             :disabled="isApplying"
@@ -71,11 +71,11 @@
         </div>
 
         <!-- Text Input -->
-        <div v-else class="mb-4">
+          <div v-else class="mb-4">
           <input
             v-model="userAnswer"
             type="text"
-            placeholder="Type your answer..."
+            placeholder="Enter your answer"
             class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
             @keyup.enter="submitAnswer"
           />

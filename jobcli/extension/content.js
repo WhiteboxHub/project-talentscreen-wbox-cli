@@ -301,23 +301,24 @@
 
                 const ctx = getCliContext();
                 if (ctx && ctx.resume) {
-                    const count = doFill(ctx.resume);
-                    // Signal completion back via DOM attribute
-                    document.documentElement.setAttribute(
-                        'data-jobcli-fill-result',
-                        JSON.stringify({ status: 'success', filled: count })
-                    );
+                    doFill(ctx.resume).then(count => {
+                        // Signal completion back via DOM attribute
+                        document.documentElement.setAttribute(
+                            'data-jobcli-fill-result',
+                            JSON.stringify({ status: 'success', filled: count })
+                        );
 
-                    // Update button visual
-                    const btn = document.getElementById('jobcli-autofill-btn');
-                    if (btn) {
-                        btn.textContent = `✅ Filled ${count} fields`;
-                        btn.style.background = 'linear-gradient(135deg, #22c55e, #16a34a)';
-                        setTimeout(() => {
-                            btn.textContent = '⚡ Autofill';
-                            btn.style.background = 'linear-gradient(135deg, #f0abfc, #c084fc, #a855f7)';
-                        }, 3000);
-                    }
+                        // Update button visual
+                        const btn = document.getElementById('jobcli-autofill-btn');
+                        if (btn) {
+                            btn.textContent = `✅ Filled ${count} fields`;
+                            btn.style.background = 'linear-gradient(135deg, #22c55e, #16a34a)';
+                            setTimeout(() => {
+                                btn.textContent = '⚡ Autofill';
+                                btn.style.background = 'linear-gradient(135deg, #f0abfc, #c084fc, #a855f7)';
+                            }, 3000);
+                        }
+                    });
                 }
             }
         }

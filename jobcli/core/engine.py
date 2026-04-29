@@ -1348,15 +1348,18 @@ class ApplicationEngine:
                     page.wait_for_timeout(2000)
 
                 # ── 4. Fill form — unified agent loop ───────────────────
+                self._check_stop()
                 agent.show_phase_banner("Filling application form")
                 success = self._agent_fill_loop(page, state, logger, agent, apply_was_clicked=apply_clicked)
 
                 if not success and state.step_count == 0:
+                    self._check_stop()
                     # Rules-based fallback only if AI made zero progress
                     agent.show_status("AI made no progress — trying rule-based fill...", phase=ExecutionPhase.RULES)
                     success = self._fill_form_rules(page, state, logger, ats_type)
 
                 if not success:
+                    self._check_stop()
                     agent.show_warning("Automation could not complete the form.")
                     handoff = agent.handoff_to_human(
                         reason="The agent could not finish the form on its own.",
@@ -1365,16 +1368,25 @@ class ApplicationEngine:
                              "the page you're currently on.",
                     )
                     if handoff.cancelled:
+                        self._check_stop() # Will raise if stopped
                         self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
                         return ApplicationStatus.FAILED
 
                     page = handoff.page
                     agent.page = page
 
+                    # LEARNING LOOP: Scrape whatever the human typed in the browser 
+                    # back into our persistent memory so we reuse it next time.
+                    try:
+                        self._scrape_browser_state_to_memory(page, state, agent)
+                    except Exception:
+                        pass
+
                     # If the human advanced (e.g. clicked Next/Submit), give
                     # the agent one more pass on the *new* page rather than
                     # declaring success/failure based on the old one.
                     if handoff.advanced:
+                        self._check_stop()
                         agent.show_status(
                             "Continuing from where you left off...",
                             phase=ExecutionPhase.HUMAN,
@@ -1385,6 +1397,8 @@ class ApplicationEngine:
 
                     if not success:
                         success = self._submission_looks_plausible(page)
+
+                self._check_stop()
 
                 # ── 5. Final status ─────────────────────────────────────
                 if success:
@@ -1413,6 +1427,12 @@ class ApplicationEngine:
 
                 return status
 
+            except (InterruptedError, KeyboardInterrupt):
+                # Clean stop requested via CLI
+                agent.show_warning("Application process stopped by user.")
+                logger.warning("Application cancelled by user", phase=state.current_phase)
+                self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
+                return ApplicationStatus.FAILED
             except Exception as e:
                 logger.error(f"Application error: {e}")
                 if self.config.screenshot_on_error:
@@ -1574,6 +1594,8 @@ class ApplicationEngine:
                 logger.warning("0 fields filled by rules. Falling through to LLM.", phase=ExecutionPhase.RULES)
                 logger.log_phase_end(ExecutionPhase.RULES, False)
                 return False
+        except (InterruptedError, KeyboardInterrupt):
+            raise
         except Exception as e:
             logger.error(f"Form fill failed: {e}", phase=ExecutionPhase.RULES)
             logger.log_phase_end(ExecutionPhase.RULES, False)
@@ -1934,8 +1956,9 @@ class ApplicationEngine:
                 ):
                     logger.log_phase_end(ExecutionPhase.LLM, False)
                     return False
-                # The human may have navigated somewhere else while solving
-                # the challenge; re-extract the AX tree from the current page.
+                # Re-extract snapshot every time so the LLM sees the
+                # results of previous steps.
+                agent.show_status("Extracting page structure (Accessibility Tree)...", phase=ExecutionPhase.LLM)
                 try:
                     ax_tree = extractor.extract()
                 except Exception:
@@ -1948,6 +1971,7 @@ class ApplicationEngine:
                         "\n\n## ALREADY FILLED FIELDS (DO NOT re-fill these — they were set by the autofill extension):\n"
                         + "\n".join(prefilled_fields)
                     )
+                agent.show_status(f"AI is thinking — Consulting {provider}...", phase=ExecutionPhase.LLM)
                 llm_response = llm_client.analyze_page_from_axtree(
                     ax_tree, self.resume, task=task,
                     memory_context=memory_context,
@@ -3164,6 +3188,8 @@ class ApplicationEngine:
             logger.log_phase_end(ExecutionPhase.LLM, success)
             return success
 
+        except (InterruptedError, KeyboardInterrupt):
+            raise
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -3228,6 +3254,52 @@ class ApplicationEngine:
             return None
 
     # NOTE: _phase_human has been removed.
+
+    def _scrape_browser_state_to_memory(self, page: Page, state: ApplicationState, agent: AgentInterface) -> None:
+        """Extract live values from the browser and save them to AgentMemory.
+        
+        This ensures the agent 'learns' even from manual work done by the human
+        during a handoff, not just from terminal prompts.
+        """
+        try:
+            # 1. Grab all non-empty, non-password field values
+            live_vals = page.evaluate("""
+                () => {
+                    const res = [];
+                    document.querySelectorAll('input, select, textarea').forEach(el => {
+                        if (el.type === 'password' || el.type === 'hidden' || el.type === 'file') return;
+                        let val = el.value;
+                        if (el.tagName === 'SELECT' && el.selectedIndex >= 0) {
+                            val = el.options[el.selectedIndex].text;
+                        }
+                        const isPlaceholder = ["select", "choose", "--"].some(p => val.toLowerCase().includes(p));
+                        if (val && val.trim() !== '' && !isPlaceholder) {
+                             const label = el.getAttribute('aria-label') || el.name || el.id || '';
+                             if (label && val.length < 200) {
+                                 res.push({ label: label, value: val.trim() });
+                             }
+                        }
+                    });
+                    return res;
+                }
+            """)
+            if not live_vals:
+                return
+
+            # 2. Persist to memory
+            from jobcli.core.memory import AgentMemory
+            mem = AgentMemory(self.session, job_id=state.job_id)
+            ats = state.detected_ats or ATSType.UNKNOWN
+            
+            learned_count = 0
+            for item in live_vals:
+                if mem.save_field_answer(item['label'], item['value'], ats, source="human_observed"):
+                    learned_count += 1
+            
+            if learned_count > 0:
+                agent.show_status(f"Learned {learned_count} new field(s) from your browser activity.", phase=ExecutionPhase.HUMAN)
+        except Exception:
+            pass
 
     def _dismiss_cookie_consent(self, page: Page, logger: JobLogger) -> None:
         """Dismiss cookie banners, privacy dialogs, and other overlays that block clicks."""

@@ -203,7 +203,7 @@ export const ApplyJobComponent: React.FC = () => {
               value={jobUrl}
               onChange={(e) => setJobUrl(e.target.value)}
               type="url"
-              placeholder="Paste job URL here (e.g., https://..."
+              placeholder="Paste job URL (e.g., https://...)"
               disabled={isApplying}
               onKeyUp={(e) => e.key === 'Enter' && startApplication()}
               className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
@@ -269,7 +269,7 @@ export const ApplyJobComponent: React.FC = () => {
                   value={userAnswer}
                   onChange={(e) => setUserAnswer(e.target.value)}
                   type="text"
-                  placeholder="Type your answer..."
+                  placeholder="Enter your answer"
                   onKeyUp={(e) => e.key === 'Enter' && submitAnswer()}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 />
