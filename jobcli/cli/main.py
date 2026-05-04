@@ -445,7 +445,7 @@ def apply(
     # (Exclude LinkedIn and Workday which require logins)
     supported_domains = [
         "lever.co", "greenhouse.io", "ashbyhq.com", "breezy.hr", "workable.com",
-        "recruitee.com", "pinpointhq.com", "rippling-ats.com", "smartrecruiters.com",
+        "recruitee.com", "pinpointhq.com", "rippling-ats.com", "rippling.com", "smartrecruiters.com",
         "jobvite.com", "applytojob.com"
     ]
     

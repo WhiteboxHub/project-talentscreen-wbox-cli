@@ -75,40 +75,56 @@ class WboxDiscoverer:
                 
                 # Extraction phase
                 if self.logger:
-                    self.logger.info("Extracting job links from grid")
+                    self.logger.info("Extracting job links from grid (scrolling through all rows)")
                 
                 # Give it a moment to ensure all cells are rendered
-                time.sleep(5)
+                time.sleep(2)
                 
-                # Identify links
-                links = page.query_selector_all('a.font-semibold.text-blue-600')
+                discovered_urls = set()
                 
-                for link in links:
-                    url = link.get_attribute("href")
-                    title = link.inner_text().strip()
+                # The dashboard uses AG Grid which uses DOM virtualization (only renders ~15 visible rows).
+                # We need to scroll down to force it to render the rest of the jobs.
+                for _ in range(15):  # Max 15 scrolls to prevent infinite loops
+                    links = page.query_selector_all('a.font-semibold.text-blue-600')
                     
-                    if url and title:
-                        # Check if job already exists
-                        existing = self.job_repo.get_by_url(url)
-                        if not existing:
-                            job = Job(
-                                url=url,
-                                title=title,
-                                status=ApplicationStatus.PENDING
-                            )
-                            # Try to find company name in parent row if possible
-                            try:
-                                # Row -> Cell -> Link
-                                row = link.evaluate_handle('el => el.closest(".ag-row")')
-                                if row:
-                                    company_cell = row.as_element().query_selector('[col-id="company"]')
-                                    if company_cell:
-                                        job.company = company_cell.inner_text().strip()
-                            except Exception:
-                                pass
+                    for link in links:
+                        try:
+                            url = link.get_attribute("href")
+                            title = link.inner_text().strip()
+                            
+                            if url and title and url not in discovered_urls:
+                                discovered_urls.add(url)
                                 
-                            self.job_repo.create(job)
-                            discovered_jobs.append(job)
+                                # Check if job already exists
+                                existing = self.job_repo.get_by_url(url)
+                                if not existing:
+                                    job = Job(
+                                        url=url,
+                                        title=title,
+                                        status=ApplicationStatus.PENDING
+                                    )
+                                    # Try to find company name in parent row if possible
+                                    try:
+                                        row = link.evaluate_handle('el => el.closest(".ag-row")')
+                                        if row:
+                                            company_cell = row.as_element().query_selector('[col-id="company"]')
+                                            if company_cell:
+                                                job.company = company_cell.inner_text().strip()
+                                    except Exception:
+                                        pass
+                                        
+                                    self.job_repo.create(job)
+                                    discovered_jobs.append(job)
+                        except Exception:
+                            # Elements might detach during scroll
+                            continue
+                            
+                    # Scroll down by evaluating JS on the viewport
+                    try:
+                        page.evaluate('() => { const vp = document.querySelector(".ag-body-viewport"); if (vp) vp.scrollBy(0, 800); }')
+                        time.sleep(1)
+                    except Exception:
+                        break
 
                 if self.logger:
                     self.logger.info(f"Discovered {len(discovered_jobs)} new jobs")
