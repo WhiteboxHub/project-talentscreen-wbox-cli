@@ -80,6 +80,7 @@ class TestLaunchConfig:
     """The launch / context options that travel alongside the JS."""
 
     def test_launch_args_strip_automation_signals(self) -> None:
+        assert "--start-maximized" in LAUNCH_ARGS
         assert "--disable-blink-features=AutomationControlled" in LAUNCH_ARGS
         assert "--no-default-browser-check" in LAUNCH_ARGS
 
@@ -88,7 +89,7 @@ class TestLaunchConfig:
 
     def test_context_has_realistic_viewport(self) -> None:
         vp = CONTEXT_OPTIONS["viewport"]
-        assert vp["width"] >= 1200 and vp["height"] >= 700
+        assert vp is None
 
     def test_context_is_us_english(self) -> None:
         assert CONTEXT_OPTIONS["locale"] == "en-US"

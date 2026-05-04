@@ -441,21 +441,49 @@ def apply(
         console.print("[red]Provide either --url or --batch[/red]")
         raise typer.Exit(1)
 
+    # Filter jobs to only include those supported by extension strategies
+    # (Exclude LinkedIn and Workday which require logins)
+    supported_domains = [
+        "lever.co", "greenhouse.io", "ashbyhq.com", "breezy.hr", "workable.com",
+        "recruitee.com", "pinpointhq.com", "rippling-ats.com", "smartrecruiters.com",
+        "jobvite.com", "applytojob.com"
+    ]
+    
+    original_count = len(jobs)
+    jobs = [
+        j for j in jobs 
+        if any(d in j.url.lower() for d in supported_domains)
+        and "linkedin.com" not in j.url.lower()
+        and "myworkdayjobs.com" not in j.url.lower()
+    ]
+    
+    if len(jobs) < original_count:
+        console.print(f"[yellow]Filtered out {original_count - len(jobs)} unsupported jobs (LinkedIn, Workday, etc.).[/yellow]")
+
+    if not jobs:
+        console.print("[yellow]No supported jobs remaining in the list.[/yellow]")
+        session.close()
+        return
+
     console.print(f"Applying to {len(jobs)} job(s)...\n")
 
     engine = ApplicationEngine(config, resume, db)
 
-    for i, job in enumerate(jobs, 1):
-        console.print(f"[bold]Job {i}/{len(jobs)}[/bold]: {job.url}")
-        try:
-            status = engine.apply_to_job(job)
-            console.print(f"Status: [green]{status.value}[/green]\n")
-        except KeyboardInterrupt:
-            console.print("\n[yellow]Interrupted by user[/yellow]")
-            break
-        except Exception as e:
-            console.print(f"[red]Error: {e}[/red]\n")
-            continue
+    try:
+        engine.start_session()
+        for i, job in enumerate(jobs, 1):
+            console.print(f"[bold]Job {i}/{len(jobs)}[/bold]: {job.url}")
+            try:
+                status = engine.apply_to_job(job)
+                console.print(f"Status: [green]{status.value}[/green]\n")
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Interrupted by user[/yellow]")
+                break
+            except Exception as e:
+                console.print(f"[red]Error: {e}[/red]\n")
+                continue
+    finally:
+        engine.stop_session()
 
     session.close()
     console.print("[bold green]Application process completed[/bold green]")

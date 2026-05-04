@@ -29,6 +29,7 @@ from typing import Optional
 #: Command-line flags that strip the most common "this is automation"
 #: markers from the Chromium process itself.
 LAUNCH_ARGS: list[str] = [
+    "--start-maximized",
     # Removes the ``navigator.webdriver`` JS flag and the
     # ``Automation`` CDP banner by disabling the Blink feature that
     # sets them.
@@ -55,7 +56,7 @@ IGNORE_DEFAULT_ARGS: list[str] = ["--enable-automation"]
 #: Realistic context options — viewport, locale, timezone.  These should
 #: match typical US-based Chrome users.
 CONTEXT_OPTIONS: dict = {
-    "viewport": {"width": 1366, "height": 864},
+    "viewport": None,
     "locale": "en-US",
     "timezone_id": "America/Los_Angeles",
     "java_script_enabled": True,

@@ -155,6 +155,11 @@ class ClaudeAgentStrategy:
 
         # Build initial prompt
         raw_aria = getattr(ax_tree, "_raw_aria", "")
+        if hasattr(ax_tree, "dropdown_fields") and ax_tree.dropdown_fields:
+            raw_aria += "\n\n## Pre-extracted Dropdown Options:\n"
+            for dropdown in ax_tree.dropdown_fields:
+                if dropdown.get('options'):
+                    raw_aria += f"- {dropdown.get('label')}: {', '.join(dropdown.get('options')[:30])}\n"
         user_info = json.loads(resume.model_dump_json())
 
         system_prompt = """You are an expert autonomous job application agent powered by Claude.
@@ -177,7 +182,8 @@ Always prioritize:
   * Compliance and legal accuracy (work authorization, visa sponsorship)
   * Required field completion
   * Consistency with candidate memory
-  * User privacy and data minimization"""
+  * User privacy and data minimization
+  * Default country codes to +1 (United States/Canada) unless specified otherwise."""
 
         initial_message = f"""Task: {task}
 

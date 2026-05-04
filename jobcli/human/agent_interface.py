@@ -610,16 +610,11 @@ class AgentInterface:
 
         if self.mode == InteractionMode.AUTO and not self.is_server:
             self.show_error(
-                f"Agent stuck ({reason}) but running in AUTO mode — cannot block."
+                f"Agent stuck ({reason}) but running in AUTO mode — cannot block indefinitely."
             )
-            return HandoffResult(
-                page=self.page,
-                url_before=url_before,
-                url_after=url_before,
-                title_after="",
-                advanced=False,
-                cancelled=True,
-            )
+            wait_timeout = 60
+        else:
+            wait_timeout = 600
 
         if self.mode == InteractionMode.AUTO and self.is_server:
              self.show_warning(
@@ -662,13 +657,13 @@ class AgentInterface:
         self.get_attention()
 
         response = self._get_user_input(
-            "  Press ENTER when done (or type 'cancel') [600s timeout]: ",
-            timeout_seconds=600
+            f"  Press ENTER when done (or type 'cancel') [{wait_timeout}s timeout]: ",
+            timeout_seconds=wait_timeout
         )
 
         if response is None:
             self.console.print(
-                "\n  [bold yellow]⏰ No response for 600 seconds — skipping this job.[/bold yellow]"
+                f"\n  [bold yellow] No response for {wait_timeout} seconds — skipping this job.[/bold yellow]"
             )
             self.clear_browser_overlay()
             return HandoffResult(

@@ -61,6 +61,7 @@ class SecureConfig(BaseModel):
     # Paths
     resume_pdf_path: Optional[str] = None
     resume_json_path: Optional[str] = None
+    extension_path: Optional[str] = Field(default_factory=lambda: os.getenv("EXTENSION_PATH"))
     log_directory: str = Field(default="logs")
     database_path: str = Field(default="~/.jobcli/jobcli.db")
 

@@ -859,6 +859,77 @@ class ApplicationEngine:
         
         self.anti_bot = AntiBotManager()
         self.stop_requested = False
+        
+        # Browser session state
+        self.playwright = None
+        self.browser = None
+        self.context = None
+        self.user_data_dir = None
+
+    def start_session(self) -> None:
+        """Start a single browser session for the duration of the batch."""
+        if self.context:
+            return
+            
+        from playwright.sync_api import sync_playwright
+        from jobcli.core.stealth import (
+            LAUNCH_ARGS,
+            IGNORE_DEFAULT_ARGS,
+            CONTEXT_OPTIONS,
+        )
+        
+        self.playwright = sync_playwright().start()
+        
+        # Use EXTENSION_PATH from config (should be the published/unpacked version)
+        extension_dir = self.config.extension_path
+        launch_args = list(LAUNCH_ARGS)
+        
+        if extension_dir and os.path.exists(extension_dir):
+            import tempfile
+            self.user_data_dir = tempfile.mkdtemp(prefix="jobcli_ext_profile_")
+            launch_args.extend([
+                f"--disable-extensions-except={extension_dir}",
+                f"--load-extension={extension_dir}"
+            ])
+            global_logger.info(f"Launching persistent browser context with extension from: {extension_dir}")
+            self.context = self.playwright.chromium.launch_persistent_context(
+                self.user_data_dir,
+                headless=False,
+                args=launch_args,
+                ignore_default_args=IGNORE_DEFAULT_ARGS,
+                **CONTEXT_OPTIONS,
+            )
+        else:
+            global_logger.info("Launching standard browser (no extension path provided or not found).")
+            self.browser = self.playwright.chromium.launch(
+                headless=self.config.headless,
+                args=launch_args,
+                ignore_default_args=IGNORE_DEFAULT_ARGS,
+            )
+            self.context = self.browser.new_context(
+                **CONTEXT_OPTIONS,
+            )
+
+    def stop_session(self) -> None:
+        """Stop the browser session."""
+        if self.context:
+            try:
+                self.context.close()
+            except Exception:
+                pass
+            self.context = None
+        if self.browser:
+            try:
+                self.browser.close()
+            except Exception:
+                pass
+            self.browser = None
+        if self.playwright:
+            try:
+                self.playwright.stop()
+            except Exception:
+                pass
+            self.playwright = None
 
     def request_stop(self) -> None:
         """Signal the engine to stop as soon as possible."""
@@ -1105,52 +1176,15 @@ class ApplicationEngine:
 
         mode = self.config.interaction_mode
 
-        with sync_playwright() as p:
-            # ──────────────────────────────────────────────────────────
-            # Anti-detection surface.  Centralised in ``core.stealth`` so
-            # the same launch flags / context settings / init script are
-            # also used by ``scripts/stealth_check.py`` and the unit
-            # tests, guaranteeing that what we ship is what we test.
-            # ──────────────────────────────────────────────────────────
-            from jobcli.core.stealth import (
-                LAUNCH_ARGS,
-                IGNORE_DEFAULT_ARGS,
-                CONTEXT_OPTIONS,
-                apply_stealth,
-            )
+        # Ensure session is started
+        if not self.context:
+            self.start_session()
             
-            # Load bundled extension
-            extension_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "extension"))
-            launch_args = list(LAUNCH_ARGS)
-            
-            if os.path.exists(extension_dir):
-                launch_args.extend([
-                    f"--disable-extensions-except={extension_dir}",
-                    f"--load-extension={extension_dir}"
-                ])
-                import tempfile
-                user_data_dir = tempfile.mkdtemp(prefix="jobcli_ext_profile_")
-                context = p.chromium.launch_persistent_context(
-                    user_data_dir,
-                    headless=False,
-                    args=launch_args,
-                    ignore_default_args=IGNORE_DEFAULT_ARGS,
-                    **CONTEXT_OPTIONS,
-                )
-                page = context.pages[0] if context.pages else context.new_page()
-            else:
-                browser = p.chromium.launch(
-                    headless=self.config.headless,
-                    args=launch_args,
-                    ignore_default_args=IGNORE_DEFAULT_ARGS,
-                )
-                context = browser.new_context(
-                    **CONTEXT_OPTIONS,
-                )
-                page = context.new_page()
-            
+        page = self.context.new_page()
+        try:
             if self.config.headless:
-                apply_stealth(context, logger=logger)
+                from jobcli.core.stealth import apply_stealth
+                apply_stealth(self.context, logger=logger)
             self.anti_bot.logger = logger
 
             # Inject resume context via a DOM attribute so the extension's
@@ -1164,7 +1198,7 @@ class ApplicationEngine:
             })
             # Escape backticks/backslashes for the template literal
             safe_json = context_json.replace("\\", "\\\\").replace("`", "\\`")
-            context.add_init_script(f"""
+            self.context.add_init_script(f"""
                 document.addEventListener('DOMContentLoaded', () => {{
                     document.documentElement.setAttribute('data-jobcli-context', `{safe_json}`);
                 }});
@@ -1184,276 +1218,266 @@ class ApplicationEngine:
             self.active_agent = agent
             self.stop_requested = False # Reset for new job
 
+            self._check_stop()
+            # ── 1. Navigate ─────────────────────────────────────────
+            agent.show_phase_banner("Navigating to job page")
+            import playwright.sync_api
             try:
-                self._check_stop()
-                # ── 1. Navigate ─────────────────────────────────────────
-                agent.show_phase_banner("Navigating to job page")
-                import playwright.sync_api
-                try:
-                    page.goto(job.url, timeout=45000, wait_until="domcontentloaded")
-                except playwright.sync_api.TimeoutError:
-                    logger.warning("Page load timed out after 45s. Continuing anyway.", phase=ExecutionPhase.RULES)
-                self._random_delay()
+                page.goto(job.url, timeout=45000, wait_until="domcontentloaded")
+            except playwright.sync_api.TimeoutError:
+                logger.warning("Page load timed out after 45s. Continuing anyway.", phase=ExecutionPhase.RULES)
+            self._random_delay()
 
-                # ── 1b. Freeze immediately if we landed on a CAPTCHA ────
-                # This MUST run before cookie-consent dismissal and any
-                # other DOM manipulation.  Clicking cookie buttons, probing
-                # elements, or injecting scripts while a bot challenge is
-                # active tends to flip the challenge into a permanent
-                # "access denied" state.
+            # --- SKIP LOGIC: LinkedIn and Workday via URL ---
+            current_url = page.url.lower()
+            orig_url = job.url.lower()
+            if "linkedin.com" in current_url or "linkedin.com" in orig_url:
+                agent.show_warning("LinkedIn job detected - skipping as requested.")
+                logger.info("Skipping LinkedIn job", phase=ExecutionPhase.RULES)
+                logger.log_phase_end(ExecutionPhase.RULES, True)
+                return ApplicationStatus.SKIPPED
+                
+            if "myworkdayjobs.com" in current_url or "myworkdayjobs.com" in orig_url:
+                agent.show_warning("Workday job detected via URL - skipping as requested.")
+                logger.info("Skipping Workday job (URL check)", phase=ExecutionPhase.RULES)
+                logger.log_phase_end(ExecutionPhase.RULES, True)
+                return ApplicationStatus.SKIPPED
+
+            # ── 1b. Freeze immediately if we landed on a CAPTCHA ────
+            # This MUST run before cookie-consent dismissal and any
+            # other DOM manipulation.  Clicking cookie buttons, probing
+            # elements, or injecting scripts while a bot challenge is
+            # active tends to flip the challenge into a permanent
+            # "access denied" state.
+            if not self._freeze_if_verification(
+                page, agent, logger, context_label="post_navigate"
+            ):
+                self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
+                return ApplicationStatus.FAILED
+            self._dismiss_cookie_consent(page, logger)
+            logger.capture_screenshot(page, "initial", ExecutionPhase.RULES)
+            # ── 1c. Job-board (LinkedIn / JobRight / Indeed / …) handoff ──
+            # These sites are job-aggregators, NOT ATSes.  The agent can't
+            # submit an application from them — the real application lives
+            # on the employer's ATS, reached either by clicking "Apply on
+            # company site" (opens a new tab) or by following a redirect
+            # from "Easy Apply" (which we explicitly forbid anyway).
+            # Hand control to the human, let them click through, and then
+            # adopt whatever tab/page they land on as the new target.
+            board = _job_board_name(page.url or job.url)
+            if board:
+                page = self._handoff_for_job_board(
+                    page, agent, logger, board=board
+                )
+                if page is None:
+                    self.job_repo.update_status(
+                        job.id or 0, ApplicationStatus.FAILED
+                    )
+                    return ApplicationStatus.FAILED
+                # Keep AgentInterface / state pointing at the page the
+                # human handed us.
+                agent.page = page
+                # Also re-check for a verification challenge on the new
+                # page — the employer's ATS may itself be gated.
                 if not self._freeze_if_verification(
-                    page, agent, logger, context_label="post_navigate"
+                    page, agent, logger, context_label="post_jobboard_handoff"
+                ):
+                    self.job_repo.update_status(
+                        job.id or 0, ApplicationStatus.FAILED
+                    )
+                    return ApplicationStatus.FAILED
+                self._dismiss_cookie_consent(page, logger)
+                logger.capture_screenshot(
+                    page, "after_jobboard_handoff", ExecutionPhase.HUMAN
+                )
+            # ── 2. Detect ATS ───────────────────────────────────────
+            detector = ATSDetector(page, logger)
+            # Always detect from the CURRENT page URL (may differ from the
+            # original job.url after a job-board handoff).
+            current_url = page.url or job.url
+            ats_type = detector.detect(current_url)
+            state.detected_ats = ats_type
+            self.job_repo.update_ats_type(job.id or 0, ats_type)
+            agent.set_context(ats_type=ats_type)
+            agent.show_status(f"Detected ATS: {ats_type.value}", phase=ExecutionPhase.RULES)
+
+            if ats_type == ATSType.WORKDAY:
+                agent.show_warning("Workday ATS detected - skipping as requested.")
+                logger.info("Skipping Workday job (ATS match)", phase=ExecutionPhase.RULES)
+                logger.log_phase_end(ExecutionPhase.RULES, True)
+                return ApplicationStatus.SKIPPED
+
+            # ── 3. Click Apply (auto, with inline human fallback) ───
+            # First, check if the page already IS the application form
+            # (e.g. file:// test pages, direct application links, or
+            # sites that land directly on the form without an Apply button).
+            page_already_has_form = False
+            try:
+                visible_inputs = page.locator(
+                    "input[type='text']:visible, input[type='email']:visible, "
+                    "input[type='tel']:visible, select:visible, textarea:visible"
+                ).count()
+                if visible_inputs >= 2:
+                    page_already_has_form = True
+                    logger.info(
+                        f"Detected {visible_inputs} visible form fields — "
+                        f"skipping Apply button search, page is already a form.",
+                        phase=ExecutionPhase.RULES,
+                    )
+            except Exception:
+                pass
+            if page_already_has_form:
+                apply_clicked = True
+            else:
+                agent.show_phase_banner("Finding and clicking Apply button")
+                # A verification challenge may appear *between* pages (job
+                # board → ATS redirect) — check again right before we touch
+                # the DOM looking for an Apply button.
+                if not self._freeze_if_verification(
+                    page, agent, logger, context_label="pre_apply_click"
                 ):
                     self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
                     return ApplicationStatus.FAILED
-
-                self._dismiss_cookie_consent(page, logger)
-                logger.capture_screenshot(page, "initial", ExecutionPhase.RULES)
-
-                # ── 1c. Job-board (LinkedIn / JobRight / Indeed / …) handoff ──
-                # These sites are job-aggregators, NOT ATSes.  The agent can't
-                # submit an application from them — the real application lives
-                # on the employer's ATS, reached either by clicking "Apply on
-                # company site" (opens a new tab) or by following a redirect
-                # from "Easy Apply" (which we explicitly forbid anyway).
-                # Hand control to the human, let them click through, and then
-                # adopt whatever tab/page they land on as the new target.
-                board = _job_board_name(page.url or job.url)
-                if board:
-                    page = self._handoff_for_job_board(
-                        page, agent, logger, board=board
-                    )
-                    if page is None:
-                        self.job_repo.update_status(
-                            job.id or 0, ApplicationStatus.FAILED
-                        )
-                        return ApplicationStatus.FAILED
-                    # Keep AgentInterface / state pointing at the page the
-                    # human handed us.
-                    agent.page = page
-                    # Also re-check for a verification challenge on the new
-                    # page — the employer's ATS may itself be gated.
-                    if not self._freeze_if_verification(
-                        page, agent, logger, context_label="post_jobboard_handoff"
-                    ):
-                        self.job_repo.update_status(
-                            job.id or 0, ApplicationStatus.FAILED
-                        )
-                        return ApplicationStatus.FAILED
-                    self._dismiss_cookie_consent(page, logger)
-                    logger.capture_screenshot(
-                        page, "after_jobboard_handoff", ExecutionPhase.HUMAN
-                    )
-
-                # ── 2. Detect ATS ───────────────────────────────────────
-                detector = ATSDetector(page, logger)
-                # Always detect from the CURRENT page URL (may differ from the
-                # original job.url after a job-board handoff).
-                current_url = page.url or job.url
-                ats_type = detector.detect(current_url)
-                state.detected_ats = ats_type
-                self.job_repo.update_ats_type(job.id or 0, ats_type)
-                agent.set_context(ats_type=ats_type)
-                agent.show_status(f"Detected ATS: {ats_type.value}", phase=ExecutionPhase.RULES)
-
-                # ── 3. Click Apply (auto, with inline human fallback) ───
-                # First, check if the page already IS the application form
-                # (e.g. file:// test pages, direct application links, or
-                # sites that land directly on the form without an Apply button).
-                page_already_has_form = False
-                try:
-                    visible_inputs = page.locator(
-                        "input[type='text']:visible, input[type='email']:visible, "
-                        "input[type='tel']:visible, select:visible, textarea:visible"
-                    ).count()
-                    if visible_inputs >= 2:
-                        page_already_has_form = True
-                        logger.info(
-                            f"Detected {visible_inputs} visible form fields — "
-                            f"skipping Apply button search, page is already a form.",
-                            phase=ExecutionPhase.RULES,
-                        )
-                except Exception:
-                    pass
-
-                if page_already_has_form:
-                    apply_clicked = True
-                else:
-                    agent.show_phase_banner("Finding and clicking Apply button")
-
-                    # A verification challenge may appear *between* pages (job
-                    # board → ATS redirect) — check again right before we touch
-                    # the DOM looking for an Apply button.
-                    if not self._freeze_if_verification(
-                        page, agent, logger, context_label="pre_apply_click"
-                    ):
-                        self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
-                        return ApplicationStatus.FAILED
-
-                    apply_clicked, page = self._click_apply_button(page, state, logger, ats_type)
-                    # Page may have changed (new tab) — update agent's reference
-                    agent.page = page
-
-                    # Clicking Apply often takes us to a gated ATS page that
-                    # itself shows a CAPTCHA. Freeze before moving on.
-                    if apply_clicked:
-                        if not self._freeze_if_verification(
-                            page, agent, logger, context_label="post_apply_click"
-                        ):
-                            self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
-                            return ApplicationStatus.FAILED
-
-                if not apply_clicked:
-                    agent.show_warning("Could not find Apply button automatically.")
-                    # Hand the browser to the human directly.  We used to
-                    # show a terminal-only selector picker here, but it
-                    # was confusing and rarely useful — the native
-                    # browser handoff is always the better UX.
-                    handoff = agent.handoff_to_human(
-                        reason="Could not find a native Apply button on this page.",
-                        hint="Click the correct Apply button yourself (avoid 'Apply with LinkedIn/Indeed'), "
-                             "or navigate to the application form. Then press ENTER to hand control back.",
-                    )
-                    if handoff.cancelled:
-                        self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
-                        return ApplicationStatus.FAILED
-
-                    page = handoff.page
-                    agent.page = page
-
-                    # If the human navigated forward, treat the apply step
-                    # as already completed — do NOT go back. Re-detect ATS
-                    # in case they landed on an entirely different host
-                    # (e.g. company site -> Workday/Greenhouse).
-                    if handoff.advanced:
-                        apply_clicked = True
-                        try:
-                            new_ats = ATSDetector(page, logger).detect(page.url)
-                            if new_ats != ats_type:
-                                ats_type = new_ats
-                                state.detected_ats = ats_type
-                                self.job_repo.update_ats_type(job.id or 0, ats_type)
-                                agent.set_context(ats_type=ats_type)
-                                agent.show_status(
-                                    f"Re-detected ATS after handoff: {ats_type.value}",
-                                    phase=ExecutionPhase.RULES,
-                                )
-                        except Exception:
-                            pass
-                        logger.capture_screenshot(page, "human_apply_resume", ExecutionPhase.HUMAN)
-                else:
-                    agent.show_success("Apply button clicked.")
-
+                apply_clicked, page = self._click_apply_button(page, state, logger, ats_type)
+                # Page may have changed (new tab) — update agent's reference
+                agent.page = page
+                # Clicking Apply often takes us to a gated ATS page that
+                # itself shows a CAPTCHA. Freeze before moving on.
                 if apply_clicked:
-                    page.wait_for_timeout(2000)
-
-                # ── 4. Fill form — unified agent loop ───────────────────
-                self._check_stop()
-                agent.show_phase_banner("Filling application form")
-                success = self._agent_fill_loop(page, state, logger, agent, apply_was_clicked=apply_clicked)
-
-                if not success and state.step_count == 0:
-                    self._check_stop()
-                    # Rules-based fallback only if AI made zero progress
-                    agent.show_status("AI made no progress — trying rule-based fill...", phase=ExecutionPhase.RULES)
-                    success = self._fill_form_rules(page, state, logger, ats_type)
-
-                if not success:
-                    self._check_stop()
-                    agent.show_warning("Automation could not complete the form.")
-                    handoff = agent.handoff_to_human(
-                        reason="The agent could not finish the form on its own.",
-                        hint="Fill any missing fields and submit (or click Next) yourself. "
-                             "When you're done, press ENTER and the agent will resume from "
-                             "the page you're currently on.",
-                    )
-                    if handoff.cancelled:
-                        self._check_stop() # Will raise if stopped
+                    if not self._freeze_if_verification(
+                        page, agent, logger, context_label="post_apply_click"
+                    ):
                         self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
                         return ApplicationStatus.FAILED
-
-                    page = handoff.page
-                    agent.page = page
-
-                    # LEARNING LOOP: Scrape whatever the human typed in the browser 
-                    # back into our persistent memory so we reuse it next time.
-                    try:
-                        self._scrape_browser_state_to_memory(page, state, agent)
-                    except Exception:
-                        pass
-
-                    # If the human advanced (e.g. clicked Next/Submit), give
-                    # the agent one more pass on the *new* page rather than
-                    # declaring success/failure based on the old one.
-                    if handoff.advanced:
-                        self._check_stop()
-                        agent.show_status(
-                            "Continuing from where you left off...",
-                            phase=ExecutionPhase.HUMAN,
-                        )
-                        success = self._agent_fill_loop(
-                            page, state, logger, agent, apply_was_clicked=True
-                        )
-
-                    if not success:
-                        success = self._submission_looks_plausible(page)
-
-                self._check_stop()
-
-                # ── 5. Final status ─────────────────────────────────────
-                if success:
-                    agent.show_success("Application completed successfully!")
-                    logger.info("Application completed successfully")
-                    self.job_repo.update_status(job.id or 0, ApplicationStatus.SUBMITTED)
-                    status = ApplicationStatus.SUBMITTED
-                else:
-                    agent.show_error("Application could not be verified as submitted.")
-                    logger.error("Application failed")
+            if not apply_clicked:
+                agent.show_warning("Could not find Apply button automatically.")
+                # Hand the browser to the human directly.  We used to
+                # show a terminal-only selector picker here, but it
+                # was confusing and rarely useful — the native
+                # browser handoff is always the better UX.
+                handoff = agent.handoff_to_human(
+                    reason="Could not find a native Apply button on this page.",
+                    hint="Click the correct Apply button yourself (avoid 'Apply with LinkedIn/Indeed'), "
+                         "or navigate to the application form. Then press ENTER to hand control back.",
+                )
+                if handoff.cancelled:
                     self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
-                    status = ApplicationStatus.FAILED
-
-                # Increment the local apps-since-sync counter regardless of
-                # outcome — the sync extractor will filter by confidence anyway.
-                try:
-                    from jobcli.core.memory import AgentMemory as _AM
-                    _mem = _AM(self.session, job_id=job.id)
-                    _mem.increment_apps_since_sync()
-                except Exception:
-                    pass
-
-                # ── 6. Final browser pause ──────────────────────────────
-                if not self.config.headless:
-                    agent.final_browser_pause()
-
-                return status
-
-            except (InterruptedError, KeyboardInterrupt):
-                # Clean stop requested via CLI
-                agent.show_warning("Application process stopped by user.")
-                logger.warning("Application cancelled by user", phase=state.current_phase)
-                self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
-                return ApplicationStatus.FAILED
-            except Exception as e:
-                logger.error(f"Application error: {e}")
-                if self.config.screenshot_on_error:
+                    return ApplicationStatus.FAILED
+                page = handoff.page
+                agent.page = page
+                # If the human navigated forward, treat the apply step
+                # as already completed — do NOT go back. Re-detect ATS
+                # in case they landed on an entirely different host
+                # (e.g. company site -> Workday/Greenhouse).
+                if handoff.advanced:
+                    apply_clicked = True
                     try:
-                        logger.capture_screenshot(page, "error", state.current_phase)
+                        new_ats = ATSDetector(page, logger).detect(page.url)
+                        if new_ats != ats_type:
+                            ats_type = new_ats
+                            state.detected_ats = ats_type
+                            self.job_repo.update_ats_type(job.id or 0, ats_type)
+                            agent.set_context(ats_type=ats_type)
+                            agent.show_status(
+                                f"Re-detected ATS after handoff: {ats_type.value}",
+                                phase=ExecutionPhase.RULES,
+                            )
                     except Exception:
                         pass
+                    logger.capture_screenshot(page, "human_apply_resume", ExecutionPhase.HUMAN)
+            else:
+                agent.show_success("Apply button clicked.")
+            if apply_clicked:
+                page.wait_for_timeout(2000)
+            # ── 4. Fill form — unified agent loop ───────────────────
+            self._check_stop()
+            agent.show_phase_banner("Filling application form")
+            success = self._agent_fill_loop(page, state, logger, agent, apply_was_clicked=apply_clicked)
+            if not success and state.step_count == 0:
+                self._check_stop()
+                # Rules-based fallback only if AI made zero progress
+                agent.show_status("AI made no progress — trying rule-based fill...", phase=ExecutionPhase.RULES)
+                success = self._fill_form_rules(page, state, logger, ats_type)
+            if not success:
+                self._check_stop()
+                agent.show_warning("Automation could not complete the form.")
+                handoff = agent.handoff_to_human(
+                    reason="The agent could not finish the form on its own.",
+                    hint="Fill any missing fields and submit (or click Next) yourself. "
+                         "When you're done, press ENTER and the agent will resume from "
+                         "the page you're currently on.",
+                )
+                if handoff.cancelled:
+                    self._check_stop() # Will raise if stopped
+                    self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
+                    return ApplicationStatus.FAILED
+                page = handoff.page
+                agent.page = page
+                # LEARNING LOOP: Scrape whatever the human typed in the browser 
+                # back into our persistent memory so we reuse it next time.
+                try:
+                    self._scrape_browser_state_to_memory(page, state, agent)
+                except Exception:
+                    pass
+                # If the human advanced (e.g. clicked Next/Submit), give
+                # the agent one more pass on the *new* page rather than
+                # declaring success/failure based on the old one.
+                if handoff.advanced:
+                    self._check_stop()
+                    agent.show_status(
+                        "Continuing from where you left off...",
+                        phase=ExecutionPhase.HUMAN,
+                    )
+                    success = self._agent_fill_loop(
+                        page, state, logger, agent, apply_was_clicked=True
+                    )
+                if not success:
+                    success = self._submission_looks_plausible(page)
+            self._check_stop()
+            # ── 5. Final status ─────────────────────────────────────
+            if success:
+                agent.show_success("Application completed successfully!")
+                logger.info("Application completed successfully")
+                self.job_repo.update_status(job.id or 0, ApplicationStatus.SUBMITTED)
+                status = ApplicationStatus.SUBMITTED
+            else:
+                agent.show_error("Application could not be verified as submitted.")
+                logger.error("Application failed")
                 self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
-                return ApplicationStatus.FAILED
-            finally:
+                status = ApplicationStatus.FAILED
+            # Increment the local apps-since-sync counter regardless of
+            # outcome — the sync extractor will filter by confidence anyway.
+            try:
+                from jobcli.core.memory import AgentMemory as _AM
+                _mem = _AM(self.session, job_id=job.id)
+                _mem.increment_apps_since_sync()
+            except Exception:
+                pass
+            # ── 6. Final browser pause ──────────────────────────────
+            if not self.config.headless:
+                agent.final_browser_pause()
+        except (InterruptedError, KeyboardInterrupt):
+            # Clean stop requested via CLI
+            agent.show_warning("Application process stopped by user.")
+            logger.warning("Application cancelled by user", phase=state.current_phase)
+            self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
+            return ApplicationStatus.FAILED
+        except Exception as e:
+            logger.error(f"Application error: {e}")
+            if self.config.screenshot_on_error:
                 try:
-                    if 'page' in locals() and page:
-                        page.context.close()
+                    logger.capture_screenshot(page, "error", state.current_phase)
                 except Exception:
                     pass
-                try:
-                    browser.close()
-                    logger.info("Browser closed")
-                except Exception:
-                    pass
-                global_logger.info(f"Completed job {job.id}", status=state.status.value)
+            self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
+            return ApplicationStatus.FAILED
+        finally:
+            try:
+                if 'page' in locals() and page:
+                    page.close()
+            except Exception:
+                pass
+            global_logger.info(f"Completed job {job.id}", status=state.status.value)
 
     def _click_apply_button(
         self,

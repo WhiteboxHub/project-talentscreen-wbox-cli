@@ -213,3 +213,5 @@
 {"job_id": 49, "phase": "llm", "screenshot_path": "logs/job_49/screenshots/003_20260423_153604_llm_submit_unverified.png", "name": "llm_submit_unverified", "event": "Screenshot captured", "level": "info", "timestamp": "2026-04-23T22:36:04.644536Z"}
 {"job_id": 49, "phase": "llm", "success": true, "event": "Completed phase: llm", "level": "info", "timestamp": "2026-04-23T22:36:04.645701Z"}
 {"job_id": 49, "phase": null, "event": "Application completed successfully", "level": "info", "timestamp": "2026-04-23T22:36:04.647646Z"}
+{"job_id": 49, "phase": "rules", "event": "Skipping LinkedIn job", "level": "info", "timestamp": "2026-04-30T23:57:13.176560Z"}
+{"job_id": 49, "phase": "rules", "success": true, "event": "Completed phase: rules", "level": "info", "timestamp": "2026-04-30T23:57:13.178069Z"}
