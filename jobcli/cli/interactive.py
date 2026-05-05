@@ -78,8 +78,31 @@ def _setup_readline():
 
 
 # ── Welcome ───────────────────────────────────────────────────────────
+def _animate_banner():
+    """Print the large ASCII banner with a smooth character-by-character reveal."""
+    lines = [
+        f"[bold {K}] ██╗    ██╗[/][bold #e879f9]██████╗  [/][bold #d946ef]██████╗ [/][bold #c026d3]██╗  ██╗[/]     [bold #e9d5ff]██████╗[/] [bold {P}]██╗     [/][bold #a78bfa]██╗[/]",
+        f"[bold {K}] ██║    ██║[/][bold #e879f9]██╔══██╗ [/][bold #d946ef]██╔═══██╗[/][bold #c026d3]╚██╗██╔╝[/]    [bold #e9d5ff]██╔════╝[/] [bold {P}]██║     [/][bold #a78bfa]██║[/]",
+        f"[bold {K}] ██║ █╗ ██║[/][bold #e879f9]██████╔╝ [/][bold #d946ef]██║   ██║[/][bold #c026d3] ╚███╔╝ [/]    [bold #e9d5ff]██║     [/] [bold {P}]██║     [/][bold #a78bfa]██║[/]",
+        f"[bold {K}] ██║███╗██║[/][bold #e879f9]██╔══██╗ [/][bold #d946ef]██║   ██║[/][bold #c026d3] ██╔██╗ [/]    [bold #e9d5ff]██║     [/] [bold {P}]██║     [/][bold #a78bfa]██║[/]",
+        f"[bold {K}] ╚███╔███╔╝[/][bold #e879f9]██████╔╝ [/][bold #d946ef]╚██████╔╝[/][bold #c026d3]██╔╝ ██╗[/]    [bold #e9d5ff]╚██████╗[/] [bold {P}]███████╗[/][bold #a78bfa]██║[/]",
+        f"[bold {K}]  ╚══╝╚══╝ [/][bold #e879f9]╚═════╝  [/][bold #d946ef] ╚═════╝ [/][bold #c026d3]╚═╝  ╚═╝[/]     [bold #e9d5ff]╚═════╝[/] [bold {P}]╚══════╝[/][bold #a78bfa]╚═╝[/]",
+    ]
+    console.print()
+    for line in lines:
+        console.print(line)
+        time.sleep(0.04)
+
+    console.print()
+    console.print(f"[dim {V}]                  Autonomous Job Application Engine[/]")
+    time.sleep(0.1)
+    console.print(f"[dim {D}]                          v0.1.0  •  Whitebox Learning[/]")
+    console.print()
+
+
 def _print_welcome():
-    """Minimal Claude Code-style welcome."""
+    """Minimal Claude Code-style welcome with the large banner."""
+    _animate_banner()
 
     # Greeting
     hour = datetime.now().hour
@@ -109,14 +132,9 @@ def _print_welcome():
 
     greeting_str = f"{greeting}, {name}" if name else greeting
 
-    console.print()
-    console.print(f"  [{P}]╭─[/] [{K}]WboxCLI[/] [{D}]v0.1.0[/]")
-    console.print(f"  [{P}]│[/]")
-    console.print(f"  [{P}]│[/]  {greeting_str}. [{D}]You have[/] [{K}]{pending_count}[/] [{D}]pending jobs.[/]")
-    console.print(f"  [{P}]│[/]")
-    console.print(f"  [{P}]│[/]  [{D}]Type a command to get started, or[/] [{K}]help[/] [{D}]to see options.[/]")
-    console.print(f"  [{P}]│[/]  [{D}]Use[/] [{K}]Tab[/] [{D}]to autocomplete,[/] [{K}]↑↓[/] [{D}]for history.[/]")
-    console.print(f"  [{P}]╰─[/]")
+    console.print(f"  {greeting_str}. [{D}]You have[/] [{K}]{pending_count}[/] [{D}]pending jobs.[/]")
+    console.print(f"  [{D}]Type a command to get started, or[/] [{K}]help[/] [{D}]to see options.[/]")
+    console.print(f"  [{D}]Use[/] [{K}]Tab[/] [{D}]to autocomplete,[/] [{K}]↑↓[/] [{D}]for history.[/]")
     console.print()
 
 
