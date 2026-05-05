@@ -210,12 +210,12 @@ if [ "$NEEDS_RELOAD" = true ]; then
 fi
 
 # ── Auto-launch interactive TUI ───────────────────────────────────────
-# If this is a fresh install (not piped/non-interactive), launch wboxcli
-if [ -t 0 ] && [ -t 1 ]; then
+# Reconnect stdin to the terminal so we can launch the TUI even if piped
+if [ -t 1 ] && [ -c /dev/tty ]; then
     echo -e "  ${BOLD}Launching WboxCLI...${NC}"
     echo ""
-    # Ensure PATH is current for this session
     export PATH="$BIN_DIR:$PATH"
+    exec < /dev/tty
     exec "$WRAPPER"
 else
     echo -e "  ${BOLD}Next steps:${NC}"
