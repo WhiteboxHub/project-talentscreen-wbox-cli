@@ -7,12 +7,14 @@ Production-grade CLI for automated job applications across multiple ATS platform
 ## Features
 
 ### Core Automation
-- **Wbox Dashboard Integration** — Automated job discovery from Whitebox Learning
+- **One-Shot Setup** — Single `jobcli setup` command loads credentials, uploads resume, and discovers all jobs
+- **Wbox Dashboard Integration** — Automated job discovery from Whitebox Learning (scrolls through all rows)
 - **Advanced AI Reasoning** — AXTree (Accessibility Tree) analysis for high-accuracy form field mapping
 - **Universal Iframe Support** — Reach-through for Greenhouse, Lever, Paylocity, and nested iframes
 - **JS Force-Fill Fallback** — Bypasses stubborn React/Angular event listeners for 100% input reliability
 - **Three-Phase Strategy** — Autonomous AI → Heuristic Rules → Human-in-the-loop
 - **Multi-Provider LLM** — Native support for OpenAI, Anthropic, and Google Gemini
+- **LinkedIn Manual Loop** — LinkedIn jobs are opened in the browser with a 60-second window for manual application before auto-skipping
 
 ### Phase 1 — Local Learning & Memory Engine
 - **Confidence-Based Memory** — Answers are only trusted after ≥ 3 successful uses at ≥ 60% confidence
@@ -39,38 +41,69 @@ python -m venv venv
 .\venv\Scripts\Activate.ps1   # Windows
 # source venv/bin/activate    # macOS / Linux
 
+pip install --upgrade pip setuptools
 pip install -e .
 playwright install chromium
 ```
 
+> **Windows Note:** After installing, if `jobcli` gives a `ModuleNotFoundError`, use the `.bat` wrapper which is created automatically in `venv/Scripts/jobcli.bat`. This is a known Windows path issue with locked `.exe` files. Simply run `jobcli` as normal after activating the venv — the `.bat` takes priority.
+
 ---
 
-## Quick Start
+## Quick Start — Just 2 Commands
+
+### Step 1 — Fill in your `.env` file
+
+Copy `.env.example` to `.env` in the project root and fill in your values:
+
+```env
+# LLM API Key (at least one required)
+OPENAI_API_KEY=sk-...
+DEFAULT_LLM_PROVIDER=openai        # openai | anthropic | gemini
+
+# Whitebox Learning credentials
+JOBCLI_USERNAME=you@example.com
+JOBCLI_PASSWORD=your_password
+
+# Resume file paths
+RESUME_PDF_PATH=C:/Users/you/resume.pdf
+RESUME_JSON_PATH=C:/Users/you/resume.json
+
+# Browser mode
+HEADLESS=false                     # false = visible browser window
+```
+
+### Step 2 — Run setup (does everything in one shot)
 
 ```bash
-# 1. Initialize database and config
 jobcli setup
+```
 
-# 2. Add credentials & LLM API keys
-jobcli login
+This single command will:
+1. ✅ Load all credentials from `.env` — no prompts
+2. ✅ Save config to `~/.jobcli/`
+3. ✅ Upload your resume automatically from the paths in `.env`
+4. ✅ Log into Whitebox Learning and discover **all** jobs from your dashboard
+5. ✅ Print a summary and tell you when you're ready
 
-# 3. Upload your resume
-jobcli resume-upload --pdf resume.pdf --json resume.json
+### Step 3 — Start Applying
 
-# 4. Pre-fill common answers (optional but recommended)
-jobcli questions
-
-# 5. Discover jobs from your Wbox dashboard
-jobcli discover
-
-# 6. Start the FastAPI bridge server for the Chrome Extension
-jobcli server
-
-# 7. Apply — single job
-jobcli apply --url https://boards.greenhouse.io/company/jobs/123
-
-# 8. Apply — all pending jobs
+```bash
+# Apply to all discovered jobs
 jobcli apply --batch
+
+# Apply to a single URL
+jobcli apply --url "https://boards.greenhouse.io/company/jobs/123"
+```
+
+### Cleanup
+
+```bash
+# Wipe everything (config, database, job history)
+jobcli uninstall
+
+# Force wipe without confirmation
+jobcli uninstall --force
 ```
 
 ---
@@ -92,19 +125,33 @@ jobcli apply --url <url> --mode manual
 
 ---
 
-## Commands
+## LinkedIn Jobs
+
+LinkedIn does not allow bot automation. When the batch encounters a LinkedIn job:
+
+1. The browser navigates to the LinkedIn job page
+2. A **60-second countdown** is displayed in the terminal
+3. You apply manually in the browser during that window
+4. After 60 seconds, the engine automatically moves to the next job
+
+---
+
+## Commands Reference
 
 | Command | Description |
 |---|---|
-| `jobcli setup` | Initialize configuration and database |
-| `jobcli login` | Store credentials for job boards and LLM API keys |
-| `jobcli config` | View or modify configuration |
-| `jobcli resume-upload` | Upload resume in PDF and JSON formats |
-| `jobcli questions` | Pre-fill answers to common application questions |
-| `jobcli discover` | Fetch job links from your Whitebox Learning dashboard |
-| `jobcli open-dashboard` | Launch an interactive browser window logged into Wbox |
-| `jobcli apply` | Apply to jobs (single `--url` or `--batch` mode) |
+| `jobcli setup` | **One-shot setup** — loads .env, saves config, uploads resume, discovers all jobs |
+| `jobcli uninstall` | **Wipe everything** — deletes `~/.jobcli/` (config, database, job history) |
+| `jobcli apply --batch` | Apply to all pending jobs in the database |
+| `jobcli apply --url <url>` | Apply to a single specific job URL |
 | `jobcli server` | Start the FastAPI bridge server for Chrome Extension integration |
+| `jobcli login` | Manually update credentials (use only if `.env` is not set) |
+| `jobcli login --auto` | Skip prompts if credentials already exist in `.env` |
+| `jobcli discover` | Re-run job discovery from Whitebox dashboard manually |
+| `jobcli resume-upload` | Manually upload a resume PDF and JSON |
+| `jobcli questions` | Pre-fill answers to common application questions |
+| `jobcli open-dashboard` | Launch an interactive browser window logged into Wbox |
+| `jobcli scan` | Scan configured ATS portals for open jobs |
 | `jobcli sync` | Push local learned patterns to server and pull aggregated updates |
 | `jobcli doctor` | Validate Playwright, SQLite, config, and resume JSON |
 
@@ -116,11 +163,12 @@ jobcli apply --url <url> --mode manual
 jobcli/
 ├── cli/              # Typer CLI commands
 ├── core/             # Core execution engine
-│   ├── engine.py     # 4-phase application loop
+│   ├── engine.py     # 4-phase application loop + LinkedIn 60s manual loop
 │   ├── memory.py     # AgentMemory — confidence-gated 3-layer memory
+│   ├── wbox_discoverer.py  # Dashboard scraper with AG Grid scroll pagination
 │   └── tool_executor.py
 ├── locators/         # Rule-based locator system
-│   └── ats/          # ATS-specific handlers (Greenhouse, Lever, Workday…)
+│   └── ats/          # ATS-specific handlers (Greenhouse, Lever, Rippling…)
 ├── llm/              # LLM reasoning layer (OpenAI / Anthropic / Gemini)
 ├── human/            # Human-in-the-loop interface
 ├── storage/          # SQLite persistence (SQLAlchemy)
@@ -153,7 +201,7 @@ To start the dashboard:
 ---
 
 ## 5-Phase Interaction Strategy
-JobCLI now follows a 5-phase strategy to ensure application success:
+JobCLI follows a 5-phase strategy to ensure application success:
 
 1. **Phase 1: Discovery** — URL normalization and ATS platform detection.
 2. **Phase 2: Extension Autofill** — High-speed DOM-native filling of standard fields.
@@ -163,8 +211,26 @@ JobCLI now follows a 5-phase strategy to ensure application success:
 
 ---
 
-3. **Extension Execution**: The extension listens for the trigger, fetches the parsed resume + memory from the bridge server, and executes native DOM autofill strategies.
-4. **Feedback Loop**: The extension posts a report back to the CLI with what it filled, allowing the Python engine to seamlessly fall back to LLM processing for any missed fields.
+## Supported ATS Platforms
+
+| Platform | Status |
+|---|---|
+| Greenhouse | ✅ Full support |
+| Lever | ✅ Full support |
+| Workday | ⚠️ Filtered out (requires account login) |
+| Ashby | ✅ Full support |
+| Rippling | ✅ Full support |
+| iCIMS | ✅ Supported |
+| BambooHR | ✅ Supported |
+| Breezy HR | ✅ Supported |
+| Jobvite | ✅ Supported |
+| SmartRecruiters | ✅ Supported |
+| Workable | ✅ Supported |
+| Recruitee | ✅ Supported |
+| LinkedIn | ⏱️ 60-second manual loop |
+| Generic / Unknown | ✅ Heuristic fallback |
+
+> **Best for first-time testing**: Greenhouse (`boards.greenhouse.io`) and Lever (`jobs.lever.co`) — no account login required.
 
 ---
 
@@ -194,8 +260,6 @@ sqlite_merger.py ──► only overwrites local if server_confidence > local_co
 jobcli sync
 ```
 
-The command will interactively confirm before syncing. It shows how many applications worth of new data you have accumulated since the last sync.
-
 ### Privacy guarantees
 
 | What is shared | What is NEVER shared |
@@ -203,14 +267,6 @@ The command will interactively confirm before syncing. It shows how many applica
 | Field label → value mappings (e.g. `years_of_experience → 4`) | Email, phone, name, address |
 | UI locators (CSS selectors ranked by success rate) | Resume content, salary, SSN |
 | ATS type + confidence scores | Job URLs, company names, candidate identity |
-
-### Merge protection rules (client side)
-
-| Condition | Action |
-|---|---|
-| `server_confidence > local_confidence` | Local value **updated** |
-| `server_confidence ≤ local_confidence` | Local value **kept** |
-| `server total_success < 3` | Record **ignored** |
 
 ---
 
@@ -239,30 +295,6 @@ A record is only returned from memory (instead of calling the LLM) when **both**
 | `auto` / `local` | `auto` / `local` | ✅ Yes |
 | `auto` / `local` | `human` / `user` | ❌ No — human answer preserved |
 
-### Personal data isolation
-
-The following fields are **never** exported from local memory to the extractor output:
-`email`, `phone`, `name`, `address`, `linkedin`, `github`, `ssn`, `salary`, `date of birth`, and 40+ other PII categories.
-
-### Inspecting the local memory
-
-```bash
-# Run the smoke test against the live DB
-python -X utf8 smoke_test.py
-
-# See what would be exported to a Phase 2 sync server
-python -X utf8 -c "
-import json
-from jobcli.storage.models import Database
-from jobcli.sync.extractor import extract_field_answers, extract_locators
-db = Database()
-db.create_tables()
-s = db.get_session()
-print(json.dumps(extract_field_answers(s), indent=2))
-s.close()
-"
-```
-
 ---
 
 ## Configuration
@@ -275,20 +307,38 @@ All config lives in `~/.jobcli/`:
 | `jobcli.db` | SQLite database (memory, answers, locators, sync state) |
 | `logs/` | Per-job JSON logs, screenshots, DOM snapshots |
 
-### `.env` file (project root)
+### `.env` file (project root — full reference)
 
 ```env
+# Whitebox Learning
+WBOX_LOGIN_URL=https://whitebox-learning.com/login
+WBOX_DASHBOARD_URL=https://whitebox-learning.com/user_dashboard
+
+# LLM API Keys (at least one required for AI form-filling)
 OPENAI_API_KEY=sk-...
-DEFAULT_LLM_PROVIDER=openai      # openai | anthropic | gemini
-HEADLESS=false                   # false = visible browser
-RESUME_PDF_PATH=C:/path/to/resume.pdf
-RESUME_JSON_PATH=C:/path/to/resume.json
+ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=AI...
+DEFAULT_LLM_PROVIDER=openai       # openai | anthropic | gemini
 
-# Phase 2 Sync (optional)
-JOBCLI_SYNC_SERVER_URL=https://your-backend.com   # defaults to http://localhost:8000
+# Job Board Credentials
+JOBCLI_USERNAME=you@example.com
+JOBCLI_PASSWORD=yourpassword
 
-# Phase 3 Extension Integration
-EXTENSION_PATH=C:/path/to/project-autofill-resume-json-extension
+# LinkedIn Credentials (optional — for reference only, not used for automation)
+LINKEDIN_USERNAME=you@example.com
+LINKEDIN_PASSWORD=yourpassword
+
+# Resume paths
+RESUME_PDF_PATH=C:/Users/you/resume.pdf
+RESUME_JSON_PATH=C:/Users/you/resume.json
+
+# Browser settings
+HEADLESS=false                    # false = visible browser
+MAX_RETRIES=3
+
+# Storage
+DATABASE_PATH=C:/Users/you/.jobcli/jobcli.db
+LOG_DIRECTORY=logs
 ```
 
 ---
@@ -325,25 +375,6 @@ EXTENSION_PATH=C:/path/to/project-autofill-resume-json-extension
 
 ---
 
-## Supported ATS Platforms
-
-| Platform | Status |
-|---|---|
-| Greenhouse | ✅ Full support |
-| Lever | ✅ Full support |
-| Workday | ✅ Supported (requires account login) |
-| Ashby | ✅ Full support |
-| iCIMS | ✅ Supported |
-| BambooHR | ✅ Supported |
-| Jobvite | ✅ Supported |
-| SmartRecruiters | ✅ Supported |
-| Taleo | ✅ Supported |
-| Generic / Unknown | ✅ Heuristic fallback |
-
-> **Best for first-time testing**: Greenhouse (`boards.greenhouse.io`) and Lever (`jobs.lever.co`) — no account login required.
-
----
-
 ## Development
 
 ```bash
@@ -362,80 +393,19 @@ touches browser automation or ATS handlers.
 pytest
 ```
 
-Runs unit tests for CLI guardrails, LLM client wrappers, repositories,
-session management, the state machine, URL normalisation, the async
-engine, and the stealth fingerprint (see below).
-
 ### 2. Stealth / anti-bot verification
 
-The single biggest reason an ATS flags an application as spam is a
-bot-like browser fingerprint. `tests/test_stealth.py` locks down every
-patch we apply via `jobcli/core/stealth.py` so regressions are caught
-before they reach production.
-
 ```bash
-# Just the stealth tests
 pytest tests/test_stealth.py -v
 ```
-
-Two strata of checks:
-
-| Stratum | What it verifies | Runs when |
-|---|---|---|
-| **Static** (13 tests) | Every fingerprint patch is present in the stealth JS + launch config (webdriver hidden, plugins populated, WebGL vendor spoofed, `Function.prototype.toString` native, iframe contentWindow patched, etc.) | Always |
-| **Runtime** (9 tests) | Launches headless Chromium with the production config, injects the stealth script, and asserts the patches actually took effect in a real document — `navigator.webdriver === undefined`, plugins length ≥ 3, WebGL vendor ≠ SwiftShader, spoofed getters report `[native code]`, permissions.query returns `prompt` not `denied`, etc. | Skipped automatically when Playwright browsers aren't installed |
-
-To run the runtime tests you need the Chromium binary:
-
-```bash
-playwright install chromium
-pytest tests/test_stealth.py -v
-```
-
-When you add a new patch to `jobcli/core/stealth.py`, add a matching
-assertion in `tests/test_stealth.py` — both a static check (the source
-contains the patch) and a runtime check (the page reflects it).
 
 ### 3. Live fingerprint diagnostic
 
-Before a real application submission on a flaky ATS, run the
-diagnostic script to confirm your current fingerprint still looks
-human. It spins up Chromium with the exact flags / init-script the
-production engine uses and prints a pass/fail table for each signal,
-plus excerpts from public bot-detection pages.
-
 ```bash
-# Headed (watch what the ATS would see)
 python scripts/stealth_check.py
-
-# Headless — same binary the engine uses at apply time
 python scripts/stealth_check.py --headless
-
-# Throw in a specific ATS URL or your own probe
 python scripts/stealth_check.py --url 'https://bot.sannysoft.com/'
-python scripts/stealth_check.py --skip-remote   # offline mode
 ```
-
-Exit code is `0` when every local check passes, `1` otherwise — wire
-it into CI (or a git pre-push hook) to prevent broken stealth patches
-from shipping. A healthy output looks like:
-
-```
-[PASS] navigator.webdriver is undefined
-[PASS] navigator.plugins is populated
-[PASS] navigator.languages looks US-English
-[PASS] window.chrome exists
-[PASS] window.chrome.runtime has OnInstalledReason
-[PASS] navigator.hardwareConcurrency is plausible
-[PASS] navigator.deviceMemory is plausible
-[PASS] WebGL vendor is not SwiftShader
-[PASS] Function.prototype.toString on spoofed getter looks native
-[PASS] navigator.permissions.query('notifications') returns 'default'
-```
-
-If any line reads `[FAIL]`, **do not run a live application** until
-the patch is fixed — that exact signal is what Ashby / Greenhouse /
-Workday spam classifiers will latch onto.
 
 ## License
 

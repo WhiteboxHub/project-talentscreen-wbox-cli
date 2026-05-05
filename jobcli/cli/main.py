@@ -136,35 +136,158 @@ def ensure_configured(config: Config, require_job_board: bool = True) -> None:
 
 
 @app.command()
+def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uninstall without confirmation")) -> None:
+    """Remove all JobCLI configuration and databases."""
+    import shutil
+    console.print("[bold red]JobCLI Uninstall[/bold red]\n")
+    if not force:
+        confirm = Confirm.ask(
+            "Are you sure you want to delete all JobCLI data (including ~/.jobcli)?\n"
+            "This will permanently delete your job history, settings, and local memory.",
+            default=False,
+        )
+        if not confirm:
+            console.print("[yellow]Uninstall cancelled.[/yellow]")
+            return
+
+    if CONFIG_DIR.exists():
+        try:
+            shutil.rmtree(CONFIG_DIR)
+            console.print(f"[green]✓ Successfully deleted {CONFIG_DIR}[/green]")
+        except Exception as e:
+            console.print(f"[red]Failed to delete {CONFIG_DIR}: {e}[/red]")
+    else:
+        console.print(f"[yellow]No configuration directory found at {CONFIG_DIR}.[/yellow]")
+
+@app.command()
 def setup() -> None:
-    """Initialize JobCLI configuration and database."""
-    console.print("[bold cyan]JobCLI Setup[/bold cyan]\n")
+    """Full one-shot setup: loads .env, saves config, uploads resume, and discovers all jobs.
 
+    This is the only command you need to run before jobcli apply --batch.
+    All values are read automatically from the .env file — no prompts.
+    """
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+
+    console.print("[bold cyan]╔══════════════════════════════════════╗[/bold cyan]")
+    console.print("[bold cyan]║       JobCLI — One-Shot Setup        ║[/bold cyan]")
+    console.print("[bold cyan]╚══════════════════════════════════════╝[/bold cyan]\n")
+
+    # ── STEP 1: Config ────────────────────────────────────────────────────────
+    console.print("[bold]Step 1/4 — Loading credentials from .env...[/bold]")
     ensure_config_dir()
-
-    # Create database
     db = get_database()
-    console.print(f"✓ Database created at: {DATABASE_FILE}")
-
-    # Initialize config
-    config = Config()
+    config = get_config()
     save_config(config)
-    console.print(f"✓ Configuration saved to: {CONFIG_FILE}")
 
-    console.print("\n[bold green]Setup completed successfully![/bold green]")
-    console.print("\nNext steps:")
-    console.print("1. Run [cyan]jobcli login[/cyan] to add credentials")
-    console.print("2. Run [cyan]jobcli resume upload[/cyan] to upload your resume")
-    console.print("3. Run [cyan]jobcli questions[/cyan] to pre-fill common answers")
-    console.print("4. Run [cyan]jobcli apply[/cyan] to start applying to jobs")
+    has_llm = bool(config.openai_api_key or config.anthropic_api_key or config.gemini_api_key)
+    has_wbox = bool(config.job_board_username and config.job_board_password)
+
+    if has_llm:
+        console.print(f"  [green]✓ LLM provider: {config.default_llm_provider}[/green]")
+    else:
+        console.print("  [red]✗ No LLM API key found in .env (OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY)[/red]")
+        console.print("    [yellow]AI form-filling will be disabled. Add a key to .env and re-run setup.[/yellow]")
+
+    if has_wbox:
+        console.print(f"  [green]✓ Whitebox credentials found for: {config.job_board_username}[/green]")
+    else:
+        console.print("  [yellow]⚠ No Whitebox credentials found (JOBCLI_USERNAME / JOBCLI_PASSWORD).[/yellow]")
+        console.print("    Job discovery will be skipped.")
+
+    # ── STEP 2: Resume ────────────────────────────────────────────────────────
+    console.print("\n[bold]Step 2/4 — Loading resume from .env paths...[/bold]")
+
+    pdf_path_str = config.resume_pdf_path
+    json_path_str = config.resume_json_path
+
+    resume_loaded = False
+    if not pdf_path_str or not json_path_str:
+        console.print("  [yellow]⚠ RESUME_PDF_PATH or RESUME_JSON_PATH not set in .env — skipping resume upload.[/yellow]")
+        console.print("    Add these paths to .env and re-run setup, or run [cyan]jobcli resume upload[/cyan] manually.")
+    else:
+        pdf_path = Path(pdf_path_str.strip('"').strip("'"))
+        json_path = Path(json_path_str.strip('"').strip("'"))
+
+        if not pdf_path.exists():
+            console.print(f"  [red]✗ PDF not found: {pdf_path}[/red]")
+        elif not json_path.exists():
+            console.print(f"  [red]✗ JSON not found: {json_path}[/red]")
+        else:
+            try:
+                import json as _json
+                with open(json_path, encoding="utf-8") as f:
+                    resume_data = _json.load(f)
+
+                resume = ResumeData(**resume_data)
+
+                session = db.get_session()
+                user_data_repo = UserDataRepository(session)
+                user_data_repo.save_resume(resume)
+                session.close()
+
+                config.resume_pdf_path = str(pdf_path.absolute())
+                config.resume_json_path = str(json_path.absolute())
+                save_config(config)
+
+                console.print(f"  [green]✓ Resume loaded: {resume.personal.first_name} {resume.personal.last_name}[/green]")
+                console.print(f"    PDF : {pdf_path.name}")
+                console.print(f"    JSON: {json_path.name}")
+                resume_loaded = True
+            except Exception as e:
+                console.print(f"  [red]✗ Failed to parse resume JSON: {e}[/red]")
+
+    # ── STEP 3: Discover Jobs ─────────────────────────────────────────────────
+    console.print("\n[bold]Step 3/4 — Discovering jobs from Whitebox dashboard...[/bold]")
+
+    jobs_found = 0
+    if not has_wbox:
+        console.print("  [yellow]⚠ Skipped — no Whitebox credentials in .env.[/yellow]")
+    else:
+        try:
+            session = db.get_session()
+            discoverer = WboxDiscoverer(session)
+            with console.status("[bold green]Logging in and scanning dashboard (this may take ~30s)..."):
+                new_jobs = discoverer.discover(headless=config.headless)
+            session.close()
+
+            jobs_found = len(new_jobs)
+            if jobs_found > 0:
+                console.print(f"  [green]✓ Discovered {jobs_found} new job(s) from the dashboard.[/green]")
+            else:
+                console.print("  [yellow]⚠ No new jobs found (they may already be in your database).[/yellow]")
+        except Exception as e:
+            console.print(f"  [red]✗ Job discovery failed: {e}[/red]")
+            console.print("    You can run [cyan]jobcli discover[/cyan] manually later.")
+
+    # ── STEP 4: Summary ───────────────────────────────────────────────────────
+    console.print("\n[bold]Step 4/4 — Summary[/bold]")
+    console.print("─" * 45)
+    console.print(f"  Config saved   : [green]✓[/green]  {CONFIG_FILE}")
+    console.print(f"  LLM ready      : {'[green]✓[/green]' if has_llm else '[red]✗[/red]'}")
+    console.print(f"  Resume loaded  : {'[green]✓[/green]' if resume_loaded else '[yellow]⚠ skipped[/yellow]'}")
+    console.print(f"  Jobs found     : [green]{jobs_found}[/green] new job(s)")
+    console.print("─" * 45)
+
+    if has_llm and resume_loaded:
+        console.print("\n[bold green]✓ Setup complete! You are ready to apply.[/bold green]")
+        console.print("\nRun: [bold cyan]jobcli apply --batch[/bold cyan]")
+    else:
+        console.print("\n[bold yellow]⚠ Setup finished with warnings. Fix the issues above, then re-run setup.[/bold yellow]")
 
 
 @app.command()
-def login() -> None:
+def login(
+    auto: bool = typer.Option(False, "--auto", help="Skip prompts if credentials exist in .env or config"),
+) -> None:
     """Configure credentials for job boards and LLM APIs."""
     console.print("[bold cyan]JobCLI Login[/bold cyan]\n")
 
     config = get_config()
+    
+    if auto and config.job_board_username and (config.openai_api_key or config.anthropic_api_key or config.gemini_api_key):
+        console.print("[green]✓ Credentials automatically loaded from config/.env! Skipping manual entry.[/green]")
+        return
 
     # Job board credentials
     console.print("[bold]Job Board Credentials[/bold]")
@@ -442,23 +565,22 @@ def apply(
         raise typer.Exit(1)
 
     # Filter jobs to only include those supported by extension strategies
-    # (Exclude LinkedIn and Workday which require logins)
+    # (Exclude Workday which require logins, but allow LinkedIn for manual looping)
     supported_domains = [
         "lever.co", "greenhouse.io", "ashbyhq.com", "breezy.hr", "workable.com",
         "recruitee.com", "pinpointhq.com", "rippling-ats.com", "rippling.com", "smartrecruiters.com",
-        "jobvite.com", "applytojob.com"
+        "jobvite.com", "applytojob.com", "linkedin.com"
     ]
     
     original_count = len(jobs)
     jobs = [
         j for j in jobs 
         if any(d in j.url.lower() for d in supported_domains)
-        and "linkedin.com" not in j.url.lower()
         and "myworkdayjobs.com" not in j.url.lower()
     ]
     
     if len(jobs) < original_count:
-        console.print(f"[yellow]Filtered out {original_count - len(jobs)} unsupported jobs (LinkedIn, Workday, etc.).[/yellow]")
+        console.print(f"[yellow]Filtered out {original_count - len(jobs)} unsupported jobs (Workday, etc.).[/yellow]")
 
     if not jobs:
         console.print("[yellow]No supported jobs remaining in the list.[/yellow]")

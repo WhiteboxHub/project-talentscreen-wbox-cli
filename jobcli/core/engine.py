@@ -1232,8 +1232,14 @@ class ApplicationEngine:
             current_url = page.url.lower()
             orig_url = job.url.lower()
             if "linkedin.com" in current_url or "linkedin.com" in orig_url:
-                agent.show_warning("LinkedIn job detected - skipping as requested.")
-                logger.info("Skipping LinkedIn job", phase=ExecutionPhase.RULES)
+                agent.show_warning("LinkedIn job detected. Manual loop active: You have 60 seconds to apply.")
+                logger.info("LinkedIn job detected. Waiting 60s for manual application...", phase=ExecutionPhase.RULES)
+                try:
+                    page.wait_for_timeout(60000)
+                except Exception:
+                    pass
+                agent.show_warning("60 seconds elapsed. Moving to the next job.")
+                logger.info("Skipping LinkedIn job after 60s manual loop", phase=ExecutionPhase.RULES)
                 logger.log_phase_end(ExecutionPhase.RULES, True)
                 return ApplicationStatus.SKIPPED
                 
