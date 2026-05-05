@@ -34,7 +34,55 @@ Production-grade CLI for automated job applications across multiple ATS platform
 
 ## Installation
 
-Requires **Python 3.10+**.
+### One-Line Install (Recommended)
+
+Requires **Python 3.10+** and **git**.
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/mahi_dev2/scripts/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/mahi_dev2/scripts/install.ps1 | iex
+```
+
+This installs `wboxcli` globally — available from any terminal, just like `nvm` or `curl`. No virtual environment activation needed. After install, the interactive TUI launches automatically.
+
+**Two ways to use it:**
+
+| Command | What it does |
+|---|---|
+| `wboxcli` | Opens the interactive TUI (Claude Code style) |
+| `wboxcli setup` | Runs a command directly (any subcommand works) |
+| `jobcli apply --batch` | Direct CLI mode (also installed, for scripting) |
+
+**What the installer does:**
+1. Clones the repo to `~/.jobcli/src`
+2. Creates an isolated Python venv at `~/.jobcli/venv`
+3. Installs all dependencies + Playwright Chromium
+4. Drops `wboxcli` + `jobcli` wrappers at `~/.local/bin/`
+5. Adds `~/.local/bin` to your PATH (if not already there)
+6. Auto-launches the interactive TUI
+
+**To update:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/mahi_dev2/scripts/install.sh | bash
+```
+
+**To uninstall:**
+
+macOS / Linux:
+```bash
+curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/mahi_dev2/scripts/uninstall.sh | bash
+```
+Windows (PowerShell):
+```powershell
+irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/mahi_dev2/scripts/uninstall.ps1 | iex
+```
+
+### Manual Install (For Development)
 
 ```bash
 python -m venv venv

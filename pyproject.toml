@@ -42,6 +42,7 @@ dev = [
 ]
 
 [project.scripts]
+wboxcli = "jobcli.cli.entry:main"
 jobcli = "jobcli.cli.main:app"
 
 [tool.setuptools.packages.find]
