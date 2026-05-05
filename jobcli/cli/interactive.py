@@ -13,6 +13,7 @@ import shutil
 from datetime import datetime
 
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 from rich import box
 from rich.rule import Rule
@@ -79,30 +80,83 @@ def _setup_readline():
 
 # ── Welcome ───────────────────────────────────────────────────────────
 def _animate_banner():
-    """Print the large ASCII banner with a smooth character-by-character reveal."""
-    lines = [
-        f"[bold {K}] ██╗    ██╗[/][bold #e879f9]██████╗  [/][bold #d946ef]██████╗ [/][bold #c026d3]██╗  ██╗[/]     [bold #e9d5ff]██████╗[/] [bold {P}]██╗     [/][bold #a78bfa]██╗[/]",
-        f"[bold {K}] ██║    ██║[/][bold #e879f9]██╔══██╗ [/][bold #d946ef]██╔═══██╗[/][bold #c026d3]╚██╗██╔╝[/]    [bold #e9d5ff]██╔════╝[/] [bold {P}]██║     [/][bold #a78bfa]██║[/]",
-        f"[bold {K}] ██║ █╗ ██║[/][bold #e879f9]██████╔╝ [/][bold #d946ef]██║   ██║[/][bold #c026d3] ╚███╔╝ [/]    [bold #e9d5ff]██║     [/] [bold {P}]██║     [/][bold #a78bfa]██║[/]",
-        f"[bold {K}] ██║███╗██║[/][bold #e879f9]██╔══██╗ [/][bold #d946ef]██║   ██║[/][bold #c026d3] ██╔██╗ [/]    [bold #e9d5ff]██║     [/] [bold {P}]██║     [/][bold #a78bfa]██║[/]",
-        f"[bold {K}] ╚███╔███╔╝[/][bold #e879f9]██████╔╝ [/][bold #d946ef]╚██████╔╝[/][bold #c026d3]██╔╝ ██╗[/]    [bold #e9d5ff]╚██████╗[/] [bold {P}]███████╗[/][bold #a78bfa]██║[/]",
-        f"[bold {K}]  ╚══╝╚══╝ [/][bold #e879f9]╚═════╝  [/][bold #d946ef] ╚═════╝ [/][bold #c026d3]╚═╝  ╚═╝[/]     [bold #e9d5ff]╚═════╝[/] [bold {P}]╚══════╝[/][bold #a78bfa]╚═╝[/]",
-    ]
+    """Claude Code style welcome: boxed title + block ASCII banner."""
+    # The small boxed welcome at the top left
+    welcome_box = Panel(
+        "[bold #f0abfc]◈ Welcome to WboxCLI[/]", 
+        box=box.ROUNDED, 
+        border_style="#c084fc",
+        padding=(0, 1),
+        expand=False
+    )
     console.print()
-    for line in lines:
+    console.print(welcome_box)
+    console.print()
+
+    # Huge block ASCII art for "WBOX CLI" (like the screenshot)
+    block_ascii = [
+        f"[bold #f0abfc]██╗    ██╗██████╗  ██████╗ ██╗  ██╗[/]",
+        f"[bold #e879f9]██║    ██║██╔══██╗██╔═══██╗╚██╗██╔╝[/]",
+        f"[bold #d946ef]██║ █╗ ██║██████╔╝██║   ██║ ╚███╔╝ [/]",
+        f"[bold #c026d3]██║███╗██║██╔══██╗██║   ██║ ██╔██╗ [/]",
+        f"[bold #a78bfa]╚███╔███╔╝██████╔╝╚██████╔╝██╔╝ ██╗[/]",
+        f"[bold #7c3aed] ╚══╝╚══╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝[/]",
+        f"",
+        f"[bold #f0abfc] ██████╗██╗     ██╗[/]",
+        f"[bold #e879f9]██╔════╝██║     ██║[/]",
+        f"[bold #d946ef]██║     ██║     ██║[/]",
+        f"[bold #c026d3]██║     ██║     ██║[/]",
+        f"[bold #a78bfa]╚██████╗███████╗██║[/]",
+        f"[bold #7c3aed] ╚═════╝╚══════╝╚═╝[/]"
+    ]
+    
+    for line in block_ascii:
         console.print(line)
         time.sleep(0.04)
 
     console.print()
-    console.print(f"[dim {V}]                  Autonomous Job Application Engine[/]")
-    time.sleep(0.1)
-    console.print(f"[dim {D}]                          v0.1.0  •  Whitebox Learning[/]")
+    console.print(f"[{D}]WboxCLI can now be used as an autonomous agent to apply to jobs automatically[/]")
+    console.print(f"[{D}]using your configured LLM and Whitebox Learning credentials.[/]")
     console.print()
 
 
+def _run_onboarding():
+    """Claude Code style interactive onboarding selection."""
+    try:
+        from jobcli.cli.main import get_config
+        config = get_config()
+        has_llm = bool(config.openai_api_key or config.anthropic_api_key or config.gemini_api_key)
+        
+        if not has_llm:
+            console.print("[bold]Select setup method:[/bold]")
+            console.print()
+            console.print(f"[{K}]> 1. Run quick setup wizard[/]")
+            console.print(f"  [{D}]Configure API keys, Whitebox login, and paths - Best for new users[/]")
+            console.print()
+            console.print(f"  [{D}]2. Continue without setup[/]")
+            console.print(f"  [{D}]Explore commands first[/]")
+            console.print()
+            
+            # Simple interaction
+            # ANSI codes for input prompt (Rich markup doesn't work in raw input())
+            PURP = "\033[1;38;2;192;132;252m"
+            RST = "\033[0m"
+            choice = ""
+            while choice not in ("1", "2"):
+                choice = input(f"{PURP}Select an option (1-2) > {RST}")
+                if choice == "1":
+                    _exec(["setup"])
+                    break
+                elif choice == "2":
+                    break
+    except Exception:
+        pass
+
+
 def _print_welcome():
-    """Minimal Claude Code-style welcome with the large banner."""
+    """Claude Code-style welcome and onboarding."""
     _animate_banner()
+    _run_onboarding()
 
     # Greeting
     hour = datetime.now().hour
