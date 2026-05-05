@@ -114,6 +114,35 @@ def _animate_banner():
     console.print()
 
 
+def _validate_llm(provider: str, api_key: str) -> bool:
+    """Validate LLM API key with a quick test call."""
+    try:
+        from litellm import completion
+        model = "gpt-3.5-turbo" if provider == "openai" else "claude-3-haiku-20240307" if provider == "anthropic" else "gemini/gemini-1.5-flash"
+        completion(model=model, messages=[{"role": "user", "content": "hi"}], api_key=api_key, max_tokens=1)
+        return True
+    except Exception:
+        return False
+
+
+def _validate_wbox(email: str, password: str) -> bool:
+    """Validate Whitebox Learning credentials."""
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto("https://whitebox-learning.com/login")
+            page.fill('input[name="email"]', email)
+            page.fill('input[name="password"]', password)
+            page.click('button:has-text("Login")')
+            page.wait_for_url("**/user_dashboard**", timeout=5000)
+            browser.close()
+            return True
+    except Exception:
+        return False
+
+
 def _run_onboarding(force: bool = False):
     """Claude Code style interactive onboarding selection."""
     try:
@@ -144,32 +173,49 @@ def _run_onboarding(force: bool = False):
             PURP = "\033[1;38;2;192;132;252m"
             RST = "\033[0m"
             
-            choice = ""
-            while choice not in ("1", "2", "3"):
-                choice = input(f"{PURP}Select provider (1-3) > {RST}").strip()
-                
             repo = ConfigRepository(session)
             db_config = repo.get_all()
             
-            if choice == "1":
-                db_config.default_llm_provider = "openai"
-                if force or not db_config.openai_api_key:
-                    db_config.openai_api_key = input(f"{PURP}Enter OpenAI API Key: {RST}").strip()
-            elif choice == "2":
-                db_config.default_llm_provider = "anthropic"
-                if force or not db_config.anthropic_api_key:
-                    db_config.anthropic_api_key = input(f"{PURP}Enter Anthropic API Key: {RST}").strip()
-            elif choice == "3":
-                db_config.default_llm_provider = "gemini"
-                if force or not db_config.gemini_api_key:
-                    db_config.gemini_api_key = input(f"{PURP}Enter Gemini API Key: {RST}").strip()
+            choice = ""
+            while True:
+                choice = input(f"{PURP}Select provider (1-3) > {RST}").strip()
+                if choice not in ("1", "2", "3"):
+                    continue
+                    
+                provider = "openai" if choice == "1" else "anthropic" if choice == "2" else "gemini"
+                prompt_name = "OpenAI" if choice == "1" else "Anthropic" if choice == "2" else "Gemini"
+                
+                api_key = input(f"{PURP}Enter {prompt_name} API Key: {RST}").strip()
+                
+                console.print(f"[{D}]Validating API key...[/]")
+                if _validate_llm(provider, api_key):
+                    db_config.default_llm_provider = provider
+                    if provider == "openai":
+                        db_config.openai_api_key = api_key
+                    elif provider == "anthropic":
+                        db_config.anthropic_api_key = api_key
+                    elif provider == "gemini":
+                        db_config.gemini_api_key = api_key
+                    console.print(f"[green]✓ API key is valid[/green]")
+                    break
+                else:
+                    console.print(f"[red]✗ Invalid {prompt_name} API key. Please try again.[/red]")
                     
             console.print()
             console.print("[bold]Whitebox Learning Credentials:[/bold]")
-            if force or not db_config.job_board_username:
-                db_config.job_board_username = input(f"{PURP}Whitebox Email: {RST}").strip()
-            if force or not db_config.job_board_password:
-                db_config.job_board_password = getpass.getpass(f"{PURP}Whitebox Password: {RST}").strip()
+            if force or not db_config.job_board_username or not db_config.job_board_password:
+                while True:
+                    email = input(f"{PURP}Whitebox Email: {RST}").strip()
+                    password = getpass.getpass(f"{PURP}Whitebox Password: {RST}").strip()
+                    
+                    console.print(f"[{D}]Validating credentials...[/]")
+                    if _validate_wbox(email, password):
+                        db_config.job_board_username = email
+                        db_config.job_board_password = password
+                        console.print(f"[green]✓ Credentials verified[/green]")
+                        break
+                    else:
+                        console.print(f"[red]✗ Invalid email or password. Please try again.[/red]")
                 
             repo.save_config(db_config)
             session.commit()
