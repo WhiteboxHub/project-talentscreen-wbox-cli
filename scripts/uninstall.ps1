@@ -2,7 +2,7 @@
 #  JobCLI Global Uninstaller — Windows (PowerShell)
 #
 #  Usage:
-#    irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/mahi_dev2/scripts/uninstall.ps1 | iex
+#    irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/bavish13_dev/scripts/uninstall.ps1 | iex
 # ──────────────────────────────────────────────────────────────────────
 
 $InstallDir = Join-Path $env:USERPROFILE ".jobcli"
