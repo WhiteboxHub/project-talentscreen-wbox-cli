@@ -117,10 +117,26 @@ def _animate_banner():
 def _validate_llm(provider: str, api_key: str) -> bool:
     """Validate LLM API key with a quick test call."""
     try:
-        from litellm import completion
-        model = "gpt-3.5-turbo" if provider == "openai" else "claude-3-haiku-20240307" if provider == "anthropic" else "gemini/gemini-1.5-flash"
-        completion(model=model, messages=[{"role": "user", "content": "hi"}], api_key=api_key, max_tokens=1)
-        return True
+        if provider == "openai":
+            import openai
+            client = openai.OpenAI(api_key=api_key)
+            client.models.list()
+            return True
+        elif provider == "anthropic":
+            import anthropic
+            client = anthropic.Anthropic(api_key=api_key)
+            client.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=1,
+                messages=[{"role": "user", "content": "hi"}]
+            )
+            return True
+        elif provider == "gemini":
+            from google import genai
+            client = genai.Client(api_key=api_key)
+            client.models.list()
+            return True
+        return False
     except Exception:
         return False
 
