@@ -93,21 +93,14 @@ def _animate_banner():
     console.print(welcome_box)
     console.print()
 
-    # Huge block ASCII art for "WBOX CLI" (like the screenshot)
+    # Huge block ASCII art for "WBOXCLI" on one line
     block_ascii = [
-        f"[bold #f0abfc]██╗    ██╗██████╗  ██████╗ ██╗  ██╗[/]",
-        f"[bold #e879f9]██║    ██║██╔══██╗██╔═══██╗╚██╗██╔╝[/]",
-        f"[bold #d946ef]██║ █╗ ██║██████╔╝██║   ██║ ╚███╔╝ [/]",
-        f"[bold #c026d3]██║███╗██║██╔══██╗██║   ██║ ██╔██╗ [/]",
-        f"[bold #a78bfa]╚███╔███╔╝██████╔╝╚██████╔╝██╔╝ ██╗[/]",
-        f"[bold #7c3aed] ╚══╝╚══╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝[/]",
-        f"",
-        f"[bold #f0abfc] ██████╗██╗     ██╗[/]",
-        f"[bold #e879f9]██╔════╝██║     ██║[/]",
-        f"[bold #d946ef]██║     ██║     ██║[/]",
-        f"[bold #c026d3]██║     ██║     ██║[/]",
-        f"[bold #a78bfa]╚██████╗███████╗██║[/]",
-        f"[bold #7c3aed] ╚═════╝╚══════╝╚═╝[/]"
+        f"[bold #f0abfc]██╗    ██╗██████╗  ██████╗ ██╗  ██╗ ██████╗██╗     ██╗[/]",
+        f"[bold #e879f9]██║    ██║██╔══██╗██╔═══██╗╚██╗██╔╝██╔════╝██║     ██║[/]",
+        f"[bold #d946ef]██║ █╗ ██║██████╔╝██║   ██║ ╚███╔╝ ██║     ██║     ██║[/]",
+        f"[bold #c026d3]██║███╗██║██╔══██╗██║   ██║ ██╔██╗ ██║     ██║     ██║[/]",
+        f"[bold #a78bfa]╚███╔███╔╝██████╔╝╚██████╔╝██╔╝ ██╗╚██████╗███████╗██║[/]",
+        f"[bold #7c3aed] ╚══╝╚══╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝[/]"
     ]
     
     for line in block_ascii:
@@ -115,42 +108,71 @@ def _animate_banner():
         time.sleep(0.04)
 
     console.print()
-    console.print(f"[{D}]WboxCLI can now be used as an autonomous agent to apply to jobs automatically[/]")
-    console.print(f"[{D}]using your configured LLM and Whitebox Learning credentials.[/]")
+    console.print(f"[{D}]WboxCLI is an exclusive autonomous agent. It works ONLY with[/]")
+    console.print(f"[{D}]Whitebox Learning (https://whiteboxlearning.com) and will[/]")
+    console.print(f"[{D}]not apply on any other external job boards.[/]")
     console.print()
 
 
-def _run_onboarding():
+def _run_onboarding(force: bool = False):
     """Claude Code style interactive onboarding selection."""
     try:
-        from jobcli.cli.main import get_config
+        from jobcli.cli.main import get_config, get_database
+        from jobcli.storage.repositories import ConfigRepository
+        import getpass
+        
         config = get_config()
         has_llm = bool(config.openai_api_key or config.anthropic_api_key or config.gemini_api_key)
+        has_wbox = bool(config.job_board_username and config.job_board_password)
         
-        if not has_llm:
-            console.print("[bold]Select setup method:[/bold]")
+        if force or not has_llm or not has_wbox:
+            console.print("[bold]Select LLM Provider for Automation:[/bold]")
             console.print()
-            console.print(f"[{K}]> 1. Run quick setup wizard[/]")
-            console.print(f"  [{D}]Configure API keys, Whitebox login, and paths - Best for new users[/]")
-            console.print()
-            console.print(f"  [{D}]2. Continue without setup[/]")
-            console.print(f"  [{D}]Explore commands first[/]")
+            console.print(f"[{K}]> 1. OpenAI (Recommended)[/]")
+            console.print(f"  [{D}]Requires OPENAI_API_KEY[/]")
+            console.print(f"  2. Anthropic")
+            console.print(f"  3. Gemini")
             console.print()
             
-            # Simple interaction
-            # ANSI codes for input prompt (Rich markup doesn't work in raw input())
             PURP = "\033[1;38;2;192;132;252m"
             RST = "\033[0m"
+            
             choice = ""
-            while choice not in ("1", "2"):
-                choice = input(f"{PURP}Select an option (1-2) > {RST}")
-                if choice == "1":
-                    _exec(["setup"])
-                    break
-                elif choice == "2":
-                    break
-    except Exception:
-        pass
+            while choice not in ("1", "2", "3"):
+                choice = input(f"{PURP}Select provider (1-3) > {RST}").strip()
+                
+            db = get_database()
+            session = db.get_session()
+            repo = ConfigRepository(session)
+            db_config = repo.get_config()
+            
+            if choice == "1":
+                db_config.default_llm_provider = "openai"
+                if force or not db_config.openai_api_key:
+                    db_config.openai_api_key = input(f"{PURP}Enter OpenAI API Key: {RST}").strip()
+            elif choice == "2":
+                db_config.default_llm_provider = "anthropic"
+                if force or not db_config.anthropic_api_key:
+                    db_config.anthropic_api_key = input(f"{PURP}Enter Anthropic API Key: {RST}").strip()
+            elif choice == "3":
+                db_config.default_llm_provider = "gemini"
+                if force or not db_config.gemini_api_key:
+                    db_config.gemini_api_key = input(f"{PURP}Enter Gemini API Key: {RST}").strip()
+                    
+            console.print()
+            console.print("[bold]Whitebox Learning Credentials:[/bold]")
+            if force or not db_config.job_board_username:
+                db_config.job_board_username = input(f"{PURP}Whitebox Email: {RST}").strip()
+            if force or not db_config.job_board_password:
+                db_config.job_board_password = getpass.getpass(f"{PURP}Whitebox Password: {RST}").strip()
+                
+            repo.update_config(db_config)
+            session.commit()
+            session.close()
+            
+            console.print(f"\n[{K}]✓ Setup complete![/]\n")
+    except Exception as e:
+        console.print(f"[red]Error during setup: {e}[/red]")
 
 
 def _print_welcome():
@@ -368,6 +390,11 @@ def _dispatch(raw: str):
     # Resume alias
     if cmd == "resume":
         _exec(["resume-upload"] + args)
+        return
+
+    # Login / Setup mapping
+    if cmd in ("login", "setup"):
+        _run_onboarding(force=True)
         return
 
     # Standard
