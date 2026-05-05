@@ -125,7 +125,14 @@ def _run_onboarding(force: bool = False):
         has_llm = bool(config.openai_api_key or config.anthropic_api_key or config.gemini_api_key)
         has_wbox = bool(config.job_board_username and config.job_board_password)
         
-        if force or not has_llm or not has_wbox:
+        db = get_database()
+        session = db.get_session()
+        
+        from jobcli.storage.repositories import UserDataRepository
+        resume_data = UserDataRepository(session).get_resume()
+        has_resume = resume_data is not None
+        
+        if force or not has_llm or not has_wbox or not has_resume:
             console.print("[bold]Select LLM Provider for Automation:[/bold]")
             console.print()
             console.print(f"[{K}]> 1. OpenAI (Recommended)[/]")
@@ -141,10 +148,8 @@ def _run_onboarding(force: bool = False):
             while choice not in ("1", "2", "3"):
                 choice = input(f"{PURP}Select provider (1-3) > {RST}").strip()
                 
-            db = get_database()
-            session = db.get_session()
             repo = ConfigRepository(session)
-            db_config = repo.get_config()
+            db_config = repo.get_all()
             
             if choice == "1":
                 db_config.default_llm_provider = "openai"
@@ -166,11 +171,26 @@ def _run_onboarding(force: bool = False):
             if force or not db_config.job_board_password:
                 db_config.job_board_password = getpass.getpass(f"{PURP}Whitebox Password: {RST}").strip()
                 
-            repo.update_config(db_config)
+            repo.save_config(db_config)
             session.commit()
-            session.close()
             
-            console.print(f"\n[{K}]✓ Setup complete![/]\n")
+            console.print()
+            console.print("[bold]Resume Upload:[/bold]")
+            if force or not has_resume:
+                pdf_path = input(f"{PURP}Path to Resume PDF: {RST}").strip()
+                json_path = input(f"{PURP}Path to Resume JSON: {RST}").strip()
+                session.close() # Close session before running subprocess
+                
+                # Use absolute paths and expand ~
+                pdf_path = os.path.abspath(os.path.expanduser(pdf_path))
+                json_path = os.path.abspath(os.path.expanduser(json_path))
+                
+                console.print(f"\n[{D}]Uploading resume...[/]")
+                _exec(["resume-upload", "--pdf", pdf_path, "--json", json_path])
+            else:
+                session.close()
+            
+            console.print(f"\n[{K}]✓ Setup complete! You are ready to apply to jobs.[/]\n")
     except Exception as e:
         console.print(f"[red]Error during setup: {e}[/red]")
 

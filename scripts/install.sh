@@ -187,11 +187,7 @@ else
     ok "~/.local/bin already on PATH"
 fi
 
-# ── Step 7: Copy .env template if no .env exists ─────────────────────
-if [ ! -f "$INSTALL_DIR/.env" ] && [ -f "$SRC_DIR/.env.template" ]; then
-    cp "$SRC_DIR/.env.template" "$INSTALL_DIR/.env"
-    info "Created default config at $INSTALL_DIR/.env — edit it with your API keys."
-fi
+
 
 # ── Done! ─────────────────────────────────────────────────────────────
 echo ""
