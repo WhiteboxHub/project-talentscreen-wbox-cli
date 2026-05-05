@@ -187,8 +187,10 @@ def _run_onboarding(force: bool = False):
                 
                 api_key = input(f"{PURP}Enter {prompt_name} API Key: {RST}").strip()
                 
-                console.print(f"[{D}]Validating API key...[/]")
-                if _validate_llm(provider, api_key):
+                with console.status(f"[{D}]Validating API key...[/]", spinner="dots", spinner_style="#e879f9"):
+                    is_valid = _validate_llm(provider, api_key)
+                
+                if is_valid:
                     db_config.default_llm_provider = provider
                     if provider == "openai":
                         db_config.openai_api_key = api_key
@@ -196,10 +198,10 @@ def _run_onboarding(force: bool = False):
                         db_config.anthropic_api_key = api_key
                     elif provider == "gemini":
                         db_config.gemini_api_key = api_key
-                    console.print(f"[green]✓ API key is valid[/green]")
+                    console.print(f"[bold white on #d946ef] ✓ [/] [green]API key successfully verified[/green]")
                     break
                 else:
-                    console.print(f"[red]✗ Invalid {prompt_name} API key. Please try again.[/red]")
+                    console.print(f"[bold white on #c026d3] ✗ [/] [red]Invalid {prompt_name} API key. Please try again.[/red]")
                     
             console.print()
             console.print("[bold]Whitebox Learning Credentials:[/bold]")
@@ -208,14 +210,16 @@ def _run_onboarding(force: bool = False):
                     email = input(f"{PURP}Whitebox Email: {RST}").strip()
                     password = getpass.getpass(f"{PURP}Whitebox Password: {RST}").strip()
                     
-                    console.print(f"[{D}]Validating credentials...[/]")
-                    if _validate_wbox(email, password):
+                    with console.status(f"[{D}]Connecting to whitebox-learning.com...[/]", spinner="dots", spinner_style="#e879f9"):
+                        is_valid = _validate_wbox(email, password)
+                    
+                    if is_valid:
                         db_config.job_board_username = email
                         db_config.job_board_password = password
-                        console.print(f"[green]✓ Credentials verified[/green]")
+                        console.print(f"[bold white on #d946ef] ✓ [/] [green]Credentials verified successfully[/green]")
                         break
                     else:
-                        console.print(f"[red]✗ Invalid email or password. Please try again.[/red]")
+                        console.print(f"[bold white on #c026d3] ✗ [/] [red]Invalid email or password. Please try again.[/red]")
                 
             repo.save_config(db_config)
             session.commit()
