@@ -78,6 +78,20 @@ class PhenomHandler(GenericATSHandler):
             self.logger.info("Filling Phenom form", phase=ExecutionPhase.RULES)
 
         results: dict[str, Any] = {}
+
+        # ── Resume upload (Priority: First) ───────────────────────────
+        if resume_path:
+            try:
+                self.page.set_input_files("input[type='file']", resume_path)
+                results["resume"] = True
+                self.page.wait_for_load_state("domcontentloaded", timeout=6000)
+                if self.logger:
+                    self.logger.info("Uploaded resume (Phenom)", phase=ExecutionPhase.RULES)
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"Phenom resume upload failed: {e}", phase=ExecutionPhase.RULES)
+                results["resume"] = False
+
         personal = self.resume.personal
 
         phenom_fields = [
@@ -89,11 +103,11 @@ class PhenomHandler(GenericATSHandler):
             ("linkedin",   "input[name*='linkedin']",   personal.linkedin),
         ]
         for key, selector, value in phenom_fields:
-            if not value or key in results:
+            if not value or results.get(key) is True:
                 continue
             try:
                 el = self.page.query_selector(selector)
-                if el:
+                if el and el.is_visible():
                     self.humanized_fill(self.page.locator(selector).first, value)
                     results[key] = True
                     if self.logger:
@@ -102,16 +116,6 @@ class PhenomHandler(GenericATSHandler):
                 if self.logger:
                     self.logger.warning(f"Phenom fill failed '{key}': {e}", phase=ExecutionPhase.RULES)
                 results.setdefault(key, False)
-
-        if resume_path:
-            try:
-                self.page.set_input_files("input[type='file']", resume_path)
-                results["resume"] = True
-                self.page.wait_for_load_state("domcontentloaded", timeout=6000)
-            except Exception as e:
-                if self.logger:
-                    self.logger.warning(f"Phenom resume upload failed: {e}", phase=ExecutionPhase.RULES)
-                results["resume"] = False
 
         results = self.generic_fill_failed_fields(results)
         if self.logger:

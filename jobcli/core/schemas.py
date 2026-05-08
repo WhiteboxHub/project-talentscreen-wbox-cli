@@ -319,7 +319,7 @@ class Config(BaseModel):
     resume_pdf_path: Optional[str] = None
     resume_json_path: Optional[str] = None
     extension_path: Optional[str] = None
-    log_directory: str = Field(default="logs")
+    log_directory: str = Field(default="~/.jobcli/logs")
     database_path: str = Field(default="~/.jobcli/jobcli.db")
 
     # Derived profile: infer country from US city/state when country blank

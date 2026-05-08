@@ -12,7 +12,7 @@ import time
 import re
 from typing import Any, Optional
 
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import Error, Page, sync_playwright
 
 from jobcli.core.logger import JobLogger, global_logger
 from jobcli.core.schemas import (
@@ -1086,6 +1086,9 @@ class ApplicationEngine:
         if result.cancelled:
             agent.show_error("Cancelled by user at job-board handoff.")
             return None
+        if result.skipped:
+            agent.show_warning("Skipped by user at job-board handoff.")
+            return None
 
         # The human may have opened a new tab (most common on LinkedIn /
         # Indeed: "Apply on company site" opens a popup).  Use the existing
@@ -1175,6 +1178,16 @@ class ApplicationEngine:
         )
 
         mode = self.config.interaction_mode
+        
+        # ── Resume Path Validation ──────────────────────────────────────
+        # Ensure we only pass a path that actually exists on this system.
+        resume_pdf_path = self.config.resume_pdf_path
+        if resume_pdf_path and not os.path.exists(resume_pdf_path):
+            global_logger.warning(
+                f"Resume PDF not found at '{resume_pdf_path}'. "
+                "The agent will proceed without a file attachment."
+            )
+            resume_pdf_path = None
 
         # Ensure session is started
         if not self.context:
@@ -1313,6 +1326,14 @@ class ApplicationEngine:
                 logger.log_phase_end(ExecutionPhase.RULES, True)
                 return ApplicationStatus.SKIPPED
 
+            # ── 2b. Check for Expired Job ───────────────────────────
+            handler = ATSHandlerFactory.create_handler(ats_type, page, self.resume, logger)
+            if handler.is_expired():
+                agent.show_warning("This job posting has expired — skipping.")
+                logger.info("Job expired, skipping.", phase=ExecutionPhase.RULES)
+                self.job_repo.update_status(job.id or 0, ApplicationStatus.SKIPPED)
+                return ApplicationStatus.SKIPPED
+
             # ── 3. Click Apply (auto, with inline human fallback) ───
             # First, check if the page already IS the application form
             # (e.g. file:// test pages, direct application links, or
@@ -1369,6 +1390,9 @@ class ApplicationEngine:
                 if handoff.cancelled:
                     self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
                     return ApplicationStatus.FAILED
+                if handoff.skipped:
+                    self.job_repo.update_status(job.id or 0, ApplicationStatus.SKIPPED)
+                    return ApplicationStatus.SKIPPED
                 page = handoff.page
                 agent.page = page
                 # If the human navigated forward, treat the apply step
@@ -1398,7 +1422,7 @@ class ApplicationEngine:
             # ── 4. Fill form — unified agent loop ───────────────────
             self._check_stop()
             agent.show_phase_banner("Filling application form")
-            success = self._agent_fill_loop(page, state, logger, agent, apply_was_clicked=apply_clicked)
+            success = self._agent_fill_loop(page, state, logger, agent, apply_was_clicked=apply_clicked, resume_pdf_path=resume_pdf_path)
             if not success and state.step_count == 0:
                 self._check_stop()
                 # Rules-based fallback only if AI made zero progress
@@ -1417,6 +1441,10 @@ class ApplicationEngine:
                     self._check_stop() # Will raise if stopped
                     self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
                     return ApplicationStatus.FAILED
+                if handoff.skipped:
+                    self._check_stop()
+                    self.job_repo.update_status(job.id or 0, ApplicationStatus.SKIPPED)
+                    return ApplicationStatus.SKIPPED
                 page = handoff.page
                 agent.page = page
                 # LEARNING LOOP: Scrape whatever the human typed in the browser 
@@ -1462,6 +1490,7 @@ class ApplicationEngine:
             # ── 6. Final browser pause ──────────────────────────────
             if not self.config.headless:
                 agent.final_browser_pause()
+            return status
         except (InterruptedError, KeyboardInterrupt):
             # Clean stop requested via CLI
             agent.show_warning("Application process stopped by user.")
@@ -1676,6 +1705,7 @@ class ApplicationEngine:
         logger: JobLogger,
         agent: AgentInterface,
         apply_was_clicked: bool = False,
+        resume_pdf_path: Optional[str] = None,
     ) -> bool:
         """Unified agent loop: LLM drives form-filling, human is integrated inline.
 
@@ -2006,7 +2036,7 @@ class ApplicationEngine:
                     ax_tree, self.resume, task=task,
                     memory_context=memory_context,
                     dropdown_options=ax_tree.dropdown_fields,
-                    resume_pdf_path=self.config.resume_pdf_path,
+                    resume_pdf_path=resume_pdf_path,
                 )
 
                 if not llm_response:
@@ -2396,36 +2426,55 @@ class ApplicationEngine:
                         still_broken = failed_actions
 
                     if still_broken:
-                        # Build a "label → value" preview so the human sees
-                        # WHAT the agent knows and just has to type/paste it
-                        # into the browser (we already have the answers —
-                        # only the selector failed).
-                        rows = []
-                        for a in still_broken[:8]:
-                            lbl = a.field_label or a.selector
-                            val = (a.value or "").strip()
-                            if val:
-                                preview = val if len(val) <= 60 else val[:57] + "…"
-                                rows.append(f"  • {lbl}: {preview}")
-                            else:
-                                rows.append(f"  • {lbl}  (no value)")
-                        more = f"\n  … and {len(still_broken) - 8} more" if len(still_broken) > 8 else ""
-                        pretty_list = "\n".join(rows) + more
-                        agent.show_warning(
-                            f"{len(still_broken)} field(s) could not be typed by the "
-                            "agent (selector didn't match). Values are ready — just "
-                            "need a human to put them in:\n" + pretty_list
-                        )
-                        handoff = agent.handoff_to_human(
-                            reason=(
-                                f"The agent already has the values for "
-                                f"{len(still_broken)} field(s), but couldn't find a "
-                                "selector that works on this page. Please type or "
-                                "paste them into the browser using the list above."
-                            ),
-                            hint="When done, press ENTER and JobCLI will continue "
-                                 "from the page you're on.",
-                        )
+                        resolved_count = 0
+                        if self.config.interaction_mode != InteractionMode.AUTO:
+                            for act in list(still_broken):
+                                label = act.field_label or act.selector
+                                # Try to find options for dropdowns
+                                field_options = None
+                                if act.action == ActionType.SELECT:
+                                    for dp in ax_tree.dropdown_fields:
+                                        if dp["label"].lower() == label.lower():
+                                            field_options = dp["options"]
+                                            break
+                                
+                                help_val = agent.request_field_help(label, act.value or "", options=field_options)
+                                if help_val:
+                                    # Human provided a value (or picked an option). 
+                                    # Update action and try one more time.
+                                    act.value = help_val
+                                    from jobcli.llm.client import LLMActionResponse
+                                    temp_response = LLMActionResponse(actions=[act])
+                                    if executor.execute_actions(temp_response):
+                                        still_broken.remove(act)
+                                        resolved_count += 1
+                                        agent.show_success(f"Successfully filled '{label}' via terminal help.")
+                        
+                        if still_broken:
+                            # Build a "label → value" preview for remaining fields
+                            rows = []
+                            for a in still_broken[:8]:
+                                lbl = a.field_label or a.selector
+                                val = (a.value or "").strip()
+                                if val:
+                                    preview = val if len(val) <= 60 else val[:57] + "…"
+                                    rows.append(f"  • {lbl}: {preview}")
+                                else:
+                                    rows.append(f"  • {lbl}  (no value)")
+                            
+                            more = f"\n  … and {len(still_broken) - 8} more" if len(still_broken) > 8 else ""
+                            pretty_list = "\n".join(rows) + more
+                            agent.show_warning(
+                                f"{len(still_broken)} field(s) still need attention. "
+                                "Please fill them in the browser:\n" + pretty_list
+                            )
+                            handoff = agent.handoff_to_human(
+                                reason=(
+                                    f"{len(still_broken)} field(s) could not be automated. "
+                                    "Please fill them in the browser."
+                                ),
+                                hint="When done, press ENTER and JobCLI will continue.",
+                            )
                         if handoff.cancelled:
                             logger.log_phase_end(ExecutionPhase.LLM, False)
                             return False
@@ -2775,7 +2824,7 @@ class ApplicationEngine:
                     ax_tree, self.resume, task="fill_empty_fields_only",
                     memory_context=memory_context,
                     dropdown_options=ax_tree.dropdown_fields,
-                    resume_pdf_path=self.config.resume_pdf_path,
+                    resume_pdf_path=resume_pdf_path,
                 )
                 if not llm_response:
                     break
@@ -3220,9 +3269,15 @@ class ApplicationEngine:
 
         except (InterruptedError, KeyboardInterrupt):
             raise
+        except Error as e:
+            if "closed" in str(e).lower():
+                agent.show_error("Browser was closed — aborting this application.")
+                logger.error("Browser closed during agent loop.", phase=ExecutionPhase.LLM)
+            else:
+                logger.error(f"Playwright error in agent loop: {e}", phase=ExecutionPhase.LLM)
+            logger.log_phase_end(ExecutionPhase.LLM, False)
+            return False
         except Exception as e:
-            import traceback
-            traceback.print_exc()
             logger.error(f"Agent loop failed: {e}", phase=ExecutionPhase.LLM)
             logger.log_phase_end(ExecutionPhase.LLM, False)
             return False

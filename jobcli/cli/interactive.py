@@ -258,7 +258,9 @@ def _run_onboarding(force: bool = False):
             
             console.print(f"\n[{K}]✓ Setup complete! You are ready to apply to jobs.[/]\n")
     except Exception as e:
+        import traceback
         console.print(f"[red]Error during setup: {e}[/red]")
+        console.print_exception()
 
 
 def _print_welcome():

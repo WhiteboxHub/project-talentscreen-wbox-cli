@@ -699,7 +699,26 @@ class FormFiller:
                     continue  # Don't overwrite 
                 
                 try:
-                    humanized_fill(self.page, self.page.locator(selector).first, value)
+                    loc = self.page.locator(selector).first
+                    # Skip if the field already has a value (don't overwrite)
+                    existing = ""
+                    try:
+                        existing = loc.input_value(timeout=500)
+                    except Exception:
+                        pass
+                    
+                    if existing and existing.strip():
+                        if self.logger:
+                            self.logger.info(
+                                f"Skipping '{field_key}' — already has value",
+                                phase=ExecutionPhase.RULES,
+                                selector=selector,
+                            )
+                        results[short_key] = True
+                        used_selectors.add(selector)
+                        continue
+
+                    humanized_fill(self.page, loc, value)
                     used_selectors.add(selector)
                     results[short_key] = True
                 except Exception:

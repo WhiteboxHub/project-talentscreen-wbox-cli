@@ -60,6 +60,7 @@ class HandoffResult:
     title_after: str           # title of current page after handoff
     advanced: bool             # True if human navigated to a different URL
     cancelled: bool = False    # human chose to abort the application
+    skipped: bool = False      # human chose to skip this job
 
 
 # ------------------------------------------------------------------
@@ -636,7 +637,8 @@ class AgentInterface:
             "(it will NOT go back to where it got stuck)."
         )
         body_lines.append(
-            "Type [bold red]cancel[/bold red] + ENTER to abort this application."
+            "Type [bold red]cancel[/bold red] + ENTER to abort this application, or "
+            "[bold cyan]skip[/bold cyan] to move to the next job."
         )
 
         self.console.print(
@@ -657,7 +659,7 @@ class AgentInterface:
         self.get_attention()
 
         response = self._get_user_input(
-            f"  Press ENTER when done (or type 'cancel') [{wait_timeout}s timeout]: ",
+            f"  Press ENTER when done (or type 'skip' / 'cancel') [{wait_timeout}s timeout]: ",
             timeout_seconds=wait_timeout
         )
 
@@ -688,6 +690,17 @@ class AgentInterface:
                 title_after="",
                 advanced=False,
                 cancelled=True,
+            )
+
+        if response in ("skip", "skipp", "skp", "s"):
+            return HandoffResult(
+                page=self.page,
+                url_before=url_before,
+                url_after=url_before,
+                title_after="",
+                advanced=False,
+                cancelled=False,
+                skipped=True,
             )
 
         # Give any in-flight navigation a chance to settle.  If the human just
@@ -747,6 +760,47 @@ class AgentInterface:
             advanced=advanced,
             cancelled=False,
         )
+
+    def request_field_help(
+        self,
+        label: str,
+        value: str,
+        options: Optional[list[str]] = None,
+    ) -> Optional[str]:
+        """Ask the human for help with a specific field that the agent failed to fill."""
+        self.get_attention()
+        self.console.print(Panel(
+            f"I couldn't find the field for: [bold cyan]{label}[/bold cyan]\n"
+            f"Expected value: [bold green]{value}[/bold green]",
+            title="[bold yellow]FIELD SELECTOR FAILED[/bold yellow]",
+            border_style="yellow",
+        ))
+        
+        choices = ["(B) I'll fill it in browser", "(V) Enter new value in terminal"]
+        if options:
+            choices.append("(O) Select from options")
+        
+        self.console.print("  What should I do?")
+        for c in choices:
+            self.console.print(f"    {c}")
+            
+        try:
+            res = self._get_user_input("  Choice [B]: ", default="b").lower()
+            if res.startswith("v"):
+                new_val = self._get_user_input(f"  Value for '{label}': ", default=value)
+                return new_val
+            if res.startswith("o") and options:
+                # Show options with numbers
+                for i, opt in enumerate(options, 1):
+                    self.console.print(f"    [{i}] {opt}")
+                opt_idx = self._get_user_input(f"  Select option (1-{len(options)}): ")
+                try:
+                    return options[int(opt_idx) - 1]
+                except (ValueError, IndexError):
+                    return None
+            return None
+        except Exception:
+            return None
 
     def handle_captcha(self) -> bool:
         """CAPTCHA detected — always pause for human except in AUTO (which gives up)."""

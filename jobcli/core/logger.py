@@ -25,7 +25,7 @@ class JobLogger:
     ) -> None:
         """Initialize job logger."""
         self.job_id = job_id
-        self.log_directory = Path(log_directory)
+        self.log_directory = Path(os.path.expanduser(log_directory))
         self.enable_screenshots = enable_screenshots
         self.on_event = on_event
 
@@ -81,7 +81,10 @@ class JobLogger:
         **metadata: Any,
     ) -> None:
         """Log a message with metadata."""
-        log_method = getattr(self.logger, level.lower(), self.logger.info)
+        log_method = getattr(self.logger, level.lower(), None)
+        if log_method is None:
+            log_method = self.logger.info
+        
         log_method(
             message,
             job_id=self.job_id,
@@ -305,26 +308,39 @@ class GlobalLogger:
 
     def _initialize(self) -> None:
         """Initialize global logger."""
-        log_dir = Path("logs")
-        log_dir.mkdir(exist_ok=True)
+        # Use ~/.jobcli/logs instead of a relative ./logs path for better stability
+        log_dir = Path(os.path.expanduser("~/.jobcli/logs"))
+        
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            # Fallback to local logs if ~/.jobcli is not writable
+            log_dir = Path("logs")
+            try:
+                log_dir.mkdir(exist_ok=True)
+            except Exception:
+                # If everything fails, just use the current directory
+                log_dir = Path(".")
 
         log_file = log_dir / "jobcli.jsonl"
 
-        # Configure structlog
-        structlog.configure(
-            processors=[
-                structlog.contextvars.merge_contextvars,
-                structlog.processors.add_log_level,
-                structlog.processors.TimeStamper(fmt="iso"),
-                structlog.processors.JSONRenderer(),
-            ],
-            wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
-            context_class=dict,
-            logger_factory=structlog.WriteLoggerFactory(
-                file=open(log_file, "a", encoding="utf-8")
-            ),
-            cache_logger_on_first_use=True,
-        )
+        # Only configure if not already configured
+        if not structlog.is_configured():
+            # Configure structlog
+            structlog.configure(
+                processors=[
+                    structlog.contextvars.merge_contextvars,
+                    structlog.processors.add_log_level,
+                    structlog.processors.TimeStamper(fmt="iso"),
+                    structlog.processors.JSONRenderer(),
+                ],
+                wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+                context_class=dict,
+                logger_factory=structlog.WriteLoggerFactory(
+                    file=open(log_file, "a", encoding="utf-8")
+                ),
+                cache_logger_on_first_use=True,
+            )
 
         self._logger = structlog.get_logger()
 

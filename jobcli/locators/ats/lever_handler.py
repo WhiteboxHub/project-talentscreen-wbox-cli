@@ -194,6 +194,22 @@ class LeverHandler(GenericATSHandler):
             self.logger.info("Filling Lever form", phase=ExecutionPhase.RULES)
 
         results: dict[str, bool] = {}
+
+        # ── Resume upload (Priority: First) ───────────────────────────
+        if resume_path:
+            try:
+                self.page.set_input_files("input[name='resume']", resume_path)
+                results["resume"] = True
+                self.page.wait_for_load_state("domcontentloaded", timeout=8000)
+                if self.logger:
+                    self.logger.info("Uploaded resume (Lever)", phase=ExecutionPhase.RULES)
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(
+                        f"Lever resume upload failed: {e}", phase=ExecutionPhase.RULES
+                    )
+                results["resume"] = False
+
         personal = self.resume.personal
 
         # Full name (Lever uses a single 'name' field)
@@ -412,19 +428,6 @@ class LeverHandler(GenericATSHandler):
                         selector=selector,
                     )
                 results[field_name] = False
-
-        # Resume upload
-        if resume_path:
-            try:
-                self.page.set_input_files("input[name='resume']", resume_path)
-                results["resume"] = True
-                self.page.wait_for_load_state("domcontentloaded", timeout=8000)
-            except Exception as e:
-                if self.logger:
-                    self.logger.warning(
-                        f"Lever resume upload failed: {e}", phase=ExecutionPhase.RULES
-                    )
-                results["resume"] = False
 
         # Consent checkboxes
         self._fill_consent_checkboxes(results)

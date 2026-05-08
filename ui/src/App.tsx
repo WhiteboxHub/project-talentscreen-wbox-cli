@@ -302,8 +302,8 @@ const App = () => {
     });
 
     // ── WEBSOCKET ────────────────────────────
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    // Bypass Vite proxy to avoid WS disconnection bugs
+    const ws = new WebSocket(`ws://127.0.0.1:8000/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {

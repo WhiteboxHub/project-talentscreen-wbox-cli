@@ -322,6 +322,8 @@ class GenericATSHandler(BaseATSHandler):
             )
         return False
 
+        return False
+
     def handle_multi_step(self, state: ApplicationState) -> bool:
         """Generic multi-step: detect confirmation, click Next/Continue."""
         if self.logger:

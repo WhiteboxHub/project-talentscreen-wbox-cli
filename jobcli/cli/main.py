@@ -88,8 +88,6 @@ def get_config() -> Config:
         ("ANTHROPIC_API_KEY", "anthropic_api_key"),
         ("GEMINI_API_KEY", "gemini_api_key"),
         ("DEFAULT_LLM_PROVIDER", "default_llm_provider"),
-        ("RESUME_PDF_PATH", "resume_pdf_path"),
-        ("RESUME_JSON_PATH", "resume_json_path"),
         ("EXTENSION_PATH", "extension_path"),
         ("DATABASE_PATH", "database_path"),
         ("LOG_DIRECTORY", "log_directory"),

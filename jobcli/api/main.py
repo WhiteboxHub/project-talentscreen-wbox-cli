@@ -153,6 +153,11 @@ async def websocket_endpoint(websocket: WebSocket):
                         terminal_input_buffer += data
             except json.JSONDecodeError:
                 pass
+            except Exception as e:
+                import traceback
+                print("\n=== WEBSOCKET FATAL ERROR ===")
+                traceback.print_exc()
+                print("=============================\n")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 

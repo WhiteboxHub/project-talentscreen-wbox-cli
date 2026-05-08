@@ -13,6 +13,9 @@ Production-grade CLI for automated job applications across multiple ATS platform
 - **Universal Iframe Support** — Reach-through for Greenhouse, Lever, Paylocity, and nested iframes
 - **JS Force-Fill Fallback** — Bypasses stubborn React/Angular event listeners for 100% input reliability
 - **Three-Phase Strategy** — Autonomous AI → Heuristic Rules → Human-in-the-loop
+- **Interactive Terminal Help** — If the agent fails to find a field, it pauses and asks you in the terminal. You can pick options (Yes/No) or enter values directly without switching to the browser.
+- **Robust Manual Skip** — Typer-friendly skip command handles common typos (`skipp`, `skp`, `s`) during high-speed application loops.
+- **Resume Path Validation** — Automatically detects missing resume files and warns you instead of crashing, ensuring batch continuity.
 - **Multi-Provider LLM** — Native support for OpenAI, Anthropic, and Google Gemini
 - **LinkedIn Manual Loop** — LinkedIn jobs are opened in the browser with a 60-second window for manual application before auto-skipping
 
