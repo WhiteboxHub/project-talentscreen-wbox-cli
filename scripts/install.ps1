@@ -76,7 +76,8 @@ if (-not (Test-Path $InstallDir)) {
 
 if (Test-Path (Join-Path $SrcDir ".git")) {
     Write-Step "Existing installation found — pulling latest..."
-    & git -C $SrcDir fetch origin --quiet 2>$null
+    & git -C $SrcDir remote set-branches origin '*' 2>$null
+    & git -C $SrcDir fetch origin --depth 1 $Branch --quiet 2>$null
     & git -C $SrcDir checkout -B $Branch "origin/$Branch" --quiet 2>$null
     Write-Ok "Updated to latest $Branch"
 } else {

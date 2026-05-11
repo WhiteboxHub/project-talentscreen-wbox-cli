@@ -78,7 +78,8 @@ mkdir -p "$INSTALL_DIR"
 
 if [ -d "$SRC_DIR/.git" ]; then
     info "Existing installation found — pulling latest..."
-    git -C "$SRC_DIR" fetch origin --quiet
+    git -C "$SRC_DIR" remote set-branches origin '*' --quiet 2>/dev/null || true
+    git -C "$SRC_DIR" fetch origin --depth 1 "$BRANCH" --quiet
     git -C "$SRC_DIR" checkout -B "$BRANCH" "origin/$BRANCH" --quiet
     ok "Updated to latest $BRANCH"
 else
