@@ -258,6 +258,10 @@ def _run_onboarding(force: bool = False):
                 
                 console.print(f"\n[{D}]Uploading resume...[/]")
                 _exec(["resume-upload", "--pdf", pdf_path, "--json", json_path])
+                
+                # Automatically discover jobs after setup
+                console.print(f"\n[{D}]Discovering jobs from Whitebox Learning...[/]")
+                _exec(["discover"])
             else:
                 session.close()
             

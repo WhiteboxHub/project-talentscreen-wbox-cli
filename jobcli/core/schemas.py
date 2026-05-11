@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, Optional
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, HttpUrl, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
 
 class ATSType(str, Enum):
