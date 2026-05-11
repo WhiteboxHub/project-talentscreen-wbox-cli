@@ -2,7 +2,7 @@
 #  WboxCLI Global Installer — Windows (PowerShell)
 #
 #  Usage:
-#    irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/bavish13_dev/scripts/install.ps1 | iex
+#    irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.ps1 | iex
 #
 #  What it does:
 #    1. Clones (or updates) the repo into %USERPROFILE%\.jobcli\src
@@ -13,7 +13,7 @@
 #    6. Launches the interactive TUI
 #
 #  Uninstall:
-#    irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/bavish13_dev/scripts/uninstall.ps1 | iex
+#    irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.ps1 | iex
 # ──────────────────────────────────────────────────────────────────────
 
 $ErrorActionPreference = "Stop"
@@ -26,7 +26,7 @@ $BinDir        = Join-Path $env:USERPROFILE ".local\bin"
 $Wrapper       = Join-Path $BinDir "wboxcli.cmd"
 $WrapperJobcli = Join-Path $BinDir "jobcli.cmd"
 $RepoUrl       = "https://github.com/WhiteboxHub/wbox-cli.git"
-$Branch        = if ($env:JOBCLI_BRANCH) { $env:JOBCLI_BRANCH } else { "bavish13_dev" }
+$Branch        = if ($env:JOBCLI_BRANCH) { $env:JOBCLI_BRANCH } else { "dev" }
 
 function Write-Step   { param($msg) Write-Host "[info]  $msg" -ForegroundColor Cyan }
 function Write-Ok     { param($msg) Write-Host "[✓]    $msg" -ForegroundColor Green }
@@ -76,9 +76,9 @@ if (-not (Test-Path $InstallDir)) {
 
 if (Test-Path (Join-Path $SrcDir ".git")) {
     Write-Step "Existing installation found — pulling latest..."
-    & git -C $SrcDir fetch origin $Branch --quiet 2>$null
-    & git -C $SrcDir checkout $Branch --quiet 2>$null
-    & git -C $SrcDir reset --hard "origin/$Branch" --quiet 2>$null
+    & git -C $SrcDir remote set-branches origin '*' 2>$null
+    & git -C $SrcDir fetch origin --depth 1 $Branch --quiet 2>$null
+    & git -C $SrcDir checkout -B $Branch "origin/$Branch" --quiet 2>$null
     Write-Ok "Updated to latest $Branch"
 } else {
     & git clone --branch $Branch --depth 1 $RepoUrl $SrcDir --quiet 2>$null
@@ -135,7 +135,7 @@ set "JOBCLI_VENV=%USERPROFILE%\.jobcli\venv"
 
 if not exist "%JOBCLI_VENV%\Scripts\python.exe" (
     echo Error: WboxCLI installation not found at %JOBCLI_VENV%
-    echo Re-install with: irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/bavish13_dev/scripts/install.ps1 ^| iex
+    echo Re-install with: irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.ps1 ^| iex
     exit /b 1
 )
 

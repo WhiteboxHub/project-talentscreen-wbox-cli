@@ -223,3 +223,10 @@ logs/**/*.webm
 
 # Per-run job logs (ephemeral); global aggregate logs/jobcli.jsonl stays trackable if you want
 # logs/job_*/application.jsonl
+
+# Temp directory (embedded git repo)
+.tmp_openclaw/
+
+# macOS duplicate files (created by copy-paste or AirDrop)
+* 2.*
+* 2/
