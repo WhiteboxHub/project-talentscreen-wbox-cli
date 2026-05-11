@@ -78,9 +78,8 @@ mkdir -p "$INSTALL_DIR"
 
 if [ -d "$SRC_DIR/.git" ]; then
     info "Existing installation found — pulling latest..."
-    git -C "$SRC_DIR" fetch origin "$BRANCH" --quiet
-    git -C "$SRC_DIR" checkout "$BRANCH" --quiet 2>/dev/null || git -C "$SRC_DIR" checkout -b "$BRANCH" "origin/$BRANCH" --quiet
-    git -C "$SRC_DIR" reset --hard "origin/$BRANCH" --quiet
+    git -C "$SRC_DIR" fetch origin --quiet
+    git -C "$SRC_DIR" checkout -B "$BRANCH" "origin/$BRANCH" --quiet
     ok "Updated to latest $BRANCH"
 else
     git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$SRC_DIR" --quiet

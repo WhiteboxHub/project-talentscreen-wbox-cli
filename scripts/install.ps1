@@ -76,9 +76,8 @@ if (-not (Test-Path $InstallDir)) {
 
 if (Test-Path (Join-Path $SrcDir ".git")) {
     Write-Step "Existing installation found — pulling latest..."
-    & git -C $SrcDir fetch origin $Branch --quiet 2>$null
-    & git -C $SrcDir checkout $Branch --quiet 2>$null
-    & git -C $SrcDir reset --hard "origin/$Branch" --quiet 2>$null
+    & git -C $SrcDir fetch origin --quiet 2>$null
+    & git -C $SrcDir checkout -B $Branch "origin/$Branch" --quiet 2>$null
     Write-Ok "Updated to latest $Branch"
 } else {
     & git clone --branch $Branch --depth 1 $RepoUrl $SrcDir --quiet 2>$null
