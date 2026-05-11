@@ -3,7 +3,7 @@
 #  WboxCLI Global Installer
 #
 #  Usage:
-#    curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/bavish13_dev/scripts/install.sh | bash
+#    curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.sh | bash
 #
 #  What it does:
 #    1. Clones (or updates) the repo into ~/.jobcli/src
@@ -40,7 +40,7 @@ BIN_DIR="$HOME/.local/bin"
 WRAPPER="$BIN_DIR/wboxcli"
 WRAPPER_JOBCLI="$BIN_DIR/jobcli"
 REPO_URL="https://github.com/WhiteboxHub/wbox-cli.git"
-BRANCH="${JOBCLI_BRANCH:-bavish13_dev}"  # Override with JOBCLI_BRANCH=<branch> if needed
+BRANCH="${JOBCLI_BRANCH:-dev}"  # Override with JOBCLI_BRANCH=<branch> if needed
 
 echo ""
 echo -e "${BOLD}${CYAN}╔══════════════════════════════════════╗${NC}"
@@ -124,7 +124,7 @@ JOBCLI_VENV="$HOME/.jobcli/venv"
 
 if [ ! -f "$JOBCLI_VENV/bin/python" ]; then
     echo "Error: WboxCLI installation not found at $JOBCLI_VENV"
-    echo "Re-install with: curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/bavish13_dev/scripts/install.sh | bash"
+    echo "Re-install with: curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.sh | bash"
     exit 1
 fi
 

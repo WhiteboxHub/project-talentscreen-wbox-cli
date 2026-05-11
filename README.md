@@ -43,12 +43,12 @@ Requires **Python 3.10+** and **git**.
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/bavish13_dev/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/bavish13_dev/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.ps1 | iex
 ```
 
 This installs `wboxcli` globally — available from any terminal, just like `nvm` or `curl`. No virtual environment activation needed. After install, the interactive TUI launches automatically.
@@ -71,18 +71,18 @@ This installs `wboxcli` globally — available from any terminal, just like `nvm
 
 **To update:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/bavish13_dev/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.sh | bash
 ```
 
 **To uninstall:**
 
 macOS / Linux:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/bavish13_dev/scripts/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.sh | bash
 ```
 Windows (PowerShell):
 ```powershell
-irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/bavish13_dev/scripts/uninstall.ps1 | iex
+irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.ps1 | iex
 ```
 
 ### Manual Install (For Development)
