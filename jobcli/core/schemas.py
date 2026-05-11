@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 
 class ATSType(str, Enum):
@@ -155,7 +155,11 @@ class Demographics(BaseModel):
 
 
 class ResumeData(BaseModel):
-    """Complete resume data structure."""
+    """Complete resume data structure.
+
+    Accepts either the internal schema format or the JSON Resume standard
+    (https://jsonresume.org/) with top-level keys: basics, work, education, skills.
+    """
 
     personal: PersonalInfo
     education: list[Education] = Field(default_factory=list)
@@ -164,6 +168,107 @@ class ResumeData(BaseModel):
     demographics: Optional[Demographics] = None
     skills: list[str] = Field(default_factory=list)
     certifications: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_json_resume_format(cls, data: Any) -> Any:  # noqa: ANN401
+        """Transparently convert JSON Resume standard format to internal schema."""
+        if not isinstance(data, dict):
+            return data
+
+        # Only transform if this looks like JSON Resume (has 'basics' but not 'personal')
+        if "basics" not in data or "personal" in data:
+            return data
+
+        transformed: dict[str, Any] = {}
+
+        # --- personal / basics ---
+        basics = data.get("basics", {})
+        name_parts = (basics.get("name") or "").split(" ", 1)
+        first_name = name_parts[0] if name_parts else ""
+        last_name = name_parts[1] if len(name_parts) > 1 else ""
+
+        location = basics.get("location") or {}
+        linkedin_url: Optional[str] = None
+        github_url: Optional[str] = None
+        for profile in basics.get("profiles", []):
+            network = (profile.get("network") or "").lower()
+            url = profile.get("url") or profile.get("username") or ""
+            if not url.startswith("http"):
+                url = "https://" + url
+            if "linkedin" in network:
+                linkedin_url = url
+            elif "github" in network:
+                github_url = url
+
+        transformed["personal"] = {
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": basics.get("email", ""),
+            "phone": basics.get("phone", ""),
+            "city": location.get("city"),
+            "state": location.get("region"),
+            "country": location.get("countryCode"),
+            "zip_code": location.get("postalCode"),
+            "linkedin": linkedin_url,
+            "github": github_url,
+            "website": basics.get("url") or basics.get("website"),
+        }
+
+        # --- education ---
+        edu_list = []
+        for edu in data.get("education", []):
+            end_raw = edu.get("endDate") or ""
+            grad_year: Optional[int] = None
+            if end_raw:
+                try:
+                    grad_year = int(str(end_raw).split("-")[0])
+                except (ValueError, IndexError):
+                    pass
+            edu_list.append({
+                "school": edu.get("institution", ""),
+                "degree": edu.get("studyType", ""),
+                "field_of_study": edu.get("area", ""),
+                "graduation_year": grad_year or 0,
+                "gpa": edu.get("gpa"),
+            })
+        transformed["education"] = edu_list
+
+        # --- experience (JSON Resume uses 'work') ---
+        exp_list = []
+        for job in data.get("work", []):
+            highlights = job.get("highlights") or []
+            description = "\n".join(highlights) if highlights else job.get("summary", "")
+            exp_list.append({
+                "company": job.get("name") or job.get("company", ""),
+                "title": job.get("position", ""),
+                "start_date": job.get("startDate", ""),
+                "end_date": job.get("endDate"),
+                "current": (job.get("endDate") or "").lower() in ("present", "current", ""),
+                "description": description,
+            })
+        transformed["experience"] = exp_list
+
+        # --- skills: flatten [{name, keywords:[...]}, ...] → [str, ...] ---
+        flat_skills: list[str] = []
+        for skill_entry in data.get("skills", []):
+            if isinstance(skill_entry, str):
+                flat_skills.append(skill_entry)
+            elif isinstance(skill_entry, dict):
+                for kw in skill_entry.get("keywords", []):
+                    if kw and isinstance(kw, str):
+                        flat_skills.append(kw)
+                # Also include the category name itself if no keywords
+                if not skill_entry.get("keywords") and skill_entry.get("name"):
+                    flat_skills.append(skill_entry["name"])
+        transformed["skills"] = flat_skills
+
+        # --- pass-through remaining keys ---
+        for key in ("work_authorization", "demographics", "certifications"):
+            if key in data:
+                transformed[key] = data[key]
+
+        return transformed
 
 
 class CommonQuestions(BaseModel):
