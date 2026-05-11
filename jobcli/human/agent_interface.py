@@ -157,7 +157,16 @@ class AgentInterface:
 
         if self.logger:
             self.logger.info(f"Agent waiting for input: {prompt_text}", phase=ExecutionPhase.HUMAN)
-            # We assume the API/Server will call resume() when it gets WebSocket input
+            # Notify the dashboard explicitly that input is required
+            try:
+                self.logger.emit_event({
+                    "type": "human_input_required",
+                    "prompt": prompt_text,
+                    "default": default,
+                    "timeout": timeout_seconds
+                })
+            except Exception:
+                pass
 
         # To keep local CLI working, we'd normally want to call input() here.
         # But if we are in "Remote" mode (server mode), we might want to ONLY wait for the event.
@@ -932,7 +941,31 @@ class AgentInterface:
         """Should the agent continue with this application?  AUTO always says yes."""
         if self.mode == InteractionMode.AUTO:
             return True
-        return Confirm.ask("  Continue with this application?", default=True)
+        return self.ask_yes_no("  Continue with this application?")
+
+    def ask_yes_no(self, question: str, default: bool = True) -> bool:
+        """Ask a yes/no question and return the result. Works in both terminal and dashboard."""
+        self.get_attention()
+        
+        # If in AUTO mode, we can't block, so return default
+        if self.mode == InteractionMode.AUTO:
+            return default
+            
+        # Notify dashboard explicitly
+        try:
+            if self.logger:
+                self.logger.emit_event({
+                    "type": "human_input_required",
+                    "input_type": "confirm",
+                    "prompt": question,
+                    "default": default
+                })
+        except Exception:
+            pass
+
+        # Use rich's Confirm for terminal UI
+        from rich.prompt import Confirm
+        return Confirm.ask(question, default=default)
 
     def show_failed_fields(
         self,

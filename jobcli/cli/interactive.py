@@ -6,7 +6,10 @@ Just a clean prompt. No heavy panels. Information when you need it.
 import os
 import sys
 import time
-import readline
+try:
+    import readline
+except ImportError:
+    readline = None # type: ignore
 import subprocess
 import random
 import shutil
@@ -64,6 +67,8 @@ class _Completer:
 
 
 def _setup_readline():
+    if not readline:
+        return None
     history_path = os.path.join(os.path.expanduser("~"), ".jobcli", "history")
     os.makedirs(os.path.dirname(history_path), exist_ok=True)
     try:
@@ -325,6 +330,7 @@ def _exec(args: list[str]):
             stderr=subprocess.STDOUT,
             cwd=os.getcwd(),
             text=True,
+            encoding="utf-8",
             bufsize=1,
         )
         for line in iter(proc.stdout.readline, ""):
@@ -531,7 +537,8 @@ def interactive_session():
                 console.print(f"  [{D}]^C[/]")
 
     finally:
-        try:
-            readline.write_history_file(history_path)
-        except (PermissionError, OSError):
-            pass
+        if readline and history_path:
+            try:
+                readline.write_history_file(history_path)
+            except (PermissionError, OSError):
+                pass

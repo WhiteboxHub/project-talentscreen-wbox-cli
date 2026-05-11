@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 
 class ATSType(str, Enum):
@@ -99,47 +99,85 @@ class ActionType(str, Enum):
 class PersonalInfo(BaseModel):
     """Personal information."""
 
-    first_name: str
-    last_name: str
-    email: str
-    phone: str
-    address: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    country: Optional[str] = None
-    zip_code: Optional[str] = None
-    linkedin: Optional[str] = None
-    github: Optional[str] = None
-    portfolio: Optional[str] = None
-    website: Optional[str] = None
+    first_name: Optional[str] = Field(
+        None, validation_alias=AliasChoices("first_name", "first_name", "given_name", "forename", "nombre", "first", "fname")
+    )
+    last_name: Optional[str] = Field(
+        None, validation_alias=AliasChoices("last_name", "last_name", "surname", "family_name", "apellido", "last", "lname")
+    )
+    email: Optional[str] = Field(
+        None, validation_alias=AliasChoices("email", "e_mail", "correo", "email_address", "Email ID", "email_id")
+    )
+    phone: Optional[str] = Field(
+        None, validation_alias=AliasChoices("phone", "mobile", "cell", "telephone", "contact_number", "phone_number", "mobile_number", "contact_number")
+    )
+    address: Optional[str] = Field(
+        None, validation_alias=AliasChoices("address", "street_address", "mailing_address")
+    )
+    city: Optional[str] = Field(None, validation_alias=AliasChoices("city"))
+    state: Optional[str] = Field(None, validation_alias=AliasChoices("state", "province", "region"))
+    country: Optional[str] = Field(None, validation_alias=AliasChoices("country", "countryCode"))
+    zip_code: Optional[str] = Field(
+        None, validation_alias=AliasChoices("zip_code", "zip", "postal", "zip code", "postal code", "postalCode")
+    )
+    linkedin: Optional[str] = Field(
+        None, validation_alias=AliasChoices("linkedin", "linkedin url", "linkedin profile", "linkedin_url")
+    )
+    github: Optional[str] = Field(
+        None, validation_alias=AliasChoices("github", "github url", "github profile")
+    )
+    portfolio: Optional[str] = Field(
+        None, validation_alias=AliasChoices("portfolio", "website", "personal website", "personal site")
+    )
+    website: Optional[str] = Field(None, validation_alias=AliasChoices("website", "url"))
 
 
 class Education(BaseModel):
-    """Education entry."""
+    """Education history entry."""
 
-    school: str
-    degree: str
-    field_of_study: str
-    graduation_year: int
-    gpa: Optional[float] = None
+    school: Optional[str] = Field(
+        None, validation_alias=AliasChoices("school", "university", "college", "institution", "school_name", "university_name")
+    )
+    degree: Optional[str] = Field(
+        None, validation_alias=AliasChoices("degree", "degree_type", "level_of_education", "education_level", "highest_degree", "studyType")
+    )
+    field_of_study: Optional[str] = Field(
+        None, validation_alias=AliasChoices("field_of_study", "field_of_study", "major", "discipline", "area_of_study", "concentration", "area")
+    )
+    graduation_year: Optional[int] = Field(
+        None, validation_alias=AliasChoices("graduation_year", "graduation", "grad_year", "year_of_graduation", "expected_graduation", "graduation_date")
+    )
+    gpa: Optional[float] = Field(
+        None, validation_alias=AliasChoices("gpa", "grade point", "cumulative gpa", "score")
+    )
 
 
 class Experience(BaseModel):
     """Work experience entry."""
 
-    company: str
-    title: str
-    start_date: str
-    end_date: Optional[str] = None
+    company: Optional[str] = Field(
+        None, validation_alias=AliasChoices("company", "employer", "organization", "company_name", "employer_name", "name_of_employer", "organization_name", "name")
+    )
+    title: Optional[str] = Field(
+        None, validation_alias=AliasChoices("title", "job_title", "role", "position", "position_title", "job_role", "your_title", "position/role")
+    )
+    start_date: Optional[str] = Field(
+        None, validation_alias=AliasChoices("start_date", "startDate", "from", "start", "date started")
+    )
+    end_date: Optional[str] = Field(
+        None, validation_alias=AliasChoices("end_date", "endDate", "to", "end", "date ended")
+    )
     current: bool = False
-    description: Optional[str] = None
+    description: Optional[str] = Field(
+        None, validation_alias=AliasChoices("description", "job_description", "responsibilities", "duties", "summary", "roles_and_responsibilities", "role_description", "work_performed")
+    )
 
 
 class WorkAuthorization(BaseModel):
     """Work authorization information."""
 
-    authorized_to_work: bool = True
-    require_sponsorship: bool = False
+    authorized_to_work: Optional[bool] = True
+    require_sponsorship: Optional[bool] = False
     visa_status: Optional[str] = None
 
 
@@ -157,9 +195,13 @@ class Demographics(BaseModel):
 class ResumeData(BaseModel):
     """Complete resume data structure."""
 
-    personal: PersonalInfo
-    education: list[Education] = Field(default_factory=list)
-    experience: list[Experience] = Field(default_factory=list)
+    personal: PersonalInfo = Field(..., validation_alias=AliasChoices("personal", "basics", "contact_info"))
+    education: list[Education] = Field(
+        default_factory=list, validation_alias=AliasChoices("education", "academics", "schooling")
+    )
+    experience: list[Experience] = Field(
+        default_factory=list, validation_alias=AliasChoices("experience", "work", "work_experience", "employment", "history")
+    )
     work_authorization: WorkAuthorization = Field(default_factory=WorkAuthorization)
     demographics: Optional[Demographics] = None
     skills: list[str] = Field(default_factory=list)
@@ -192,6 +234,7 @@ class EvaluationReport(BaseModel):
 
 class Job(BaseModel):
     """Job posting information."""
+    model_config = ConfigDict(from_attributes=True)
 
     id: Optional[int] = None
     url: str
