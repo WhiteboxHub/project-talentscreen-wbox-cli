@@ -9,8 +9,11 @@ from sqlalchemy.orm import Session
 
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load from ~/.jobcli/.env (written by the setup wizard) first,
+# then fall back to a local .env in the cwd if present.
+_JOBCLI_ENV = os.path.join(os.path.expanduser("~"), ".jobcli", ".env")
+load_dotenv(_JOBCLI_ENV, override=False)
+load_dotenv(override=False)
 
 from jobcli.core.logger import JobLogger, global_logger
 from jobcli.core.schemas import ApplicationStatus, Job
