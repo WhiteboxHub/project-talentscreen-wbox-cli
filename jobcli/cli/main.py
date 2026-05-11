@@ -629,7 +629,7 @@ def apply(
 
 @app.command()
 def discover(
-    headless: bool = typer.Option(True, help="Run browser in headless mode"),
+    headless: bool = typer.Option(False, help="Run browser in headless mode"),
 ) -> None:
     """Discover jobs from Whitebox Learning dashboard."""
     console.print("[bold cyan]Job Discovery[/bold cyan]\n")

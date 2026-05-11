@@ -50,7 +50,7 @@ class SecureConfig(BaseModel):
 
     # Application settings
     default_llm_provider: str = Field(default="openai")
-    headless: bool = Field(default=True)
+    headless: bool = Field(default=False)
     max_retries: int = Field(default=3)
     screenshot_on_error: bool = Field(default=True)
     screenshot_on_success: bool = Field(default=False)
