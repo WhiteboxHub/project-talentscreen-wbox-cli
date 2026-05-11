@@ -132,6 +132,25 @@ def run_doctor(console: "Console", wbox_smoke: bool = False) -> int:
                 console.print(f"Wbox smoke: {bad} ({e})")
                 issues += 1
 
+    # Browser Extension Auto-Discovery
+    try:
+        from jobcli.cli.main import get_config
+        cfg = get_config()
+        ext_path = cfg.extension_path
+        
+        if not ext_path or not os.path.exists(ext_path):
+            # Mirror the engine's auto-discovery logic
+            discovered = Path(__file__).parent.parent / "extension"
+            if discovered.exists():
+                ext_path = str(discovered.absolute())
+        
+        if ext_path and os.path.exists(ext_path):
+            console.print(f"Browser Extension ({Path(ext_path).name}): {ok}")
+        else:
+            console.print(f"Browser Extension: {warn} (not found, automation will rely on rules/AI only)")
+    except Exception:
+        pass
+
     console.print()
     if issues:
         console.print(f"[bold red]{issues} critical check(s) failed.[/bold red]")
