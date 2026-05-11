@@ -881,18 +881,15 @@ class ApplicationEngine:
         
         self.playwright = sync_playwright().start()
         
-        # Use EXTENSION_PATH from config (should be the published/unpacked version)
+        # Use EXTENSION_PATH from config — must point to the unpacked
+        # TalentScreen extension downloaded from the Chrome Web Store.
+        # If not set or the path doesn't exist, run without any extension.
         extension_dir = self.config.extension_path
-        
-        # ── AUTO-DISCOVERY ──────────────────────────────────────────────
-        # If no extension path is configured, or it doesn't exist, try
-        # to find it in the standard project location relative to this file.
-        if not extension_dir or not os.path.exists(extension_dir):
-            from pathlib import Path
-            # engine.py is in jobcli/core/engine.py, extension is in jobcli/extension/
-            discovered = Path(__file__).parent.parent / "extension"
-            if discovered.exists():
-                extension_dir = str(discovered.absolute())
+        if extension_dir and not os.path.exists(extension_dir):
+            global_logger.warning(
+                f"EXTENSION_PATH '{extension_dir}' does not exist — launching without extension."
+            )
+            extension_dir = None
 
         self.extension_dir = extension_dir
         launch_args = list(LAUNCH_ARGS)
@@ -1233,22 +1230,9 @@ class ApplicationEngine:
                 apply_stealth(self.context, logger=logger)
             self.anti_bot.logger = logger
 
-            # Inject resume context via a DOM attribute so the extension's
-            # content script (which runs in an isolated JS world) can read it.
-            # Page-world window properties are invisible to content scripts,
-            # but the DOM is shared between both worlds.
-            import json as _json
-            context_json = _json.dumps({
-                "resume": self.resume.model_dump(),
-                "memory": {}
-            })
-            # Escape backticks/backslashes for the template literal
-            safe_json = context_json.replace("\\", "\\\\").replace("`", "\\`")
-            self.context.add_init_script(f"""
-                document.addEventListener('DOMContentLoaded', () => {{
-                    document.documentElement.setAttribute('data-jobcli-context', `{safe_json}`);
-                }});
-            """)
+            # Resume data is injected into the TalentScreen extension's storage
+            # via chrome.storage.local through the background service worker
+            # (see engine._inject_resume_into_extension), not via DOM attributes.
 
             # AgentInterface is created once and used throughout the loop.
             # Memory + ATS type are populated as soon as we know them so every
@@ -1783,53 +1767,10 @@ class ApplicationEngine:
                 except Exception:
                     pass
 
-            # ── Click Extension Autofill Button ────────────────────────────
-            # The extension injects a floating "⚡ Autofill" button on every page.
-            # The agent CLICKS it only when it's sure we're on an application form
-            # (not a login page, job board, or redirect). This prevents the
-            # extension from accidentally filling login fields or causing issues
-            # on non-application pages.
-            try:
-                autofill_btn = page.locator('#jobcli-autofill-btn')
-                # Skip the untrusted-event JS extension on strictly monitored platforms.
-                # We have removed Greenhouse and Lever from this list so you can see the extension in your UI.
-                strict_platforms = (ATSType.ASHBY, ATSType.WORKDAY)
-                
-                if autofill_btn.count() > 0 and state.detected_ats not in strict_platforms:
-                    agent.show_status(f"Extension detected at {self.extension_dir}. Clicking Autofill...", phase=ExecutionPhase.RULES)
-                    
-                    # Clear any previous result
-                    page.evaluate("document.documentElement.removeAttribute('data-jobcli-fill-result')")
-                    
-                    # Click the button (agent action, not auto-trigger)
-                    autofill_btn.click()
-                    
-                    # Wait for the extension to write back its result
-                    ext_result = page.evaluate("""
-                        () => new Promise(resolve => {
-                            const check = () => {
-                                const result = document.documentElement.getAttribute('data-jobcli-fill-result');
-                                if (result) {
-                                    document.documentElement.removeAttribute('data-jobcli-fill-result');
-                                    resolve(JSON.parse(result));
-                                }
-                            };
-                            const interval = setInterval(check, 200);
-                            setTimeout(() => { clearInterval(interval); resolve({ error: 'timeout' }); }, 10000);
-                            check();
-                        })
-                    """)
-                    if ext_result and ext_result.get("error"):
-                        logger.warning(f"Extension autofill: {ext_result['error']}", phase=ExecutionPhase.RULES)
-                    else:
-                        filled = ext_result.get("filled", 0)
-                        agent.show_success(f"Extension filled {filled} fields.")
-                        # Wait for DOM to settle after extension fill
-                        page.wait_for_timeout(1500)
-                else:
-                    logger.info("Skipping extension autofill (not on application form yet).", phase=ExecutionPhase.RULES)
-            except Exception as e:
-                logger.warning(f"Extension autofill skipped: {e}", phase=ExecutionPhase.RULES)
+            # ── TalentScreen Extension Autofill ───────────────────────────
+            # The TalentScreen Chrome Web Store extension autofills the form
+            # natively once resume data is loaded into its chrome.storage.
+            # No custom button injection needed — the extension handles UI.
             # ──────────────────────────────────────────────────────────────
 
             # Extract AFTER extension fill so the LLM sees updated field values
@@ -2783,65 +2724,10 @@ class ApplicationEngine:
 
                 agent.show_status(f"Running AI on page {page_count}...", phase=ExecutionPhase.LLM)
 
-                # ── Click Extension Autofill on each new page ──────────
-                # Sequential flow: Extension → LLM → Human
-                try:
-                    autofill_btn = page.locator('#jobcli-autofill-btn')
-                    if autofill_btn.count() > 0:
-                        agent.show_status(f"Clicking Autofill on page {page_count}...", phase=ExecutionPhase.RULES)
-                        page.evaluate("document.documentElement.removeAttribute('data-jobcli-fill-result')")
-                        autofill_btn.click()
-                        ext_result = page.evaluate("""
-                            () => new Promise(resolve => {
-                                const check = () => {
-                                    const result = document.documentElement.getAttribute('data-jobcli-fill-result');
-                                    if (result) {
-                                        document.documentElement.removeAttribute('data-jobcli-fill-result');
-                                        resolve(JSON.parse(result));
-                                    }
-                                };
-                                const interval = setInterval(check, 200);
-                                setTimeout(() => { clearInterval(interval); resolve({ error: 'timeout' }); }, 8000);
-                                check();
-                            })
-                        """)
-                        if ext_result and not ext_result.get("error"):
-                            filled = ext_result.get("filled", 0)
-                            agent.show_success(f"Extension filled {filled} fields on page {page_count}.")
-                            page.wait_for_timeout(1500)
-                            
-                            # Grab live values explicitly
-                            try:
-                                live_vals = page.evaluate("""
-                                    () => {
-                                        const res = [];
-                                        document.querySelectorAll('input, select, textarea').forEach(el => {
-                                            let val = el.value;
-                                            if (el.tagName === 'SELECT' && el.selectedIndex >= 0) {
-                                                val = el.options[el.selectedIndex].text;
-                                            }
-                                            if (val && val.trim() !== '') {
-                                                const label = el.name || el.id || el.getAttribute('aria-label') || '';
-                                                if (label) {
-                                                    res.push({ label: label, value: val.trim() });
-                                                }
-                                            }
-                                        });
-                                        return res;
-                                    }
-                                """)
-                                placeholders = ["select", "choose", "please choose", "select...", "select an option", "-- select --"]
-                                for f in live_vals:
-                                    val = f.get('value', '')
-                                    label = f.get('label', '')
-                                    if val.lower() not in placeholders and label:
-                                        filled_fields.add(f"- {label}: already has value '{val}'")
-                            except Exception:
-                                pass
-
-                            ax_tree = extractor.extract()
-                except Exception as ext_err:
-                    logger.warning(f"Extension on page {page_count}: {ext_err}", phase=ExecutionPhase.RULES)
+                # ── TalentScreen Extension Autofill (per page) ────────────
+                # TalentScreen handles each page automatically via its own
+                # content scripts. No click trigger needed from the CLI.
+                # ──────────────────────────────────────────────────────────
 
                 logger.save_structured_dom(ax_tree.model_dump(), f"ax_tree_page_{page_count}", ExecutionPhase.LLM)
 
