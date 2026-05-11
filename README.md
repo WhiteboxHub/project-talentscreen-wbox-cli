@@ -8,6 +8,7 @@ Production-grade CLI for automated job applications across multiple ATS platform
 
 ### Core Automation
 - **One-Shot Setup** — Single `jobcli setup` command loads credentials, uploads resume, and discovers all jobs
+- **Auto-Discovery Extension** — Browser extension is automatically detected and loaded from the project root; no manual `.env` paths required.
 - **Wbox Dashboard Integration** — Automated job discovery from Whitebox Learning (scrolls through all rows)
 - **Advanced AI Reasoning** — AXTree (Accessibility Tree) analysis for high-accuracy form field mapping
 - **Universal Iframe Support** — Reach-through for Greenhouse, Lever, Paylocity, and nested iframes
@@ -18,6 +19,7 @@ Production-grade CLI for automated job applications across multiple ATS platform
 - **Resume Path Validation** — Automatically detects missing resume files and warns you instead of crashing, ensuring batch continuity.
 - **Multi-Provider LLM** — Native support for OpenAI, Anthropic, and Google Gemini
 - **LinkedIn Manual Loop** — LinkedIn jobs are opened in the browser with a 60-second window for manual application before auto-skipping
+- **Job Activity Dashboard Sync** — Automatically pushes `SUBMITTED` and `FAILED` application statuses to your central dashboard for real-time tracking
 
 ### Phase 1 — Local Learning & Memory Engine
 - **Confidence-Based Memory** — Answers are only trusted after ≥ 3 successful uses at ≥ 60% confidence
@@ -26,12 +28,12 @@ Production-grade CLI for automated job applications across multiple ATS platform
 - **Personal Data Isolation** — PII fields (email, phone, name, address, etc.) are never stored in reusable memory
 - **Structured Logging** — JSON logs with screenshots and DOM snapshots
 
-### Phase 2 — Knowledge Sync *(new)*
+### Phase 2 — Knowledge & Activity Sync *(updated)*
 - **Anonymous Crowd Intelligence** — Share only high-confidence, non-PII patterns with the central server
 - **Aggregated Downloads** — Pull the best field answers and UI locators from all contributing users
-- **Strict Merge Protection** — Server data only updates local data when `server_confidence > local_confidence`
-- **Weak Data Filtering** — Records with fewer than 3 successes are never uploaded or accepted
-- **Locator Ranking** — Server ranks selectors per `(ats_type, purpose)` using `score = confidence + log(success_count)` and returns the top 3
+- **Automated Activity Logging** — Pushes your application history (title, company, status) to the central dashboard
+- **Intelligent Job Mapping** — Automatically maps local job titles to centralized job types for accurate metrics
+- **Unified Sync Flow** — Single command to keep your local engine and central dashboard in perfect sync
 
 ---
 
@@ -142,7 +144,6 @@ This single command will:
 ```bash
 # Apply to all discovered jobs
 jobcli apply --batch
-
 # Apply to a single URL
 jobcli apply --url "https://boards.greenhouse.io/company/jobs/123"
 ```
@@ -152,7 +153,6 @@ jobcli apply --url "https://boards.greenhouse.io/company/jobs/123"
 ```bash
 # Wipe everything (config, database, job history)
 jobcli uninstall
-
 # Force wipe without confirmation
 jobcli uninstall --force
 ```
@@ -166,10 +166,8 @@ Control how much the agent pauses for your input:
 ```bash
 # supervised (default) — AI drives, pauses for missing fields and submission
 jobcli apply --url <url> --mode supervised
-
 # auto — fully autonomous, only stops for CAPTCHA or fatal errors
 jobcli apply --url <url> --mode auto
-
 # manual — pauses before every action batch for explicit approval
 jobcli apply --url <url> --mode manual
 ```
@@ -203,7 +201,7 @@ LinkedIn does not allow bot automation. When the batch encounters a LinkedIn job
 | `jobcli questions` | Pre-fill answers to common application questions |
 | `jobcli open-dashboard` | Launch an interactive browser window logged into Wbox |
 | `jobcli scan` | Scan configured ATS portals for open jobs |
-| `jobcli sync` | Push local learned patterns to server and pull aggregated updates |
+| `jobcli sync` | **Sync all data** — push patterns/activity to server and pull global updates |
 | `jobcli doctor` | Validate Playwright, SQLite, config, and resume JSON |
 
 ---
@@ -298,6 +296,8 @@ Local SQLite
     │
     ▼
 POST /api/sync_cli/knowledge_sync   ──► Server aggregates & scores
+    │
+POST /api/job_activity_logs/bulk     ──► Pushes application logs to dashboard
     │
 GET  /api/sync_cli/knowledge_updates ◄── Top-ranked patterns per ATS
     │

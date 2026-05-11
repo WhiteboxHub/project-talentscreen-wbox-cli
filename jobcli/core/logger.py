@@ -92,6 +92,18 @@ class JobLogger:
             **metadata,
         )
         
+        # Broadcast to WebSocket if attached
+        if self.on_event:
+            event_data = {
+                "type": "log",
+                "message": message,
+                "level": level,
+                "job_id": self.job_id,
+                "phase": phase.value if phase else None,
+            }
+            event_data.update(metadata)
+            self.on_event(event_data)
+        
         # Mirror important info to terminal for monitoring
         if level.lower() in ["info", "warning", "error", "critical"]:
             self._print_to_console(level, message, phase, **metadata)

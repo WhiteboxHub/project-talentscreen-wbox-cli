@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 # Fix UnicodeEncodeError on Windows terminals when printing checkmarks/symbols
-if sys.stdout.encoding.lower() != 'utf-8':
+if hasattr(sys.stdout, 'reconfigure') and sys.stdout.encoding.lower() != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
 import typer
@@ -408,11 +408,15 @@ def resume_upload(
         raise typer.Exit(1)
 
     try:
-        with open(json_path) as f:
+        with open(json_path, encoding="utf-8") as f:
             resume_data = json.load(f)
 
+        # Use project's native auto-detector to normalize various JSON formats
+        from jobcli.core.synonym_resolver import ResumeAutoDetector
+        normalized_data = ResumeAutoDetector.detect_and_convert(resume_data)
+
         # Validate with Pydantic
-        resume = ResumeData(**resume_data)
+        resume = ResumeData(**normalized_data)
 
         console.print(f"✓ Resume JSON validated")
         console.print(f"  Name: {resume.personal.first_name} {resume.personal.last_name}")
@@ -439,6 +443,8 @@ def resume_upload(
     save_config(config)
 
     console.print("\n[bold green]✓ Resume uploaded successfully[/bold green]")
+
+
 
 
 @app.command()
@@ -607,6 +613,18 @@ def apply(
 
     session.close()
     console.print("[bold green]Application process completed[/bold green]")
+    
+    # Auto-sync knowledge if enabled (default to true)
+    try:
+        from jobcli.sync.manager import SyncManager
+        db = get_database()
+        with db.get_session() as sync_session:
+            manager = SyncManager(sync_session)
+            console.print("\n[dim]Auto-syncing learned patterns...[/dim]")
+            manager.perform_sync()
+    except Exception as e:
+        # Silently fail auto-sync to avoid confusing the user at the very end
+        pass
 
 
 @app.command()
@@ -754,71 +772,42 @@ def doctor_cmd(
 
 @app.command("sync")
 def sync_cmd() -> None:
-    """Sync learned field answers and locators with the central server."""
-    console.print("[bold cyan]JobCLI Knowledge Sync[/bold cyan]\n")
-    
+    """Sync learned knowledge and job activity with the central server."""
     db = get_database()
-    session = db.get_session()
-    
-    try:
-        from jobcli.storage.repositories import SyncMetadataRepository
-        sync_repo = SyncMetadataRepository(session)
-        metadata = sync_repo.get_metadata()
+    with db.get_session() as session:
+        from jobcli.sync.manager import SyncManager
+        manager = SyncManager(session)
         
-        apps_since_sync = metadata.apps_since_sync if metadata else 0
+        console.print("[bold cyan]JobCLI Synchronization[/bold cyan]")
+        console.print("Syncing knowledge and application activity with central server...\n")
         
-        if apps_since_sync > 0:
-            console.print(f"You have {apps_since_sync} applications worth of new data.")
-        
-        do_sync = Confirm.ask("New improvements available. Sync now?", default=True)
-        if not do_sync:
-            console.print("[yellow]Sync cancelled.[/yellow]")
-            return
+        try:
+            results = manager.perform_sync()
             
-        with console.status("[bold green]Extracting and uploading local knowledge..."):
-            from jobcli.sync.extractor import extract_field_answers, extract_locators
-            from jobcli.sync.client import upload_knowledge, download_updates
-            from jobcli.sync.sqlite_merger import merge_server_updates
-            from datetime import datetime
-            
-            field_answers = extract_field_answers(session)
-            locators = extract_locators(session)
-            
-            payload = {
-                "field_answers": field_answers,
-                "locators": locators
-            }
-            
-            # 1. Upload
-            upload_resp = upload_knowledge(payload)
-            
-            # 2. Download
-            current_version = metadata.last_version if metadata else "0.0.0"
-            download_resp = download_updates(current_version)
-            
-            new_version = download_resp.get("version", current_version)
-            field_answers_down = len(download_resp.get("field_answers", []))
-            locators_down = len(download_resp.get("locators", []))
-            
-            # 3. Merge
-            merge_server_updates(session, download_resp)
-            
-            # 4. Update metadata
-            if hasattr(sync_repo, "record_sync_success"):
-                sync_repo.record_sync_success(new_version)
-            elif metadata:
-                metadata.last_version = new_version
-                metadata.last_sync_at = datetime.now()
-                metadata.apps_since_sync = 0
-                session.commit()
+            if results["status"] == "success":
+                # Knowledge Sync Results
+                if results.get("uploaded_answers") or results.get("uploaded_locators"):
+                    console.print(f"  [green]✓[/green] Uploaded {results['uploaded_answers']} field patterns")
+                    console.print(f"  [green]✓[/green] Uploaded {results['uploaded_locators']} locators")
                 
-            console.print(f"[bold green]✓ Downloaded {field_answers_down} field answers and {locators_down} locators.[/bold green]")
-            console.print(f"[bold green]✓ Updated to version {new_version}.[/bold green]")
-            
-    except Exception as e:
-        console.print(f"\n[red]Sync failed: {e}[/red]")
-    finally:
-        session.close()
+                if results.get("downloaded_updates", 0) > 0:
+                    console.print(f"  [green]✓[/green] Downloaded {results['downloaded_updates']} global updates")
+                else:
+                    console.print("  [blue]i[/blue] Knowledge patterns are up to date.")
+                
+                # Activity Sync Results
+                if results.get("activity_sync_status") == "success":
+                    console.print(f"  [green]✓[/green] Synced {results['activity_count']} job applications to dashboard")
+                elif results.get("activity_sync_status") == "skipped":
+                    console.print("  [blue]i[/blue] No new application activity to sync.")
+                elif results.get("activity_sync_status") == "failed":
+                    console.print(f"  [yellow]⚠[/yellow] Activity sync failed: {results.get('activity_error')}")
+
+                console.print("\n[bold green]✓ Synchronization complete[/bold green]")
+            else:
+                console.print(f"[red]Sync failed: {results['error']}[/red]")
+        except Exception as e:
+            console.print(f"[red]Sync error: {e}[/red]")
 
 
 

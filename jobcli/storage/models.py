@@ -169,7 +169,7 @@ class DropdownStrategyModel(Base):
 
 
 class SyncMetadataModel(Base):
-    """Tracks sync state for future Phase 2 server integration (local only).
+    """Tracks state for Central DB synchronization.
 
     Only one row ever exists (id=1).  Use SyncMetadataRepository to read/write it.
     """
@@ -184,6 +184,8 @@ class SyncMetadataModel(Base):
     # Incremented after every completed application.  Lets Phase 2 decide
     # whether there is anything new to push without querying all records.
     apps_since_sync = Column(Integer, default=0)
+    # Total count of field answers + locators downloaded during the last sync.
+    downloaded_count = Column(Integer, default=0)
     updated_at      = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
@@ -244,6 +246,9 @@ class Database:
                 "dropdown_strategies": [
                     ("first_job_id", "INTEGER"),
                     ("last_job_id", "INTEGER"),
+                ],
+                "sync_metadata": [
+                    ("downloaded_count", "INTEGER DEFAULT 0"),
                 ],
             }
             for table, pending in additive.items():

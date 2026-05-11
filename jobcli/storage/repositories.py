@@ -163,6 +163,34 @@ class JobRepository:
             for j in jobs
         ]
 
+    def list_recent_activity(self, since: Optional[datetime] = None) -> list[Job]:
+        """List all jobs with status changes since a given datetime."""
+        query = self.session.query(JobModel).filter(
+            JobModel.status.in_(
+                [ApplicationStatus.SUBMITTED, ApplicationStatus.FAILED]
+            )
+        )
+        if since:
+            query = query.filter(JobModel.updated_at > since)
+        
+        jobs = query.all()
+        return [
+            Job(
+                id=j.id,
+                url=j.url,
+                resolved_url=getattr(j, "resolved_url", None),
+                title=j.title,
+                company=j.company,
+                location=j.location,
+                description=j.description,
+                ats_type=j.ats_type,
+                status=j.status,
+                created_at=j.created_at,
+                updated_at=j.updated_at,
+            )
+            for j in jobs
+        ]
+
 
 class ApplicationLogRepository:
     """Repository for application logs."""
@@ -955,7 +983,7 @@ class SyncMetadataRepository:
         """Return the singleton sync-metadata row, creating it if absent."""
         row = self.session.query(SyncMetadataModel).filter(SyncMetadataModel.id == 1).first()
         if not row:
-            row = SyncMetadataModel(id=1, apps_since_sync=0, last_version="0.0.0")
+            row = SyncMetadataModel(id=1, apps_since_sync=0, downloaded_count=0, last_version="0.0.0")
             self.session.add(row)
             self.session.commit()
             self.session.refresh(row)
@@ -968,11 +996,12 @@ class SyncMetadataRepository:
         row.updated_at = datetime.now()
         self.session.commit()
 
-    def record_sync(self, version: str = "0.0.0") -> None:
+    def record_sync(self, version: str = "0.0.0", downloaded_count: int = 0) -> None:
         """Record that a sync has just completed (called by Phase 2 sync client)."""
         row = self.get_or_create()
         row.last_sync_at = datetime.now()
         row.last_version = version
+        row.downloaded_count = int(downloaded_count)  # type: ignore
         row.apps_since_sync = 0
         row.updated_at = datetime.now()
         self.session.commit()

@@ -139,12 +139,24 @@ class BaseATSHandler(ABC):
             return
 
         try:
+            locator.scroll_into_view_if_needed(timeout=1500)
             locator.hover(timeout=1500)
             self.page.wait_for_timeout(_r.randint(80, 180))
         except Exception:
             pass
 
-        locator.click(timeout=1500)
+        # Use force=True to handle cases where elements like floating labels/headers
+        # intercept the pointer events. Playwright's default actionability check
+        # can be too strict in these scenarios.
+        try:
+            locator.click(timeout=1500, force=True)
+        except Exception:
+            # Final fallback if even forced click fails
+            try:
+                locator.focus(timeout=1000)
+            except Exception:
+                pass
+        
         self.page.wait_for_timeout(_r.randint(120, 280))
 
         mod = "Meta" if _sys.platform == "darwin" else "Control"

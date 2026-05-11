@@ -520,6 +520,15 @@ class ResumeAutoDetector:
     """
 
     @staticmethod
+    def _deep_lowercase_keys(data: Any) -> Any:
+        """Recursively lowercase all keys in a dictionary."""
+        if isinstance(data, dict):
+            return {k.lower().replace(" ", "_"): ResumeAutoDetector._deep_lowercase_keys(v) for k, v in data.items()}
+        if isinstance(data, list):
+            return [ResumeAutoDetector._deep_lowercase_keys(i) for i in data]
+        return data
+
+    @staticmethod
     def detect_and_convert(raw_json: dict[str, Any]) -> dict[str, Any]:
         """Detect the resume JSON format and convert to our native schema.
 
@@ -529,32 +538,39 @@ class ResumeAutoDetector:
         Returns:
             Dict matching our ResumeData schema.
         """
+        # Recursively lowercase and normalize keys (e.g., "First Name" -> "first_name")
+        data = ResumeAutoDetector._deep_lowercase_keys(raw_json)
+
         # Already our format?
-        if "personal" in raw_json and isinstance(raw_json["personal"], dict):
-            if "first_name" in raw_json["personal"]:
-                return raw_json
+        if "personal" in data and isinstance(data["personal"], dict):
+            return data
 
         # JSONResume format (bavish.json style)
-        if "basics" in raw_json:
-            return ResumeAutoDetector._convert_json_resume(raw_json)
+        if "basics" in data:
+            return ResumeAutoDetector._convert_json_resume(data)
 
         # Flat format
-        if "first_name" in raw_json or "name" in raw_json:
-            return ResumeAutoDetector._convert_flat(raw_json)
+        if "first_name" in data or "name" in data:
+            return ResumeAutoDetector._convert_flat(data)
 
         # Unknown — return as-is and let validation catch errors
-        return raw_json
+        return data
 
     @staticmethod
     def _convert_json_resume(data: dict[str, Any]) -> dict[str, Any]:
         """Convert JSONResume format to our schema."""
+        # This receives low_json from detect_and_convert
         basics = data.get("basics", {})
-        location = basics.get("location", {})
-        profiles = basics.get("profiles", [])
+        low_basics = {k.lower(): v for k, v in basics.items()} if isinstance(basics, dict) else {}
+        
+        location = low_basics.get("location", {})
+        low_location = {k.lower(): v for k, v in location.items()} if isinstance(location, dict) else {}
+        
+        profiles = low_basics.get("profiles", [])
 
         # Parse name
-        full_name = basics.get("name", "")
-        name_parts = full_name.strip().split(" ", 1)
+        full_name = low_basics.get("name", "")
+        name_parts = str(full_name).strip().split(" ", 1)
         first_name = name_parts[0] if name_parts else ""
         last_name = name_parts[1] if len(name_parts) > 1 else ""
 
@@ -563,6 +579,7 @@ class ResumeAutoDetector:
         github = ""
         portfolio = ""
         for profile in profiles:
+            if not isinstance(profile, dict): continue
             network = (profile.get("network", "") or "").lower()
             url = profile.get("url", "")
             if "linkedin" in network:
@@ -575,52 +592,57 @@ class ResumeAutoDetector:
         personal = {
             "first_name": first_name,
             "last_name": last_name,
-            "email": basics.get("email", ""),
-            "phone": basics.get("phone", ""),
-            "city": location.get("city", ""),
-            "state": location.get("region", location.get("state", "")),
-            "country": location.get("countryCode", location.get("country", "")),
-            "zip_code": location.get("postalCode", ""),
-            "address": location.get("address", ""),
+            "email": low_basics.get("email", ""),
+            "phone": low_basics.get("phone", ""),
+            "city": low_location.get("city", ""),
+            "state": low_location.get("region", low_location.get("state", "")),
+            "country": low_location.get("countrycode", low_location.get("country", "")),
+            "zip_code": low_location.get("postalcode", ""),
+            "address": low_location.get("address", ""),
             "linkedin": linkedin,
             "github": github,
             "portfolio": portfolio,
-            "website": basics.get("url", ""),
+            "website": low_basics.get("url", ""),
         }
 
         # Education
         education = []
         for edu in data.get("education", []):
+            if not isinstance(edu, dict): continue
+            low_edu = {k.lower(): v for k, v in edu.items()}
             education.append({
-                "school": edu.get("institution", edu.get("school", "")),
-                "degree": edu.get("studyType", edu.get("degree", "")),
-                "field_of_study": edu.get("area", edu.get("field_of_study", "")),
+                "school": low_edu.get("institution", low_edu.get("school", "")),
+                "degree": low_edu.get("studytype", low_edu.get("degree", "")),
+                "field_of_study": low_edu.get("area", low_edu.get("field_of_study", "")),
                 "graduation_year": ResumeAutoDetector._parse_year(
-                    edu.get("endDate", edu.get("graduation_year", ""))
+                    low_edu.get("enddate", low_edu.get("graduation_year", ""))
                 ),
-                "gpa": edu.get("score", edu.get("gpa")),
+                "gpa": low_edu.get("score", low_edu.get("gpa")),
             })
 
         # Experience
         experience = []
         for work in data.get("work", data.get("experience", [])):
+            if not isinstance(work, dict): continue
+            low_work = {k.lower(): v for k, v in work.items()}
             experience.append({
-                "company": work.get("name", work.get("company", "")),
-                "title": work.get("position", work.get("title", "")),
-                "start_date": work.get("startDate", work.get("start_date", "")),
-                "end_date": work.get("endDate", work.get("end_date", "")),
-                "current": not bool(work.get("endDate", work.get("end_date", ""))),
-                "description": work.get("summary", work.get("description", "")),
+                "company": low_work.get("name", low_work.get("company", "")),
+                "title": low_work.get("position", low_work.get("title", "")),
+                "start_date": low_work.get("startdate", low_work.get("start_date", "")),
+                "end_date": low_work.get("enddate", low_work.get("end_date", "")),
+                "current": not bool(low_work.get("enddate", low_work.get("end_date", ""))),
+                "description": low_work.get("summary", low_work.get("description", "")),
             })
 
-        # Skills — flatten JSONResume skill groups
+        # Skills
         skills: list[str] = []
         for skill_group in data.get("skills", []):
             if isinstance(skill_group, dict):
-                keywords = skill_group.get("keywords", [])
+                low_sg = {k.lower(): v for k, v in skill_group.items()}
+                keywords = low_sg.get("keywords", [])
                 if isinstance(keywords, list):
                     skills.extend(keywords)
-                name = skill_group.get("name", "")
+                name = low_sg.get("name", "")
                 if name and name not in skills:
                     skills.append(name)
             elif isinstance(skill_group, str):
@@ -630,27 +652,30 @@ class ResumeAutoDetector:
         certifications = []
         for cert in data.get("certificates", data.get("certifications", [])):
             if isinstance(cert, dict):
-                certifications.append(cert.get("name", str(cert)))
+                low_c = {k.lower(): v for k, v in cert.items()}
+                certifications.append(low_c.get("name", str(cert)))
             elif isinstance(cert, str):
                 certifications.append(cert)
 
-        # Demographics (may or may not exist)
+        # Demographics
         demographics = None
         demo_data = data.get("demographics", {})
         if demo_data:
+            low_demo = {k.lower(): v for k, v in demo_data.items()} if isinstance(demo_data, dict) else {}
             demographics = {
-                "gender": demo_data.get("gender"),
-                "race": demo_data.get("race"),
-                "veteran_status": demo_data.get("veteran_status"),
-                "disability_status": demo_data.get("disability_status"),
+                "gender": low_demo.get("gender"),
+                "race": low_demo.get("race"),
+                "veteran_status": low_demo.get("veteran_status"),
+                "disability_status": low_demo.get("disability_status"),
             }
 
         # Work authorization
         work_auth = data.get("work_authorization", {})
+        low_wa = {k.lower(): v for k, v in work_auth.items()} if isinstance(work_auth, dict) else {}
         work_authorization = {
-            "authorized_to_work": work_auth.get("authorized_to_work", True),
-            "require_sponsorship": work_auth.get("require_sponsorship", False),
-            "visa_status": work_auth.get("visa_status"),
+            "authorized_to_work": low_wa.get("authorized_to_work", True),
+            "require_sponsorship": low_wa.get("require_sponsorship", False),
+            "visa_status": low_wa.get("visa_status"),
         }
 
         result: dict[str, Any] = {
@@ -669,10 +694,12 @@ class ResumeAutoDetector:
     @staticmethod
     def _convert_flat(data: dict[str, Any]) -> dict[str, Any]:
         """Convert flat format to our schema."""
+        # data is already lowercase keys from detect_and_convert
+        
         # Parse name if only 'name' is provided
         full_name = data.get("name", "")
         if full_name and "first_name" not in data:
-            parts = full_name.strip().split(" ", 1)
+            parts = str(full_name).strip().split(" ", 1)
             first_name = parts[0]
             last_name = parts[1] if len(parts) > 1 else ""
         else:

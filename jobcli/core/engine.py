@@ -864,6 +864,7 @@ class ApplicationEngine:
         self.playwright = None
         self.browser = None
         self.context = None
+        self.active_page = None
         self.user_data_dir = None
 
     def start_session(self) -> None:
@@ -882,16 +883,28 @@ class ApplicationEngine:
         
         # Use EXTENSION_PATH from config (should be the published/unpacked version)
         extension_dir = self.config.extension_path
+        
+        # ── AUTO-DISCOVERY ──────────────────────────────────────────────
+        # If no extension path is configured, or it doesn't exist, try
+        # to find it in the standard project location relative to this file.
+        if not extension_dir or not os.path.exists(extension_dir):
+            from pathlib import Path
+            # engine.py is in jobcli/core/engine.py, extension is in jobcli/extension/
+            discovered = Path(__file__).parent.parent / "extension"
+            if discovered.exists():
+                extension_dir = str(discovered.absolute())
+
+        self.extension_dir = extension_dir
         launch_args = list(LAUNCH_ARGS)
         
-        if extension_dir and os.path.exists(extension_dir):
+        if self.extension_dir and os.path.exists(self.extension_dir):
             import tempfile
             self.user_data_dir = tempfile.mkdtemp(prefix="jobcli_ext_profile_")
             launch_args.extend([
-                f"--disable-extensions-except={extension_dir}",
-                f"--load-extension={extension_dir}"
+                f"--disable-extensions-except={self.extension_dir}",
+                f"--load-extension={self.extension_dir}"
             ])
-            global_logger.info(f"Launching persistent browser context with extension from: {extension_dir}")
+            global_logger.info(f"Launching persistent browser context with extension from: {self.extension_dir}")
             self.context = self.playwright.chromium.launch_persistent_context(
                 self.user_data_dir,
                 headless=False,
@@ -957,6 +970,22 @@ class ApplicationEngine:
             return
         if handler is not None and handler.__class__.__name__ == "WorkdayHandler":
             setattr(handler, "resume_path_for_workday_modal", str(p))
+
+    def _get_llm_client(self, logger: Optional[JobLogger] = None) -> Optional[LLMClient]:
+        """Initialize LLMClient based on current config."""
+        provider = self.config.default_llm_provider
+        api_key = None
+        if provider == "openai":
+            api_key = self.config.openai_api_key
+        elif provider == "anthropic":
+            api_key = self.config.anthropic_api_key
+        elif provider == "gemini":
+            api_key = self.config.gemini_api_key
+        
+        if not api_key:
+            return None
+            
+        return LLMClient(provider, api_key, logger)
 
     # ------------------------------------------------------------------
     # CAPTCHA / bot-challenge freeze gate
@@ -1193,7 +1222,11 @@ class ApplicationEngine:
         if not self.context:
             self.start_session()
             
-        page = self.context.new_page()
+        # Reuse existing page if available, otherwise create new one
+        if not hasattr(self, 'active_page') or self.active_page is None or self.active_page.is_closed():
+            self.active_page = self.context.new_page()
+            
+        page = self.active_page
         try:
             if self.config.headless:
                 from jobcli.core.stealth import apply_stealth
@@ -1245,16 +1278,22 @@ class ApplicationEngine:
             current_url = page.url.lower()
             orig_url = job.url.lower()
             if "linkedin.com" in current_url or "linkedin.com" in orig_url:
-                agent.show_warning("LinkedIn job detected. Manual loop active: You have 60 seconds to apply.")
-                logger.info("LinkedIn job detected. Waiting 60s for manual application...", phase=ExecutionPhase.RULES)
-                try:
-                    page.wait_for_timeout(60000)
-                except Exception:
-                    pass
-                agent.show_warning("60 seconds elapsed. Moving to the next job.")
-                logger.info("Skipping LinkedIn job after 60s manual loop", phase=ExecutionPhase.RULES)
-                logger.log_phase_end(ExecutionPhase.RULES, True)
-                return ApplicationStatus.SKIPPED
+                agent.show_warning("LinkedIn job detected.")
+                should_skip = agent.ask_yes_no("  This is a LinkedIn job. Should I skip it?", default=True)
+                
+                if should_skip:
+                    logger.info("Skipping LinkedIn job as confirmed by user", phase=ExecutionPhase.RULES)
+                    logger.log_phase_end(ExecutionPhase.RULES, True)
+                    return ApplicationStatus.SKIPPED
+                else:
+                    agent.show_status("Handing off to you for manual application...", phase=ExecutionPhase.HUMAN)
+                    handoff = agent.handoff_to_human(
+                        reason="LinkedIn job detected. Please apply manually in the browser.",
+                        hint="When you're finished with the application, press ENTER to move to the next job."
+                    )
+                    if handoff.cancelled:
+                        return ApplicationStatus.FAILED
+                    return ApplicationStatus.SUBMITTED
                 
             if "myworkdayjobs.com" in current_url or "myworkdayjobs.com" in orig_url:
                 agent.show_warning("Workday job detected via URL - skipping as requested.")
@@ -1478,18 +1517,20 @@ class ApplicationEngine:
                 agent.show_error("Application could not be verified as submitted.")
                 logger.error("Application failed")
                 self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
-                status = ApplicationStatus.FAILED
-            # Increment the local apps-since-sync counter regardless of
-            # outcome — the sync extractor will filter by confidence anyway.
-            try:
-                from jobcli.core.memory import AgentMemory as _AM
-                _mem = _AM(self.session, job_id=job.id)
-                _mem.increment_apps_since_sync()
-            except Exception:
-                pass
+                # Increment apps_since_sync for central DB sync
+                from jobcli.storage.repositories import SyncMetadataRepository
+                sync_repo = SyncMetadataRepository(self.session)
+                sync_repo.increment_apps_since_sync()
+
             # ── 6. Final browser pause ──────────────────────────────
+            # Only pause if NOT in a batch success (keep moving!)
+            # But DO pause if it failed so the human can see why.
             if not self.config.headless:
-                agent.final_browser_pause()
+                if not success:
+                    agent.final_browser_pause()
+                else:
+                    # Just a tiny delay to let the human see the success before navigating away
+                    page.wait_for_timeout(1500)
             return status
         except (InterruptedError, KeyboardInterrupt):
             # Clean stop requested via CLI
@@ -1507,11 +1548,7 @@ class ApplicationEngine:
             self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
             return ApplicationStatus.FAILED
         finally:
-            try:
-                if 'page' in locals() and page:
-                    page.close()
-            except Exception:
-                pass
+            # We NO LONGER close the page here. It is closed in stop_session().
             global_logger.info(f"Completed job {job.id}", status=state.status.value)
 
     def _click_apply_button(
@@ -1716,16 +1753,10 @@ class ApplicationEngine:
         logger.log_phase_start(ExecutionPhase.LLM)
         state.current_phase = ExecutionPhase.LLM
 
-        provider = self.config.default_llm_provider
-        api_key = None
-        if provider == "openai":
-            api_key = self.config.openai_api_key
-        elif provider == "anthropic":
-            api_key = self.config.anthropic_api_key
-        elif provider == "gemini":
-            api_key = self.config.gemini_api_key
+        llm_client = self._get_llm_client(logger)
 
-        if not api_key:
+        if not llm_client:
+            provider = self.config.default_llm_provider
             # Don't just bail — a missing/invalid LLM key is a routine
             # situation (free tier exhausted, key rotated, network down).
             # Hand the form to the human so they can finish it, then return
@@ -1761,11 +1792,11 @@ class ApplicationEngine:
             try:
                 autofill_btn = page.locator('#jobcli-autofill-btn')
                 # Skip the untrusted-event JS extension on strictly monitored platforms.
-                # We will rely entirely on the native Python rules_handler for these to ensure isTrusted: true events.
-                strict_platforms = (ATSType.ASHBY, ATSType.GREENHOUSE, ATSType.WORKDAY, ATSType.LEVER)
+                # We have removed Greenhouse and Lever from this list so you can see the extension in your UI.
+                strict_platforms = (ATSType.ASHBY, ATSType.WORKDAY)
                 
                 if autofill_btn.count() > 0 and state.detected_ats not in strict_platforms:
-                    agent.show_status("Clicking Extension Autofill button...", phase=ExecutionPhase.RULES)
+                    agent.show_status(f"Extension detected at {self.extension_dir}. Clicking Autofill...", phase=ExecutionPhase.RULES)
                     
                     # Clear any previous result
                     page.evaluate("document.documentElement.removeAttribute('data-jobcli-fill-result')")
@@ -1972,7 +2003,6 @@ class ApplicationEngine:
                     phase=ExecutionPhase.RULES,
                 )
 
-            llm_client = LLMClient(provider, api_key, logger)
 
             from jobcli.core.memory import AgentMemory
             from jobcli.core.synonym_resolver import SynonymResolver
@@ -2438,7 +2468,7 @@ class ApplicationEngine:
                                             field_options = dp["options"]
                                             break
                                 
-                                help_val = agent.request_field_help(label, act.value or "", options=field_options)
+                                help_val = agent.request_field_input(label, current_value=act.value or "", options=field_options)
                                 if help_val:
                                     # Human provided a value (or picked an option). 
                                     # Update action and try one more time.
@@ -3308,9 +3338,16 @@ class ApplicationEngine:
                 "Examine the page and emit a single 'click' action for the correct button."
             )
             
-            from jobcli.llm.client import LLMClient
-            client = LLMClient(config=self.config)
-            response = client.get_browser_actions(ax_tree, prompt)
+            client = self._get_llm_client(logger)
+            if not client:
+                logger.error("No LLM client available for job board navigation", phase=ExecutionPhase.LLM)
+                return None
+                
+            response = client.analyze_page_from_axtree(
+                ax_tree, 
+                self.resume, 
+                task="find_apply_button"
+            )
 
             if response and response.actions:
                 # Execute the first click action
