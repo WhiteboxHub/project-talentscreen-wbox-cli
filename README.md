@@ -7,7 +7,7 @@ Production-grade CLI for automated job applications across multiple ATS platform
 ## Features
 
 ### Core Automation
-- **One-Shot Setup** — Single `jobcli setup` command loads credentials, uploads resume, and discovers all jobs
+- **One-Shot Setup** — Single `jobcli setup` (or onboarding) command loads credentials, uploads resume, and automatically discovers all jobs
 - **Auto-Discovery Extension** — Browser extension is automatically detected and loaded from the project root; no manual `.env` paths required.
 - **Wbox Dashboard Integration** — Automated job discovery from Whitebox Learning (scrolls through all rows)
 - **Advanced AI Reasoning** — AXTree (Accessibility Tree) analysis for high-accuracy form field mapping
@@ -126,18 +126,18 @@ RESUME_JSON_PATH=C:/Users/you/resume.json
 HEADLESS=false                     # false = visible browser window
 ```
 
-### Step 2 — Run setup (does everything in one shot)
+### Step 2 — Run setup (or just type `wboxcli`)
 
 ```bash
 jobcli setup
 ```
 
-This single command will:
+This single command (or the interactive onboarding in `wboxcli`) will:
 1. ✅ Load all credentials from `.env` — no prompts
 2. ✅ Save config to `~/.jobcli/`
 3. ✅ Upload your resume automatically from the paths in `.env`
-4. ✅ Log into Whitebox Learning and discover **all** jobs from your dashboard
-5. ✅ Print a summary and tell you when you're ready
+4. ✅ Log into Whitebox Learning and discover **all** jobs from your dashboard automatically
+5. ✅ Print a summary and tell you when you're ready to apply
 
 ### Step 3 — Start Applying
 
