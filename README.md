@@ -45,12 +45,12 @@ Requires **Python 3.10+** and **git**.
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/sunil_dev1/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/sunil_dev1/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.ps1 | iex
 ```
 
 This installs `wboxcli` globally — available from any terminal, just like `nvm` or `curl`. No virtual environment activation needed. After install, the interactive TUI launches automatically.
@@ -73,18 +73,18 @@ This installs `wboxcli` globally — available from any terminal, just like `nvm
 
 **To update:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/sunil_dev1/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.sh | bash
 ```
 
 **To uninstall:**
 
 macOS / Linux:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/sunil_dev1/scripts/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.sh | bash
 ```
 Windows (PowerShell):
 ```powershell
-irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/sunil_dev1/scripts/uninstall.ps1 | iex
+irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.ps1 | iex
 ```
 
 ### Manual Install (For Development)
@@ -144,7 +144,6 @@ This single command will:
 ```bash
 # Apply to all discovered jobs
 jobcli apply --batch
-
 # Apply to a single URL
 jobcli apply --url "https://boards.greenhouse.io/company/jobs/123"
 ```
@@ -154,7 +153,6 @@ jobcli apply --url "https://boards.greenhouse.io/company/jobs/123"
 ```bash
 # Wipe everything (config, database, job history)
 jobcli uninstall
-
 # Force wipe without confirmation
 jobcli uninstall --force
 ```
@@ -168,10 +166,8 @@ Control how much the agent pauses for your input:
 ```bash
 # supervised (default) — AI drives, pauses for missing fields and submission
 jobcli apply --url <url> --mode supervised
-
 # auto — fully autonomous, only stops for CAPTCHA or fatal errors
 jobcli apply --url <url> --mode auto
-
 # manual — pauses before every action batch for explicit approval
 jobcli apply --url <url> --mode manual
 ```
