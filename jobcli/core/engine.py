@@ -1233,6 +1233,7 @@ class ApplicationEngine:
             # Resume data is injected into the TalentScreen extension's storage
             # via chrome.storage.local through the background service worker
             # (see engine._inject_resume_into_extension), not via DOM attributes.
+            self._inject_resume_into_extension(page, logger)
 
             # AgentInterface is created once and used throughout the loop.
             # Memory + ATS type are populated as soon as we know them so every
@@ -1719,6 +1720,42 @@ class ApplicationEngine:
             logger.log_phase_end(ExecutionPhase.RULES, False)
         return False
 
+    def _inject_resume_into_extension(self, page: Page, logger: JobLogger) -> None:
+        """Inject resume data into TalentScreen extension via its background service worker."""
+        try:
+            context = page.context
+            bg_target = None
+            
+            if context.service_workers:
+                bg_target = context.service_workers[0]
+            elif context.background_pages:
+                bg_target = context.background_pages[0]
+                
+            if not bg_target:
+                logger.debug("No extension service worker/background page found in context.")
+                return
+                
+            if not self.resume:
+                return
+                
+            resume_dict = self.resume.model_dump(exclude_none=True)
+            import json
+            resume_json = json.dumps(resume_dict)
+            
+            inject_js = f"""
+                chrome.storage.local.set({{
+                    normalizedData: {resume_json},
+                    autoTriggerEnabled: true
+                }}, () => {{
+                    console.log('Resume data injected into extension storage.');
+                }});
+            """
+            bg_target.evaluate(inject_js)
+            logger.info("Successfully injected resume into extension storage.")
+            
+        except Exception as e:
+            logger.error(f"Failed to inject resume into extension: {e}")
+
     def _agent_fill_loop(
         self,
         page: Page,
@@ -1738,9 +1775,9 @@ class ApplicationEngine:
         state.current_phase = ExecutionPhase.LLM
 
         llm_client = self._get_llm_client(logger)
+        provider = self.config.default_llm_provider
 
         if not llm_client:
-            provider = self.config.default_llm_provider
             # Don't just bail — a missing/invalid LLM key is a routine
             # situation (free tier exhausted, key rotated, network down).
             # Hand the form to the human so they can finish it, then return
@@ -1905,9 +1942,9 @@ class ApplicationEngine:
                         phase=ExecutionPhase.RULES,
                     )
                     try:
-                        prefill_results = rules_handler.fill_form(
-                            self.config.resume_pdf_path
-                        )
+                        # Disable rule-based form fill to let the TalentScreen extension
+                        # handle the autofill natively.
+                        prefill_results = {} # rules_handler.fill_form(self.config.resume_pdf_path)
                         filled = [k for k, v in (prefill_results or {}).items() if v]
                         if filled:
                             agent.show_success(

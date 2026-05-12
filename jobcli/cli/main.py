@@ -206,11 +206,11 @@ def setup() -> None:
     load_dotenv(override=True)
 
     console.print("[bold cyan]╔══════════════════════════════════════╗[/bold cyan]")
-    console.print("[bold cyan]║       JobCLI — One-Shot Setup        ║[/bold cyan]")
+    console.print("[bold cyan]║       W-BOX CLI — One-Shot Setup     ║[/bold cyan]")
     console.print("[bold cyan]╚══════════════════════════════════════╝[/bold cyan]\n")
 
     # ── STEP 1: Config ────────────────────────────────────────────────────────
-    console.print("[bold]Step 1/4 — Loading credentials from .env...[/bold]")
+    console.print("[bold]Step 1/5 — Loading credentials from .env...[/bold]")
     ensure_config_dir()
     db = get_database()
     config = get_config()
@@ -232,7 +232,7 @@ def setup() -> None:
         console.print("    Job discovery will be skipped.")
 
     # ── STEP 2: Resume ────────────────────────────────────────────────────────
-    console.print("\n[bold]Step 2/4 — Loading resume from .env paths...[/bold]")
+    console.print("\n[bold]Step 2/5 — Loading resume from .env paths...[/bold]")
 
     pdf_path_str = config.resume_pdf_path
     json_path_str = config.resume_json_path
@@ -274,7 +274,7 @@ def setup() -> None:
                 console.print(f"  [red]✗ Failed to parse resume JSON: {e}[/red]")
 
     # ── STEP 3: Discover Jobs ─────────────────────────────────────────────────
-    console.print("\n[bold]Step 3/4 — Discovering jobs from Whitebox dashboard...[/bold]")
+    console.print("\n[bold]Step 3/5 — Discovering jobs from Whitebox dashboard...[/bold]")
 
     jobs_found = 0
     if not has_wbox:
@@ -296,13 +296,107 @@ def setup() -> None:
             console.print(f"  [red]✗ Job discovery failed: {e}[/red]")
             console.print("    You can run [cyan]jobcli discover[/cyan] manually later.")
 
-    # ── STEP 4: Summary ───────────────────────────────────────────────────────
-    console.print("\n[bold]Step 4/4 — Dashboard Summary[/bold]")
-    session = db.get_session()
-    print_dashboard_summary(session)
-    session.close()
 
-    if has_llm and resume_loaded:
+    # ── STEP 4: Browser & Extension Test ─────────────────────────────────────
+    console.print("\n[bold]Step 4/5 — Testing browser & extension...[/bold]")
+    browser_ok = False
+    extension_loaded = False
+    browser_error: str = ""
+
+    # ── 4a: Resolve & validate extension path ───────────────────────────────
+    ext_dir = config.extension_path
+    if ext_dir:
+        ext_dir = str(Path(ext_dir).expanduser().resolve())
+
+    # Auto-download extension if missing or invalid
+    if not ext_dir or not Path(ext_dir).is_dir() or not (Path(ext_dir) / "manifest.json").exists():
+        console.print("  [yellow]⚠ Extension not found or invalid. Auto-downloading...[/yellow]")
+        from jobcli.core.extension_manager import ExtensionManager
+        
+        # TalentScreen extension ID
+        ts_ext_id = "bebdlhhpgmegdebdballinfmfnlpmeio"
+        auto_ext_dir = CONFIG_DIR / "extension_unpacked"
+        
+        with console.status("[bold green]Downloading and extracting TalentScreen extension..."):
+            success = ExtensionManager.download_and_extract(ts_ext_id, auto_ext_dir)
+            
+        if success:
+            console.print(f"  [green]✓ Extension downloaded successfully to {auto_ext_dir}[/green]")
+            ext_dir = str(auto_ext_dir)
+            config.extension_path = ext_dir
+            save_config(config)
+        else:
+            ext_dir = None
+
+    if not ext_dir:
+        console.print("  [red]✗ EXTENSION_PATH could not be configured automatically.[/red]")
+        browser_error = "Failed to download extension"
+    else:
+        console.print(f"  [green]✓ Extension directory ready: {ext_dir}[/green]")
+
+        # ── 4b: Launch browser with extension and navigate to test URL ────
+        try:
+            from playwright.sync_api import sync_playwright
+            from jobcli.core.stealth import LAUNCH_ARGS, IGNORE_DEFAULT_ARGS, CONTEXT_OPTIONS
+            import tempfile
+
+            test_url = os.getenv("WBOX_LOGIN_URL", "https://whitebox-learning.com/login")
+            launch_args = list(LAUNCH_ARGS)
+            launch_args.extend([
+                f"--disable-extensions-except={ext_dir}",
+                f"--load-extension={ext_dir}",
+            ])
+
+            with console.status("[bold green]Launching browser with extension (this may take ~15s)..."):
+                with sync_playwright() as pw:
+                    user_data_dir = tempfile.mkdtemp(prefix="jobcli_setup_test_")
+                    ctx = pw.chromium.launch_persistent_context(
+                        user_data_dir,
+                        headless=False,
+                        args=launch_args,
+                        ignore_default_args=IGNORE_DEFAULT_ARGS,
+                        **CONTEXT_OPTIONS,
+                    )
+                    extension_loaded = True
+
+                    page = ctx.new_page()
+                    response = page.goto(test_url, timeout=30000, wait_until="domcontentloaded")
+                    status_code = response.status if response else 0
+                    page_title = page.title() or "(no title)"
+                    console.print("\n  [cyan]Holding browser open for 15 seconds for visual inspection...[/cyan]")
+                    page.wait_for_timeout(15000)
+                    ctx.close()
+
+            if status_code and status_code < 400:
+                browser_ok = True
+                console.print(f"  [green]✓ Extension loaded successfully: {Path(ext_dir).name}[/green]")
+                console.print(f"  [green]✓ Test URL reachable ({test_url}) — HTTP {status_code}[/green]")
+                console.print(f"    Page title: {page_title}")
+            else:
+                browser_error = f"HTTP {status_code} from {test_url}"
+                console.print(f"  [red]✗ Test URL returned error status: {browser_error}[/red]")
+
+        except Exception as _be:
+            browser_error = str(_be)
+            console.print(f"  [red]✗ Browser launch failed: {browser_error}[/red]")
+            console.print("    Make sure Playwright is installed: [cyan]playwright install chromium[/cyan]")
+
+    # ── STEP 5: Summary ───────────────────────────────────────────────────────
+    console.print("\n[bold]Step 5/5 — Summary[/bold]")
+    console.print("─" * 45)
+    console.print(f"  Config saved   : [green]✓[/green]  {CONFIG_FILE}")
+    console.print(f"  LLM ready      : {'[green]✓[/green]' if has_llm else '[red]✗[/red]'}")
+    console.print(f"  Resume loaded  : {'[green]✓[/green]' if resume_loaded else '[yellow]⚠ skipped[/yellow]'}")
+    console.print(f"  Jobs found     : [green]{jobs_found}[/green] new job(s)")
+    console.print(f"  Browser test   : {'[green]✓ PASSED[/green]' if browser_ok else '[red]✗ FAILED[/red]'}")
+    if extension_loaded:
+        console.print(f"  Extension      : [green]✓ loaded[/green]")
+    console.print("─" * 45)
+
+    # ── STEP 4: Summary ───────────────────────────────────────────────────────
+ 
+
+    if has_llm and resume_loaded and browser_ok:
         console.print("\n[bold green]✓ Setup complete! You are ready to apply.[/bold green]")
         console.print("\nRun: [bold cyan]jobcli apply --batch[/bold cyan]")
     else:
