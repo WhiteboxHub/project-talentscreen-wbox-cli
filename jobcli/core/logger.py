@@ -379,6 +379,19 @@ class GlobalLogger:
         """Log debug message."""
         self.logger.debug(message, **metadata)
 
+    def shutdown(self) -> None:
+        """Close the file handle to allow directory deletion."""
+        if not self._logger:
+            return
+            
+        # structlog.WriteLoggerFactory doesn't expose the file handle easily,
+        # but we can try to find and close it via the logging module if configured that way,
+        # or manually reset the configuration.
+        logging.shutdown()
+        # Reset structlog configuration if possible (rarely needed but good for clean state)
+        self._logger = None
+        GlobalLogger._instance = None
+
 
 # Global logger instance
 global_logger = GlobalLogger()

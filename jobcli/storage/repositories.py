@@ -19,6 +19,7 @@ from jobcli.core.schemas import (
     SelectorType,
 )
 from jobcli.core.url_normalize import normalize_job_url
+from jobcli.core.constants import DASHBOARD_SUMMARY_DAYS, REFERENCE_LINKS_COUNT, SUPPORTED_DOMAINS
 from jobcli.storage.models import (
     ApplicationLogModel,
     ConfigModel,
@@ -144,6 +145,7 @@ class JobRepository:
         jobs = (
             self.session.query(JobModel)
             .filter(JobModel.status == ApplicationStatus.PENDING)
+            .order_by(JobModel.created_at.asc())
             .all()
         )
         return [
@@ -190,6 +192,139 @@ class JobRepository:
             )
             for j in jobs
         ]
+
+    def deduplicate_jobs(self) -> int:
+        """Find and erase duplicate jobs by normalized URL.
+        
+        Returns the number of duplicates removed.
+        """
+        all_jobs = self.session.query(JobModel).all()
+        seen_urls = {} # canonical_url -> job_model
+        to_delete = []
+        
+        # Priority mapping for statuses (higher number = more important to keep)
+        status_priority = {
+            ApplicationStatus.OFFER: 10,
+            ApplicationStatus.INTERVIEW: 9,
+            ApplicationStatus.SUBMITTED: 8,
+            ApplicationStatus.IN_PROGRESS: 7,
+            ApplicationStatus.REQUIRES_HUMAN: 6,
+            ApplicationStatus.EVALUATING: 5,
+            ApplicationStatus.PENDING: 4,
+            ApplicationStatus.FAILED: 3,
+            ApplicationStatus.SKIPPED: 2,
+            ApplicationStatus.REJECTED: 1
+        }
+
+        for job in all_jobs:
+            # Auto-tag existing jobs as 'wbox' if source is missing
+            if not job.scan_source:
+                job.scan_source = "wbox"
+
+            canonical = normalize_job_url(job.url)
+            
+            if canonical in seen_urls:
+                existing = seen_urls[canonical]
+                
+                # Compare priorities to decide which to keep
+                existing_prio = status_priority.get(existing.status, 0)
+                current_prio = status_priority.get(job.status, 0)
+                
+                if current_prio > existing_prio:
+                    # Keep current, delete existing
+                    to_delete.append(existing)
+                    seen_urls[canonical] = job
+                else:
+                    # Keep existing, delete current
+                    to_delete.append(job)
+            else:
+                seen_urls[canonical] = job
+
+        deleted_count = 0
+        for job in to_delete:
+            # Re-link logs if any to the kept job
+            winner = seen_urls[normalize_job_url(job.url)]
+            if winner.id != job.id:
+                self.session.query(ApplicationLogModel).filter(ApplicationLogModel.job_id == job.id).update(
+                    {"job_id": winner.id}
+                )
+                self.session.delete(job)
+                deleted_count += 1
+        
+        # Flush deletions first to free up URLs for the UNIQUE constraint
+        if deleted_count > 0:
+            self.session.flush()
+        
+        # After deleting duplicates, normalize the URLs of the remaining "winners"
+        for canonical, winner in seen_urls.items():
+            if winner.url != canonical:
+                winner.url = canonical
+        
+        if deleted_count > 0 or any(w.url != c for c, w in seen_urls.items()):
+            self.session.commit()
+        
+        return deleted_count
+
+    def get_dashboard_stats(self, days: int = DASHBOARD_SUMMARY_DAYS) -> dict:
+        """Calculate dashboard statistics for the last N days."""
+        from datetime import datetime, timedelta
+        since = datetime.now() - timedelta(days=days)
+        
+        # 1. Total jobs in WBL for last 7 days
+        # We assume scan_source='wbox' for Whitebox Learning jobs
+        total_wbl = self.session.query(JobModel).filter(
+            JobModel.created_at >= since,
+            JobModel.scan_source == "wbox"
+        ).count()
+        
+        # 2. Already applied for you
+        applied_statuses = [
+            ApplicationStatus.SUBMITTED, 
+            ApplicationStatus.INTERVIEW, 
+            ApplicationStatus.OFFER,
+            ApplicationStatus.IN_PROGRESS
+        ]
+        applied_count = self.session.query(JobModel).filter(
+            JobModel.status.in_(applied_statuses)
+        ).count()
+        
+        # 3. Remaining total jobs (PENDING)
+        remaining_count = self.session.query(JobModel).filter(
+            JobModel.status == ApplicationStatus.PENDING
+        ).count()
+        
+        # 4. CLI friendly (PENDING + supported domains)
+        cli_friendly = 0
+        pending_jobs = self.session.query(JobModel).filter(
+            JobModel.status == ApplicationStatus.PENDING
+        ).all()
+        
+        for job in pending_jobs:
+            if any(domain in job.url.lower() for domain in SUPPORTED_DOMAINS):
+                # Extra check to exclude workday logins which are NOT CLI friendly yet
+                if "myworkdayjobs.com" not in job.url.lower():
+                    cli_friendly += 1
+        
+        # 5. Latest 100 job links for reference
+        latest_jobs = (
+            self.session.query(JobModel)
+            .order_by(JobModel.created_at.desc())
+            .limit(REFERENCE_LINKS_COUNT)
+            .all()
+        )
+        
+        latest_links = [
+            {"title": j.title, "url": j.url, "created_at": j.created_at} 
+            for j in latest_jobs
+        ]
+        
+        return {
+            "total_wbl": total_wbl,
+            "applied_count": applied_count,
+            "remaining_count": remaining_count,
+            "cli_friendly": cli_friendly,
+            "latest_links": latest_links
+        }
 
 
 class ApplicationLogRepository:

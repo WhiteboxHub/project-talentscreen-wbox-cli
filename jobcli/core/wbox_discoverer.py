@@ -16,6 +16,7 @@ load_dotenv(_JOBCLI_ENV, override=False)
 load_dotenv(override=False)
 
 from jobcli.core.logger import JobLogger, global_logger
+from jobcli.core.url_normalize import normalize_job_url
 from jobcli.core.schemas import ApplicationStatus, Job
 from jobcli.storage.repositories import JobRepository
 
@@ -72,8 +73,9 @@ class WboxDiscoverer:
                 
                 page.goto(self.dashboard_url)
                 
-                # Wait for grid to be fully loaded
-                page.wait_for_load_state("networkidle")
+                # Scroll down slowly to allow virtualized rows to load
+                page.mouse.wheel(0, 1200)
+                page.wait_for_timeout(500) # Wait for grid hydration
                 page.wait_for_selector(".ag-center-cols-container", timeout=30000)
                 
                 # Extraction phase
@@ -85,26 +87,28 @@ class WboxDiscoverer:
                 
                 discovered_urls = set()
                 
-                # The dashboard uses AG Grid which uses DOM virtualization (only renders ~15 visible rows).
-                # We need to scroll down to force it to render the rest of the jobs.
-                for _ in range(15):  # Max 15 scrolls to prevent infinite loops
+                # Scrolling logic to fetch jobs from the AG Grid
+                # We use a higher limit (50) to ensure we reach the end of large lists (e.g. 500+ jobs)
+                for _ in range(50):
                     links = page.query_selector_all('a.font-semibold.text-blue-600')
                     
                     for link in links:
                         try:
                             url = link.get_attribute("href")
                             title = link.inner_text().strip()
+                            canonical = normalize_job_url(url)
                             
-                            if url and title and url not in discovered_urls:
-                                discovered_urls.add(url)
+                            if canonical and title and canonical not in discovered_urls:
+                                discovered_urls.add(canonical)
                                 
                                 # Check if job already exists
-                                existing = self.job_repo.get_by_url(url)
+                                existing = self.job_repo.get_by_url(canonical)
                                 if not existing:
                                     job = Job(
-                                        url=url,
+                                        url=canonical,
                                         title=title,
-                                        status=ApplicationStatus.PENDING
+                                        status=ApplicationStatus.PENDING,
+                                        scan_source="wbox"
                                     )
                                     # Try to find company name in parent row if possible
                                     try:
@@ -124,8 +128,9 @@ class WboxDiscoverer:
                             
                     # Scroll down by evaluating JS on the viewport
                     try:
-                        page.evaluate('() => { const vp = document.querySelector(".ag-body-viewport"); if (vp) vp.scrollBy(0, 800); }')
-                        time.sleep(1)
+                        # Scroll the AG Grid viewport specifically
+                        page.evaluate('() => { const vp = document.querySelector(".ag-body-viewport"); if (vp) vp.scrollBy(0, 1200); }')
+                        page.wait_for_timeout(600) # Wait for rows to load
                     except Exception:
                         break
 
