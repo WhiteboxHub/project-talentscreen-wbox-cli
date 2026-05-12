@@ -456,7 +456,7 @@ class Config(BaseModel):
     # Preferences
     default_llm_provider: Literal["openai", "anthropic", "gemini", "claude"] = "openai"
     interaction_mode: InteractionMode = InteractionMode.SUPERVISED
-    headless: bool = True
+    headless: bool = False
     max_retries: int = 3
     screenshot_on_error: bool = True
     screenshot_on_success: bool = False

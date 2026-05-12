@@ -24,6 +24,7 @@ from jobcli.storage.repositories import (
     JobRepository,
     UserDataRepository,
 )
+from jobcli.core.constants import DASHBOARD_SUMMARY_DAYS, REFERENCE_LINKS_COUNT, SUPPORTED_DOMAINS
 
 app = typer.Typer(
     name="jobcli",
@@ -133,6 +134,39 @@ def ensure_configured(config: Config, require_job_board: bool = True) -> None:
         console.print("Run [cyan]jobcli login[/cyan] to unlock full AI automation capabilities.\n")
 
 
+def print_dashboard_summary(session):
+    """Print the 7-day dashboard summary as requested by the user."""
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich import box
+    
+    repo = JobRepository(session)
+    stats = repo.get_dashboard_stats()
+    
+    console.print()
+    summary_text = (
+        f"[bold white]Total Jobs present in WBL for last {DASHBOARD_SUMMARY_DAYS} days:[/] [bold cyan]{stats['total_wbl']}[/]\n"
+        f"[bold white]Already applied for you -[/] [bold green]{stats['applied_count']}[/]\n"
+        f"[bold white]Remaining total jobs -[/] [bold #f0abfc]{stats['remaining_count']}[/]\n"
+        f"[bold white]CLI friendly -[/] [bold #c084fc]{stats['cli_friendly']}[/]"
+    )
+    
+    console.print(Panel(summary_text, title="[bold #c084fc]WBox Dashboard Summary[/]", border_style="#c084fc", expand=False))
+    
+    if stats['latest_links']:
+        console.print(f"\n[bold #f0abfc]Latest {len(stats['latest_links'])} job links for reference:[/]")
+        table = Table(box=box.SIMPLE, show_header=True, header_style="bold #c084fc")
+        table.add_column("Title", style="cyan")
+        table.add_column("URL", style="blue")
+        table.add_column("Date", style="dim")
+        
+        for job in stats['latest_links']:
+            url = job['url'][:50] + "..." if len(job['url']) > 50 else job['url']
+            table.add_row(job['title'] or "Untitled", url, job['created_at'].strftime("%Y-%m-%d"))
+        
+        console.print(table)
+
+
 @app.command()
 def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uninstall without confirmation")) -> None:
     """Remove all JobCLI configuration and databases."""
@@ -147,6 +181,10 @@ def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uni
         if not confirm:
             console.print("[yellow]Uninstall cancelled.[/yellow]")
             return
+
+    # Shutdown logger to release file locks on Windows
+    from jobcli.core.logger import global_logger
+    global_logger.shutdown()
 
     if CONFIG_DIR.exists():
         try:
@@ -258,6 +296,7 @@ def setup() -> None:
             console.print(f"  [red]✗ Job discovery failed: {e}[/red]")
             console.print("    You can run [cyan]jobcli discover[/cyan] manually later.")
 
+
     # ── STEP 4: Browser & Extension Test ─────────────────────────────────────
     console.print("\n[bold]Step 4/5 — Testing browser & extension...[/bold]")
     browser_ok = False
@@ -353,6 +392,9 @@ def setup() -> None:
     if extension_loaded:
         console.print(f"  Extension      : [green]✓ loaded[/green]")
     console.print("─" * 45)
+
+    # ── STEP 4: Summary ───────────────────────────────────────────────────────
+ 
 
     if has_llm and resume_loaded and browser_ok:
         console.print("\n[bold green]✓ Setup complete! You are ready to apply.[/bold green]")
@@ -477,9 +519,9 @@ def config_cmd(
 @app.command()
 def resume_upload(
     pdf: str = typer.Option(..., help="Path to resume PDF"),
-    json_file: str = typer.Option(..., "--json", help="Path to resume JSON"),
+    json_file: Optional[str] = typer.Option(None, "--json", help="Path to resume JSON (optional)"),
 ) -> None:
-    """Upload resume in PDF and JSON formats."""
+    """Upload resume in PDF format (JSON is optional)."""
     console.print("[bold cyan]Resume Upload[/bold cyan]\n")
 
     # Validate PDF
@@ -488,10 +530,37 @@ def resume_upload(
         console.print(f"[red]PDF file not found: {pdf}[/red]")
         raise typer.Exit(1)
 
-    # Validate and parse JSON
-    json_path = Path(json_file)
+    # Use existing JSON if provided, otherwise look for one in the same directory or use a dummy
+    if json_file:
+        json_path = Path(json_file)
+    else:
+        # Try to find a .json file with the same name as the PDF
+        json_path = pdf_path.with_suffix(".json")
+        if not json_path.exists():
+            # Create a minimal valid JSON so the system doesn't crash
+            console.print("[yellow]No JSON provided. Creating a basic profile from your login info...[/yellow]")
+            config = get_config()
+            minimal_resume = {
+                "personal": {
+                    "first_name": config.job_board_username.split("@")[0] if config.job_board_username else "User",
+                    "last_name": "Applicant",
+                    "email": config.job_board_username or "user@example.com",
+                    "phone": "",
+                    "location": "",
+                    "linkedin": "",
+                    "github": "",
+                    "website": ""
+                },
+                "education": [],
+                "experience": [],
+                "skills": [],
+                "projects": [],
+                "summary": "Professional applicant."
+            }
+            json_path.write_text(json.dumps(minimal_resume, indent=2))
+
     if not json_path.exists():
-        console.print(f"[red]JSON file not found: {json_file}[/red]")
+        console.print(f"[red]JSON file not found: {json_path}[/red]")
         raise typer.Exit(1)
 
     try:
@@ -593,6 +662,8 @@ def questions() -> None:
 def apply(
     url: Optional[str] = typer.Option(None, help="Single job URL to apply"),
     batch: bool = typer.Option(False, help="Apply to all pending jobs"),
+    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of jobs in batch mode"),
+    sort: str = typer.Option("oldest", "--sort", "-s", help="Sort order for batch mode (oldest, newest)"),
     mode: str = typer.Option(
         "supervised",
         "--mode", "-m",
@@ -647,6 +718,12 @@ def apply(
 
     elif batch:
         jobs = job_repo.list_pending()
+        if sort.lower() == "newest":
+            jobs.reverse() # list_pending is ASC (oldest) by default
+            
+        if limit:
+            jobs = jobs[:limit]
+            
         if not jobs:
             console.print("[yellow]No pending jobs found.[/yellow]")
             raise typer.Exit(0)
@@ -657,16 +734,11 @@ def apply(
 
     # Filter jobs to only include those supported by extension strategies
     # (Exclude Workday which require logins, but allow LinkedIn for manual looping)
-    supported_domains = [
-        "lever.co", "greenhouse.io", "ashbyhq.com", "breezy.hr", "workable.com",
-        "recruitee.com", "pinpointhq.com", "rippling-ats.com", "rippling.com", "smartrecruiters.com",
-        "jobvite.com", "applytojob.com", "linkedin.com"
-    ]
     
     original_count = len(jobs)
     jobs = [
         j for j in jobs 
-        if any(d in j.url.lower() for d in supported_domains)
+        if any(d in j.url.lower() for d in SUPPORTED_DOMAINS)
         and "myworkdayjobs.com" not in j.url.lower()
     ]
     
@@ -728,23 +800,27 @@ def discover(
     session = db.get_session()
 
     try:
+        job_repo = JobRepository(session)
+        
+        # 1. Deduplicate first
+        with console.status("[bold green]Erasing duplicate links from database..."):
+            removed = job_repo.deduplicate_jobs()
+        if removed > 0:
+            console.print(f"[dim]✓ Cleaned up {removed} duplicate job(s).[/dim]")
+            
+        # 2. Discover
         discoverer = WboxDiscoverer(session)
         with console.status("[bold green]Discovering jobs from Wbox dashboard..."):
             new_jobs = discoverer.discover(headless=headless)
 
+        # 3. Show Dashboard Summary
+        print_dashboard_summary(session)
+        
         if new_jobs:
-            console.print(f"\n[bold green]✓ Discovered {len(new_jobs)} new jobs![/bold green]")
-            table = Table(title="New Jobs")
-            table.add_column("Title", style="cyan")
-            table.add_column("Company", style="green")
-            table.add_column("URL", style="blue")
-
-            for job in new_jobs:
-                table.add_row(job.title, job.company or "Unknown", job.url)
-            console.print(table)
-            console.print("\nRun [cyan]jobcli apply --batch[/cyan] to start applying.")
+            console.print(f"\n[bold green]✓ Discovered {len(new_jobs)} new jobs in this session![/bold green]")
+            console.print("Run [cyan]jobcli apply --batch[/cyan] to start applying.")
         else:
-            console.print("\n[yellow]No new jobs found.[/yellow]")
+            console.print("\n[yellow]No new jobs found in this scan.[/yellow]")
 
     except Exception as e:
         console.print(f"\n[red]Discovery failed: {e}[/red]")

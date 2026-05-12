@@ -13,7 +13,7 @@ except ImportError:
 import subprocess
 import random
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from rich.console import Console
 from rich.panel import Panel
@@ -345,7 +345,39 @@ def _print_welcome():
 
     greeting_str = f"{greeting}, {name}" if name else greeting
 
-    console.print(f"  {greeting_str}. [{D}]You have[/] [{K}]{pending_count}[/] [{D}]pending jobs.[/]")
+    try:
+        from jobcli.cli.main import get_database
+        from jobcli.storage.repositories import JobRepository
+        from jobcli.core.constants import DASHBOARD_SUMMARY_DAYS
+        
+        db = get_database()
+        session = db.get_session()
+        repo = JobRepository(session)
+        
+        # Run a quick deduplication on startup to keep counts accurate
+        repo.deduplicate_jobs()
+        
+        stats = repo.get_dashboard_stats()
+        session.close()
+
+        console.print(f"  {greeting_str}.")
+        console.print()
+        console.print(f"  [bold white]Total Jobs present in WBL for last {DASHBOARD_SUMMARY_DAYS} days:[/] [bold cyan]{stats['total_wbl']}[/]")
+        console.print(f"  [bold white]Already applied for you -[/] [bold green]{stats['applied_count']}[/]")
+        console.print(f"  [bold white]Remaining total jobs -[/] [bold #f0abfc]{stats['remaining_count']}[/]")
+        console.print(f"  [bold white]CLI friendly -[/] [bold #c084fc]{stats['cli_friendly']}[/]")
+        console.print()
+        console.print(f"  [bold #f0abfc]Latest job links for reference...[/]")
+        
+        if stats['latest_links']:
+            for i, job in enumerate(stats['latest_links'][:5], 1): # Show top 5 in welcome for brevity
+                url = job['url'][:60] + "..." if len(job['url']) > 60 else job['url']
+                console.print(f"  [{D}]{i}.[/] [{K}]{job['title'] or 'Untitled'}[/] [{F}]({url})[/]")
+        
+    except Exception as e:
+        console.print(f"  {greeting_str}. [{D}]You have[/] [{K}]{pending_count}[/] [{D}]pending jobs.[/]")
+
+    console.print()
     console.print(f"  [{D}]Type a command to get started, or[/] [{K}]help[/] [{D}]to see options.[/]")
     console.print(f"  [{D}]Use[/] [{K}]Tab[/] [{D}]to autocomplete,[/] [{K}]↑↓[/] [{D}]for history.[/]")
     console.print()

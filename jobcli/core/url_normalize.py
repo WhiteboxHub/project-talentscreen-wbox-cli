@@ -13,6 +13,13 @@ _STRIP_QUERY_PREFIXES = (
     "_gl",
     "ref",
     "source",
+    "click_id",
+    "job_board_id",
+    "_s",
+    "_t",
+    "search_id",
+    "gh_jid",
+    "gh_src"
 )
 
 
