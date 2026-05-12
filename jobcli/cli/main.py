@@ -168,7 +168,7 @@ def setup() -> None:
     load_dotenv(override=True)
 
     console.print("[bold cyan]╔══════════════════════════════════════╗[/bold cyan]")
-    console.print("[bold cyan]║       JobCLI — One-Shot Setup        ║[/bold cyan]")
+    console.print("[bold cyan]║       W-BOX CLI — One-Shot Setup     ║[/bold cyan]")
     console.print("[bold cyan]╚══════════════════════════════════════╝[/bold cyan]\n")
 
     # ── STEP 1: Config ────────────────────────────────────────────────────────
@@ -264,28 +264,36 @@ def setup() -> None:
     extension_loaded = False
     browser_error: str = ""
 
-    # ── 4a: Resolve & validate extension path (REQUIRED) ──────────────────
+    # ── 4a: Resolve & validate extension path ───────────────────────────────
     ext_dir = config.extension_path
     if ext_dir:
         ext_dir = str(Path(ext_dir).expanduser().resolve())
 
-    # Hard-fail if EXTENSION_PATH is not set at all
+    # Auto-download extension if missing or invalid
+    if not ext_dir or not Path(ext_dir).is_dir() or not (Path(ext_dir) / "manifest.json").exists():
+        console.print("  [yellow]⚠ Extension not found or invalid. Auto-downloading...[/yellow]")
+        from jobcli.core.extension_manager import ExtensionManager
+        
+        # TalentScreen extension ID
+        ts_ext_id = "bebdlhhpgmegdebdballinfmfnlpmeio"
+        auto_ext_dir = CONFIG_DIR / "extension_unpacked"
+        
+        with console.status("[bold green]Downloading and extracting TalentScreen extension..."):
+            success = ExtensionManager.download_and_extract(ts_ext_id, auto_ext_dir)
+            
+        if success:
+            console.print(f"  [green]✓ Extension downloaded successfully to {auto_ext_dir}[/green]")
+            ext_dir = str(auto_ext_dir)
+            config.extension_path = ext_dir
+            save_config(config)
+        else:
+            ext_dir = None
+
     if not ext_dir:
-        console.print("  [red]✗ EXTENSION_PATH is not set in .env[/red]")
-        console.print("    Add [cyan]EXTENSION_PATH=/path/to/unpacked/extension[/cyan] to your .env and re-run setup.")
-        browser_error = "EXTENSION_PATH not configured"
-    # Hard-fail if the directory doesn't exist
-    elif not Path(ext_dir).is_dir():
-        console.print(f"  [red]✗ EXTENSION_PATH directory not found: {ext_dir}[/red]")
-        console.print("    Make sure the path points to an unpacked Chrome extension folder.")
-        browser_error = f"Extension directory not found: {ext_dir}"
-    # Hard-fail if there's no manifest.json inside (not a real extension)
-    elif not (Path(ext_dir) / "manifest.json").exists():
-        console.print(f"  [red]✗ No manifest.json found in: {ext_dir}[/red]")
-        console.print("    The folder must be an unpacked Chrome extension with a manifest.json.")
-        browser_error = f"manifest.json missing in {ext_dir}"
+        console.print("  [red]✗ EXTENSION_PATH could not be configured automatically.[/red]")
+        browser_error = "Failed to download extension"
     else:
-        console.print(f"  [green]✓ Extension directory found: {ext_dir}[/green]")
+        console.print(f"  [green]✓ Extension directory ready: {ext_dir}[/green]")
 
         # ── 4b: Launch browser with extension and navigate to test URL ────
         try:
@@ -316,6 +324,8 @@ def setup() -> None:
                     response = page.goto(test_url, timeout=30000, wait_until="domcontentloaded")
                     status_code = response.status if response else 0
                     page_title = page.title() or "(no title)"
+                    console.print("\n  [cyan]Holding browser open for 15 seconds for visual inspection...[/cyan]")
+                    page.wait_for_timeout(15000)
                     ctx.close()
 
             if status_code and status_code < 400:
