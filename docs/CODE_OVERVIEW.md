@@ -85,7 +85,7 @@ wbox-cli/
 | `questions`       | Pre-fill `CommonQuestions` (salary, notice, relocate, remote, etc.).   |
 | `discover`        | Log into Wbox dashboard via Playwright and harvest job links.          |
 | `open-dashboard`  | Open an interactive logged-in browser window.                          |
-| `apply`           | Apply to one URL (`--url`) or all pending jobs (`--batch`). Has `--mode auto/supervised/manual`. |
+| `apply`           | Apply to one URL (`--url`) or all pending jobs (default, no flag needed). Has `--mode auto/supervised/manual`. |
 | `scan`            | Zero-token API scan of Greenhouse/Lever/Ashby/BambooHR boards.         |
 | `doctor`          | Validate Playwright, SQLite, config, resume; optional Wbox smoke test. |
 

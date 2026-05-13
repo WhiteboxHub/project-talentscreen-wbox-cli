@@ -661,7 +661,7 @@ def questions() -> None:
 @app.command()
 def apply(
     url: Optional[str] = typer.Option(None, help="Single job URL to apply"),
-    batch: bool = typer.Option(False, help="Apply to all pending jobs"),
+    batch: bool = typer.Option(False, "--batch", help="Apply to all pending jobs (default when no --url given)"),
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of jobs in batch mode"),
     sort: str = typer.Option("oldest", "--sort", "-s", help="Sort order for batch mode (oldest, newest)"),
     mode: str = typer.Option(
@@ -670,7 +670,10 @@ def apply(
         help="Interaction mode: auto (fully autonomous), supervised (AI + human checkpoints, default), manual (pause at every step)",
     ),
 ) -> None:
-    """Apply to jobs.
+    """Apply to all pending jobs (or a single URL with --url).
+
+    Running `jobcli apply` with no arguments automatically starts batch mode
+    and processes every pending job discovered from your dashboard.
 
     The --mode flag controls how tightly you are integrated into the agent loop:
 
@@ -707,6 +710,7 @@ def apply(
     jobs = []
 
     if url:
+        # Single-job mode
         job = job_repo.get_by_url(url)
         if not job:
             job = job_repo.create(
@@ -716,21 +720,18 @@ def apply(
             job_repo.update_status(job.id, ApplicationStatus.PENDING)
         jobs = [job]
 
-    elif batch:
+    else:
+        # Batch mode — either explicit --batch flag or plain `jobcli apply`
         jobs = job_repo.list_pending()
         if sort.lower() == "newest":
-            jobs.reverse() # list_pending is ASC (oldest) by default
-            
+            jobs.reverse()  # list_pending is ASC (oldest) by default
+
         if limit:
             jobs = jobs[:limit]
-            
-        if not jobs:
-            console.print("[yellow]No pending jobs found.[/yellow]")
-            raise typer.Exit(0)
 
-    else:
-        console.print("[red]Provide either --url or --batch[/red]")
-        raise typer.Exit(1)
+        if not jobs:
+            console.print("[yellow]No pending jobs found. Run 'jobcli discover' first.[/yellow]")
+            raise typer.Exit(0)
 
     # Filter jobs to only include those supported by extension strategies
     # (Exclude Workday which require logins, but allow LinkedIn for manual looping)
