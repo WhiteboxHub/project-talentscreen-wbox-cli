@@ -61,7 +61,7 @@ This installs `wboxcli` globally — available from any terminal, just like `nvm
 |---|---|
 | `wboxcli` | Opens the interactive TUI (Claude Code style) |
 | `wboxcli setup` | Runs a command directly (any subcommand works) |
-| `jobcli apply --batch` | Direct CLI mode (also installed, for scripting) |
+| `jobcli apply` | Direct CLI mode — applies to all pending jobs |
 
 **What the installer does:**
 1. Clones the repo to `~/.jobcli/src`
@@ -143,7 +143,7 @@ This single command (or the interactive onboarding in `wboxcli`) will:
 
 ```bash
 # Apply to all discovered jobs
-jobcli apply --batch
+jobcli apply
 # Apply to a single URL
 jobcli apply --url "https://boards.greenhouse.io/company/jobs/123"
 ```
@@ -191,7 +191,7 @@ LinkedIn does not allow bot automation. When the batch encounters a LinkedIn job
 |---|---|
 | `jobcli setup` | **One-shot setup** — loads .env, saves config, uploads resume, discovers all jobs |
 | `jobcli uninstall` | **Wipe everything** — deletes `~/.jobcli/` (config, database, job history) |
-| `jobcli apply --batch` | Apply to all pending jobs in the database |
+| `jobcli apply` | Apply to all pending jobs in the database |
 | `jobcli apply --url <url>` | Apply to a single specific job URL |
 | `jobcli server` | Start the FastAPI bridge server for Chrome Extension integration |
 | `jobcli login` | Manually update credentials (use only if `.env` is not set) |
