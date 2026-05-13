@@ -348,7 +348,6 @@ def _print_welcome():
     try:
         from jobcli.cli.main import get_database
         from jobcli.storage.repositories import JobRepository
-        from jobcli.core.constants import DASHBOARD_SUMMARY_DAYS
         
         db = get_database()
         session = db.get_session()
@@ -357,28 +356,55 @@ def _print_welcome():
         # Run a quick deduplication on startup to keep counts accurate
         repo.deduplicate_jobs()
         
-        stats = repo.get_dashboard_stats()
+        stats = repo.get_dashboard_stats(days=1) # "today"
         session.close()
 
         console.print(f"  {greeting_str}.")
         console.print()
-        console.print(f"  [bold white]Total Jobs present in WBL for last {DASHBOARD_SUMMARY_DAYS} days:[/] [bold cyan]{stats['total_wbl']}[/]")
-        console.print(f"  [bold white]Already applied for you -[/] [bold green]{stats['applied_count']}[/]")
-        console.print(f"  [bold white]Remaining total jobs -[/] [bold #f0abfc]{stats['remaining_count']}[/]")
-        console.print(f"  [bold white]CLI friendly -[/] [bold #c084fc]{stats['cli_friendly']}[/]")
+        console.print(f"  [bold white]Jobs added to your queue today:[/] [bold cyan]{stats['total_wbl']}[/]")
+        console.print(f"  [bold white]Already applied for you:[/] [bold green]{stats['applied_count']}[/]")
+        console.print(f"  [bold white]Total jobs waiting in queue:[/] [bold #f0abfc]{stats['remaining_count']}[/]")
+        console.print(f"  [bold white]CLI-friendly jobs:[/] [bold #c084fc]{stats['cli_friendly']}[/]")
         console.print()
         console.print(f"  [bold #f0abfc]Latest job links for reference...[/]")
         
         if stats['latest_links']:
             for i, job in enumerate(stats['latest_links'][:5], 1): # Show top 5 in welcome for brevity
-                url = job['url'][:60] + "..." if len(job['url']) > 60 else job['url']
-                console.print(f"  [{D}]{i}.[/] [{K}]{job['title'] or 'Untitled'}[/] [{F}]({url})[/]")
+                url = job['url']
+                
+                # Format URL for display
+                display_url = url[:60] + "..." if len(url) > 60 else url
+                
+                # Format Title
+                title = job['title'] or 'Untitled'
+                if title.lower() == "manual entry":
+                    # Try to extract company from URL
+                    from urllib.parse import urlparse
+                    try:
+                        domain = urlparse(url).netloc.replace("www.", "").split(".")[0]
+                        title = f"{domain.title()} (Manual Entry)"
+                    except:
+                        title = "Manual Entry"
+                else:
+                    title = title.title()
+                
+                # Skip file:/// URLs
+                if url.startswith("file://"):
+                    continue
+                    
+                console.print(f"  [{D}]{i}.[/] [{K}]{title}[/] [{F}]({display_url})[/]")
+                
+        console.print()
+        if stats['remaining_count'] > 0:
+            console.print(f"  [{D}]You have {stats['remaining_count']} jobs in your queue! Type[/] [{K}]apply --batch[/] [{D}]to start applying.[/]")
+        else:
+            console.print(f"  [{D}]Your queue is empty! Type[/] [{K}]discover[/] [{D}]to find new jobs.[/]")
         
     except Exception as e:
         console.print(f"  {greeting_str}. [{D}]You have[/] [{K}]{pending_count}[/] [{D}]pending jobs.[/]")
+        console.print(f"  [{D}]Type a command to get started, or[/] [{K}]help[/] [{D}]to see options.[/]")
 
-    console.print()
-    console.print(f"  [{D}]Type a command to get started, or[/] [{K}]help[/] [{D}]to see options.[/]")
+>>>>>>> 88c7c48 (feat: improve welcome dashboard UX and fix job stats calculation)
     console.print(f"  [{D}]Use[/] [{K}]Tab[/] [{D}]to autocomplete,[/] [{K}]↑↓[/] [{D}]for history.[/]")
     console.print()
 

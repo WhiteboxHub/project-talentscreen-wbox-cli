@@ -18,25 +18,44 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 INSTALL_DIR="$HOME/.jobcli"
-WRAPPER="$HOME/.local/bin/jobcli"
+WRAPPER_JOBCLI="$HOME/.local/bin/jobcli"
+WRAPPER_WBOXCLI="$HOME/.local/bin/wboxcli"
 
 echo ""
 echo -e "${BOLD}${RED}JobCLI — Uninstaller${NC}"
 echo ""
 
+# Reconnect stdin if piped so read works
+if [ ! -t 0 ]; then
+    if [ -c /dev/tty ]; then
+        exec < /dev/tty
+    else
+        echo -e "${YELLOW}Cannot prompt for confirmation interactively.${NC}"
+        echo -e "${YELLOW}Please run: bash ~/.jobcli/src/scripts/uninstall.sh${NC}"
+        exit 1
+    fi
+fi
+
 # Confirm
-read -r -p "This will delete $INSTALL_DIR and $WRAPPER. Continue? [y/N] " confirm
+read -r -p "This will delete $INSTALL_DIR, $WRAPPER_JOBCLI, and $WRAPPER_WBOXCLI. Continue? [y/N] " confirm
 if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
     echo -e "${YELLOW}Cancelled.${NC}"
     exit 0
 fi
 
-# Remove wrapper
-if [ -f "$WRAPPER" ]; then
-    rm -f "$WRAPPER"
-    echo -e "${GREEN}[✓]${NC} Removed $WRAPPER"
+# Remove wrappers
+if [ -f "$WRAPPER_JOBCLI" ]; then
+    rm -f "$WRAPPER_JOBCLI"
+    echo -e "${GREEN}[✓]${NC} Removed $WRAPPER_JOBCLI"
 else
-    echo -e "${YELLOW}[—]${NC} Wrapper not found at $WRAPPER"
+    echo -e "${YELLOW}[—]${NC} Wrapper not found at $WRAPPER_JOBCLI"
+fi
+
+if [ -f "$WRAPPER_WBOXCLI" ]; then
+    rm -f "$WRAPPER_WBOXCLI"
+    echo -e "${GREEN}[✓]${NC} Removed $WRAPPER_WBOXCLI"
+else
+    echo -e "${YELLOW}[—]${NC} Wrapper not found at $WRAPPER_WBOXCLI"
 fi
 
 # Remove install dir
