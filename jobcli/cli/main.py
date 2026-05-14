@@ -787,6 +787,28 @@ def config_cmd(
         console.print(table)
 
 
+def _clean_path_input(raw: Optional[str]) -> Optional[str]:
+    """Strip surrounding quotes / whitespace that Windows shells often leave on
+    pasted paths. Saves us from the classic ``C:\\Users\\sampa\\"C:\\..."``
+    bug where the literal ``"`` becomes part of the stored path string.
+
+    Handles three cases observed in the wild:
+      1. ``"C:\\Users\\sam\\resume.pdf"`` → ``C:\\Users\\sam\\resume.pdf``
+      2. ``'C:\\Users\\sam\\resume.pdf'`` → ``C:\\Users\\sam\\resume.pdf``
+      3. Trailing whitespace from interactive paste.
+    """
+    if raw is None:
+        return None
+    s = raw.strip()
+    # PowerShell tab-completion sometimes wraps paths with spaces in quotes
+    # and the shell passes the quotes through to Python as part of argv.
+    for quote in ('"', "'"):
+        if len(s) >= 2 and s.startswith(quote) and s.endswith(quote):
+            s = s[1:-1].strip()
+            break
+    return s or None
+
+
 @app.command()
 def resume_upload(
     pdf: str = typer.Option(..., help="Path to resume PDF"),
@@ -795,15 +817,28 @@ def resume_upload(
     """Upload resume in PDF format (JSON is optional)."""
     console.print("[bold cyan]Resume Upload[/bold cyan]\n")
 
+    # Strip surrounding quotes that PowerShell / cmd often pass through when
+    # a path is pasted. Without this, a user typing
+    # ``--pdf "C:\Users\sam\resume.pdf"`` would have the literal quotes
+    # stored in the DB, and downstream code (which prepends CWD to relative
+    # paths) would produce errors like
+    # ``C:\Users\sampa\"C:\Users\sampa\Downloads\resume.pdf"``.
+    pdf = _clean_path_input(pdf) or ""
+    json_file = _clean_path_input(json_file)
+
     # Validate PDF
-    pdf_path = Path(pdf)
+    pdf_path = Path(pdf).expanduser().resolve()
     if not pdf_path.exists():
-        console.print(f"[red]PDF file not found: {pdf}[/red]")
+        console.print(f"[red]PDF file not found: {pdf_path}[/red]")
+        console.print(
+            "[dim]Tip: don't wrap paths in quotes if they contain no spaces; "
+            "if they do, plain quotes are fine — JobCLI strips them before saving.[/dim]"
+        )
         raise typer.Exit(1)
 
     # Use existing JSON if provided, otherwise look for one in the same directory or use a dummy
     if json_file:
-        json_path = Path(json_file)
+        json_path = Path(json_file).expanduser().resolve()
     else:
         # Try to find a .json file with the same name as the PDF
         json_path = pdf_path.with_suffix(".json")

@@ -332,6 +332,7 @@ class SyncClient:
         }
         if status and status.lower() not in ("all", "any"):
             params["status"] = status
+        response = None
         try:
             response = requests.get(
                 url,
@@ -341,6 +342,27 @@ class SyncClient:
                 verify=_requests_verify(),
             )
             response.raise_for_status()
+        except requests.HTTPError as e:
+            # Surface the server's actual rejection reason (FastAPI 422
+            # validation errors put a JSON ``detail`` array in the body —
+            # without printing it the user just sees the useless
+            # "Client Error: unknown for url" line). Include the body
+            # truncated to ~600 chars so the error is loud but bounded.
+            body_text = ""
+            try:
+                if response is not None:
+                    if response.headers.get("content-type", "").startswith("application/json"):
+                        body_text = response.text
+                    else:
+                        body_text = response.text[:600]
+            except Exception:
+                pass
+            status = response.status_code if response is not None else "?"
+            extra = f" — body: {body_text[:600]}" if body_text else ""
+            raise RuntimeError(
+                f"cli_window request failed: HTTP {status} for {url}?"
+                f"{requests.compat.urlencode(params)}{extra}"
+            ) from e
         except requests.RequestException as e:
             raise RuntimeError(f"cli_window request failed: {e}") from e
         try:
