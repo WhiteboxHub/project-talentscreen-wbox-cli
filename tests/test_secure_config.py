@@ -99,7 +99,7 @@ def test_config_defaults():
     """Test that config has sensible defaults."""
     config = SecureConfig()
 
-    assert config.headless is True
+    assert config.headless is False
     assert config.max_retries == 3
     assert config.screenshot_on_error is True
     assert config.log_directory == "logs"

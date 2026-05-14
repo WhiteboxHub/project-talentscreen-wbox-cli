@@ -1,21 +1,18 @@
 import pytest
-import typer
-from unittest.mock import patch, MagicMock
 from jobcli.core.schemas import Config
 from jobcli.cli.main import ensure_configured
 
-def test_ensure_configured_missing_job_board_credentials():
-    """Test that missing job board credentials raises typer.Exit."""
+def test_ensure_configured_missing_job_board_credentials_warns_only(capsys):
+    """Missing job board credentials print a warning but do not exit."""
     config = Config(
         job_board_username=None,
         job_board_password=None,
         openai_api_key="sk-test-key"
     )
-    
-    with pytest.raises(typer.Exit) as exc_info:
-        ensure_configured(config)
-        
-    assert exc_info.value.exit_code == 1
+
+    ensure_configured(config)
+    captured = capsys.readouterr().out
+    assert "Missing job board credentials" in captured
 
 def test_ensure_configured_with_valid_credentials():
     """Test that valid credentials allow execution to continue."""

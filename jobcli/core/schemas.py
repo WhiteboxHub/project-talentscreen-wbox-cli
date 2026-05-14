@@ -356,6 +356,12 @@ class Job(BaseModel):
     evaluation_report_path: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
+    listing_created_at: Optional[datetime] = None
+    normalized_url: Optional[str] = None
+    is_cli_friendly: Optional[bool] = None
+    is_already_applied: Optional[bool] = None
+    source_status: Optional[str] = None
+    external_id: Optional[str] = None
 
 
 class BrowserAction(BaseModel):
@@ -470,6 +476,9 @@ class Config(BaseModel):
     extension_path: Optional[str] = None
     log_directory: str = Field(default="~/.jobcli/logs")
     database_path: str = Field(default="~/.jobcli/jobcli.db")
+
+    # WBL HTTP API (JobCLI discover / sync); persisted by setup/login. Env overrides: JOBCLI_SYNC_SERVER_URL, NEXT_PUBLIC_API_URL
+    sync_server_url: Optional[str] = None
 
     # Derived profile: infer country from US city/state when country blank
     infer_location_country: bool = True

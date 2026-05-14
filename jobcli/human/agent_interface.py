@@ -150,10 +150,41 @@ class AgentInterface:
 
     def _get_user_input(self, prompt_text: str, default: str = "", timeout_seconds: Optional[int] = None) -> Optional[str]:
         """Wait for input from either the local terminal or a remote signal.
-        If timeout_seconds is provided and the local terminal times out, returns None."""
+
+        Returns the typed text (or ``default`` on empty input). Returns
+        ``None`` only on local-terminal timeout when ``timeout_seconds`` is
+        set.
+
+        Universal quit / Ctrl+C semantics
+        ---------------------------------
+        Typing any of the canonical quit keywords (``q``, ``quit``,
+        ``exit``, ``:q``, ``quit-all``) or pressing Ctrl+C raises
+        :class:`jobcli.core.exit_signal.ExitRequested`, which bubbles up
+        through the engine to the top-level apply loop and triggers a
+        graceful shutdown (close browser, persist state, exit 0).
+
+        We register our event with the global exit registry so a Ctrl+C
+        handled by the process-wide SIGINT handler can wake this prompt
+        immediately — Windows PowerShell will otherwise leave a daemon
+        thread blocked on ``input()`` until the user types something.
+        """
+        from jobcli.core.exit_signal import (
+            ExitRequested,
+            is_exit_requested,
+            is_quit_keyword,
+            register_input_event,
+            unregister_input_event,
+        )
+
         self._is_waiting = True
         self._input_event.clear()
         self._input_value = None
+
+        # If the global SIGINT handler already fired (e.g. user pressed
+        # Ctrl+C before this prompt even appeared), short-circuit.
+        if is_exit_requested():
+            self._is_waiting = False
+            raise ExitRequested("Ctrl+C received before prompt")
 
         if self.logger:
             self.logger.info(f"Agent waiting for input: {prompt_text}", phase=ExecutionPhase.HUMAN)
@@ -168,38 +199,58 @@ class AgentInterface:
             except Exception:
                 pass
 
-        # To keep local CLI working, we'd normally want to call input() here.
-        # But if we are in "Remote" mode (server mode), we might want to ONLY wait for the event.
-        # For a truly unified experience, we can run input() in a daemon thread.
-        
         # Make sure the prompt text is relayed over WebSocket to the dashboard UI
         self.console.print(prompt_text, end="")
 
-        if self.is_server:
-            # Server mode ignores the timeout parameter for now, as the dashboard handles its own state
-            self._input_event.wait()
-        else:
-            def local_input_thread():
-                try:
-                    # We already printed the prompt, so pass empty string to input()
-                    val = input()
-                    self.remote_resume(val)
-                except (EOFError, KeyboardInterrupt):
-                    self.remote_resume("cancel")
+        # Register so global SIGINT can wake us mid-wait. Always paired with
+        # an unregister in finally so we don't leak events across calls.
+        register_input_event(self._input_event)
 
-            thread = threading.Thread(target=local_input_thread, daemon=True)
-            thread.start()
-
-            # Block until either the thread or a remote call sets the event, or timeout occurs
-            if timeout_seconds is not None:
-                timed_out = not self._input_event.wait(timeout=timeout_seconds)
-                if timed_out:
-                    return None
-            else:
+        try:
+            if self.is_server:
+                # Server mode ignores the timeout parameter for now, as the dashboard handles its own state
                 self._input_event.wait()
-            
+            else:
+                def local_input_thread():
+                    try:
+                        # We already printed the prompt, so pass empty string to input()
+                        val = input()
+                        self.remote_resume(val)
+                    except (EOFError, KeyboardInterrupt):
+                        # Either stdin was closed or Ctrl+C arrived while this
+                        # daemon thread was blocked on input(). Either way the
+                        # user wants out — push a sentinel main thread will
+                        # translate to ExitRequested.
+                        self.remote_resume("__JOBCLI_EXIT__")
+
+                thread = threading.Thread(target=local_input_thread, daemon=True)
+                thread.start()
+
+                # Block until either the thread, a remote call, the global
+                # SIGINT handler, or a timeout fires.
+                if timeout_seconds is not None:
+                    timed_out = not self._input_event.wait(timeout=timeout_seconds)
+                    if timed_out:
+                        self._is_waiting = False
+                        return None
+                else:
+                    self._input_event.wait()
+        finally:
+            unregister_input_event(self._input_event)
+
         self._is_waiting = False
-        return self._input_value or default
+
+        # The SIGINT handler may have woken us with no value written.
+        if is_exit_requested() and not self._input_value:
+            raise ExitRequested("Ctrl+C during input wait")
+
+        raw = self._input_value
+        if raw == "__JOBCLI_EXIT__":
+            raise ExitRequested("Ctrl+C / EOF on stdin")
+        if is_quit_keyword(raw):
+            raise ExitRequested(f"quit keyword '{(raw or '').strip()}' at prompt")
+
+        return raw or default
 
     # ------------------------------------------------------------------
     # DB integration helpers (memory-aware)
@@ -646,8 +697,10 @@ class AgentInterface:
             "(it will NOT go back to where it got stuck)."
         )
         body_lines.append(
-            "Type [bold red]cancel[/bold red] + ENTER to abort this application, or "
-            "[bold cyan]skip[/bold cyan] to move to the next job."
+            "Type [bold red]cancel[/bold red] + ENTER to abort this application, "
+            "[bold cyan]skip[/bold cyan] to move to the next job, or "
+            "[bold magenta]q[/bold magenta] / [bold magenta]quit[/bold magenta] "
+            "(or Ctrl+C) to exit JobCLI entirely."
         )
 
         self.console.print(
@@ -882,7 +935,8 @@ class AgentInterface:
                 body_lines.append(f"  {i}. {opt}")
         body_lines.append("")
         body_lines.append(
-            "[dim]Your answer will be saved and reused on future applications.[/dim]"
+            "[dim]Your answer will be saved and reused on future applications. "
+            "Type [bold]q[/bold] / [bold]quit[/bold] (or press Ctrl+C) to exit JobCLI.[/dim]"
         )
         self.console.print(
             Panel(
@@ -944,13 +998,21 @@ class AgentInterface:
         return self.ask_yes_no("  Continue with this application?")
 
     def ask_yes_no(self, question: str, default: bool = True) -> bool:
-        """Ask a yes/no question and return the result. Works in both terminal and dashboard."""
+        """Ask a yes/no question and return the result.
+
+        Uses the unified ``_get_user_input`` pipeline so the universal quit
+        keywords (``q``, ``quit``, ``exit``, ``:q``) and Ctrl+C work here
+        too — previously this used ``rich.prompt.Confirm.ask`` directly,
+        which only accepted y/n/yes/no and turned Ctrl+C into a stack
+        trace. ExitRequested propagates to the apply loop for graceful
+        shutdown.
+        """
         self.get_attention()
-        
+
         # If in AUTO mode, we can't block, so return default
         if self.mode == InteractionMode.AUTO:
             return default
-            
+
         # Notify dashboard explicitly
         try:
             if self.logger:
@@ -963,9 +1025,23 @@ class AgentInterface:
         except Exception:
             pass
 
-        # Use rich's Confirm for terminal UI
-        from rich.prompt import Confirm
-        return Confirm.ask(question, default=default)
+        default_hint = "Y/n" if default else "y/N"
+        # ``_get_user_input`` raises ExitRequested for quit keywords / Ctrl+C
+        # which the apply loop catches — we don't need to handle it here.
+        prompt = f"  {question} [{default_hint}] (q to quit): "
+        answer = self._get_user_input(prompt, default="")
+        if answer is None or not answer.strip():
+            return default
+        a = answer.strip().lower()
+        if a in ("y", "yes", "yep", "yeah", "true", "1"):
+            return True
+        if a in ("n", "no", "nope", "false", "0"):
+            return False
+        # Anything else (including weird non-yes/no text) → fall back to
+        # default rather than asking again, matching prior rich.Confirm
+        # behavior. Quit keywords are intercepted earlier in
+        # ``_get_user_input``.
+        return default
 
     def show_failed_fields(
         self,

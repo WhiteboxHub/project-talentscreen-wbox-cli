@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import Integer
+from sqlalchemy import Integer, or_, update, nullslast
 from sqlalchemy.orm import Session
 
 from jobcli.core.locator_schemas import LearnedLocator
@@ -19,7 +19,11 @@ from jobcli.core.schemas import (
     SelectorType,
 )
 from jobcli.core.url_normalize import normalize_job_url
-from jobcli.core.constants import DASHBOARD_SUMMARY_DAYS, REFERENCE_LINKS_COUNT, SUPPORTED_DOMAINS
+from jobcli.core.constants import (
+    DASHBOARD_SUMMARY_DAYS,
+    REFERENCE_LINKS_COUNT,
+    job_url_is_cli_friendly,
+)
 from jobcli.storage.models import (
     ApplicationLogModel,
     ConfigModel,
@@ -46,6 +50,31 @@ def _compute_confidence(success_count: int, failure_count: int) -> float:
     return max(0.0, min(1.0, success_count / total))
 
 
+def _job_model_to_job(jm: JobModel) -> Job:
+    """Map SQLAlchemy JobModel to pydantic Job."""
+    return Job(
+        id=jm.id,
+        url=jm.url,
+        resolved_url=getattr(jm, "resolved_url", None),
+        title=jm.title,
+        company=jm.company,
+        location=jm.location,
+        description=jm.description,
+        ats_type=jm.ats_type,
+        status=jm.status,
+        created_at=jm.created_at,
+        updated_at=jm.updated_at,
+        scan_source=jm.scan_source,
+        evaluation_report_path=getattr(jm, "evaluation_report_path", None),
+        listing_created_at=getattr(jm, "listing_created_at", None),
+        normalized_url=getattr(jm, "normalized_url", None),
+        is_cli_friendly=getattr(jm, "is_cli_friendly", None),
+        is_already_applied=getattr(jm, "is_already_applied", None),
+        source_status=getattr(jm, "source_status", None),
+        external_id=getattr(jm, "external_id", None),
+    )
+
+
 class JobRepository:
     """Repository for job operations."""
 
@@ -56,6 +85,13 @@ class JobRepository:
     def create(self, job: Job) -> Job:
         """Create a new job."""
         canonical = normalize_job_url(job.url)
+        norm = job.normalized_url or canonical
+        friendly = job.is_cli_friendly
+        if friendly is None:
+            friendly = job_url_is_cli_friendly(canonical)
+        already = job.is_already_applied
+        if already is None:
+            already = False
         job_model = JobModel(
             url=canonical,
             resolved_url=job.resolved_url,
@@ -65,6 +101,14 @@ class JobRepository:
             description=job.description,
             ats_type=job.ats_type,
             status=job.status,
+            scan_source=job.scan_source,
+            evaluation_report_path=job.evaluation_report_path,
+            listing_created_at=job.listing_created_at,
+            normalized_url=norm,
+            is_cli_friendly=friendly,
+            is_already_applied=already,
+            source_status=job.source_status,
+            external_id=job.external_id,
         )
         self.session.add(job_model)
         self.session.commit()
@@ -74,7 +118,63 @@ class JobRepository:
         job.url = canonical
         job.created_at = job_model.created_at
         job.updated_at = job_model.updated_at
+        job.normalized_url = norm
+        job.is_cli_friendly = friendly
+        job.is_already_applied = already
         return job
+
+    def clear_job_related_data(self) -> int:
+        """Remove all jobs and job-scoped logs; preserve config, resume, memory tables.
+
+        Nulls ``first_job_id`` / ``last_job_id`` on locator/answer/strategy rows
+        that pointed at deleted jobs.
+        """
+        job_ids = [row[0] for row in self.session.query(JobModel.id).all()]
+        n = len(job_ids)
+        if n == 0:
+            return 0
+        chunk_size = 400
+        for i in range(0, n, chunk_size):
+            chunk = job_ids[i : i + chunk_size]
+            self.session.query(ApplicationLogModel).filter(ApplicationLogModel.job_id.in_(chunk)).delete(
+                synchronize_session=False
+            )
+            self.session.query(InteractionLogModel).filter(InteractionLogModel.job_id.in_(chunk)).delete(
+                synchronize_session=False
+            )
+            self.session.execute(
+                update(LearnedLocatorModel)
+                .where(LearnedLocatorModel.first_job_id.in_(chunk))
+                .values(first_job_id=None)
+            )
+            self.session.execute(
+                update(LearnedLocatorModel)
+                .where(LearnedLocatorModel.last_job_id.in_(chunk))
+                .values(last_job_id=None)
+            )
+            self.session.execute(
+                update(FieldAnswerModel)
+                .where(FieldAnswerModel.first_job_id.in_(chunk))
+                .values(first_job_id=None)
+            )
+            self.session.execute(
+                update(FieldAnswerModel)
+                .where(FieldAnswerModel.last_job_id.in_(chunk))
+                .values(last_job_id=None)
+            )
+            self.session.execute(
+                update(DropdownStrategyModel)
+                .where(DropdownStrategyModel.first_job_id.in_(chunk))
+                .values(first_job_id=None)
+            )
+            self.session.execute(
+                update(DropdownStrategyModel)
+                .where(DropdownStrategyModel.last_job_id.in_(chunk))
+                .values(last_job_id=None)
+            )
+        self.session.query(JobModel).delete(synchronize_session=False)
+        self.session.commit()
+        return n
 
     def get(self, job_id: int) -> Optional[Job]:
         """Get job by ID."""
@@ -82,19 +182,7 @@ class JobRepository:
         if not job_model:
             return None
 
-        return Job(
-            id=job_model.id,
-            url=job_model.url,
-            resolved_url=getattr(job_model, "resolved_url", None),
-            title=job_model.title,
-            company=job_model.company,
-            location=job_model.location,
-            description=job_model.description,
-            ats_type=job_model.ats_type,
-            status=job_model.status,
-            created_at=job_model.created_at,
-            updated_at=job_model.updated_at,
-        )
+        return _job_model_to_job(job_model)
 
     def get_by_url(self, url: str) -> Optional[Job]:
         """Get job by URL (exact or normalized match)."""
@@ -105,19 +193,7 @@ class JobRepository:
         if not job_model:
             return None
 
-        return Job(
-            id=job_model.id,
-            url=job_model.url,
-            resolved_url=getattr(job_model, "resolved_url", None),
-            title=job_model.title,
-            company=job_model.company,
-            location=job_model.location,
-            description=job_model.description,
-            ats_type=job_model.ats_type,
-            status=job_model.status,
-            created_at=job_model.created_at,
-            updated_at=job_model.updated_at,
-        )
+        return _job_model_to_job(job_model)
 
     def update_status(self, job_id: int, status: ApplicationStatus) -> None:
         """Update job status."""
@@ -141,29 +217,18 @@ class JobRepository:
         self.session.commit()
 
     def list_pending(self) -> list[Job]:
-        """List all pending jobs."""
+        """List pending jobs eligible for batch apply (CLI-friendly, oldest first)."""
         jobs = (
             self.session.query(JobModel)
-            .filter(JobModel.status == ApplicationStatus.PENDING)
-            .order_by(JobModel.created_at.asc())
+            .filter(
+                JobModel.status == ApplicationStatus.PENDING,
+                JobModel.is_cli_friendly == True,
+                or_(JobModel.is_already_applied == False, JobModel.is_already_applied.is_(None)),
+            )
+            .order_by(nullslast(JobModel.listing_created_at.asc()), JobModel.id.asc())
             .all()
         )
-        return [
-            Job(
-                id=j.id,
-                url=j.url,
-                resolved_url=getattr(j, "resolved_url", None),
-                title=j.title,
-                company=j.company,
-                location=j.location,
-                description=j.description,
-                ats_type=j.ats_type,
-                status=j.status,
-                created_at=j.created_at,
-                updated_at=j.updated_at,
-            )
-            for j in jobs
-        ]
+        return [_job_model_to_job(j) for j in jobs]
 
     def list_recent_activity(self, since: Optional[datetime] = None) -> list[Job]:
         """List all jobs with status changes since a given datetime."""
@@ -221,7 +286,8 @@ class JobRepository:
             if not job.scan_source:
                 job.scan_source = "wbox"
 
-            canonical = normalize_job_url(job.url)
+            nu = getattr(job, "normalized_url", None)
+            canonical = normalize_job_url(nu) if nu else normalize_job_url(job.url)
             
             if canonical in seen_urls:
                 existing = seen_urls[canonical]
@@ -242,8 +308,10 @@ class JobRepository:
 
         deleted_count = 0
         for job in to_delete:
+            nu = getattr(job, "normalized_url", None)
+            ckey = normalize_job_url(nu) if nu else normalize_job_url(job.url)
             # Re-link logs if any to the kept job
-            winner = seen_urls[normalize_job_url(job.url)]
+            winner = seen_urls[ckey]
             if winner.id != job.id:
                 self.session.query(ApplicationLogModel).filter(ApplicationLogModel.job_id == job.id).update(
                     {"job_id": winner.id}
@@ -266,64 +334,70 @@ class JobRepository:
         return deleted_count
 
     def get_dashboard_stats(self, days: int = DASHBOARD_SUMMARY_DAYS) -> dict:
-        """Calculate dashboard statistics for the last N days."""
-        from datetime import datetime, timedelta
+        """Dashboard stats for the last N days using WBL listing timestamps (wbox_api)."""
+        from datetime import timedelta
+
         since = datetime.now() - timedelta(days=days)
-        
-        # 1. Total jobs in WBL for last 7 days
-        # We assume scan_source='wbox' for Whitebox Learning jobs
-        total_wbl = self.session.query(JobModel).filter(
-            JobModel.created_at >= since,
-            JobModel.scan_source == "wbox"
-        ).count()
-        
-        # 2. Already applied for you
+        win = (
+            JobModel.scan_source == "wbox_api",
+            JobModel.listing_created_at.isnot(None),
+            JobModel.listing_created_at >= since,
+        )
+        total_wbl = self.session.query(JobModel).filter(*win).count()
+
         applied_statuses = [
-            ApplicationStatus.SUBMITTED, 
-            ApplicationStatus.INTERVIEW, 
+            ApplicationStatus.SUBMITTED,
+            ApplicationStatus.INTERVIEW,
             ApplicationStatus.OFFER,
-            ApplicationStatus.IN_PROGRESS
+            ApplicationStatus.IN_PROGRESS,
         ]
-        applied_count = self.session.query(JobModel).filter(
-            JobModel.status.in_(applied_statuses)
-        ).count()
-        
-        # 3. Remaining total jobs (PENDING)
-        remaining_count = self.session.query(JobModel).filter(
-            JobModel.status == ApplicationStatus.PENDING
-        ).count()
-        
-        # 4. CLI friendly (PENDING + supported domains)
-        cli_friendly = 0
-        pending_jobs = self.session.query(JobModel).filter(
-            JobModel.status == ApplicationStatus.PENDING
-        ).all()
-        
-        for job in pending_jobs:
-            if any(domain in job.url.lower() for domain in SUPPORTED_DOMAINS):
-                # Extra check to exclude workday logins which are NOT CLI friendly yet
-                if "myworkdayjobs.com" not in job.url.lower():
-                    cli_friendly += 1
-        
-        # 5. Latest 100 job links for reference
-        latest_jobs = (
+        applied_count = (
             self.session.query(JobModel)
-            .order_by(JobModel.created_at.desc())
+            .filter(
+                *win,
+                or_(JobModel.is_already_applied == True, JobModel.status.in_(applied_statuses)),
+            )
+            .count()
+        )
+
+        remaining_count = max(0, total_wbl - applied_count)
+
+        cli_friendly = (
+            self.session.query(JobModel)
+            .filter(
+                *win,
+                JobModel.status == ApplicationStatus.PENDING,
+                JobModel.is_cli_friendly == True,
+                or_(JobModel.is_already_applied == False, JobModel.is_already_applied.is_(None)),
+            )
+            .count()
+        )
+
+        unsupported_skipped = max(0, remaining_count - cli_friendly)
+
+        ref_jobs = (
+            self.session.query(JobModel)
+            .filter(*win)
+            .order_by(JobModel.listing_created_at.asc(), JobModel.id.asc())
             .limit(REFERENCE_LINKS_COUNT)
             .all()
         )
-        
         latest_links = [
-            {"title": j.title, "url": j.url, "created_at": j.created_at} 
-            for j in latest_jobs
+            {
+                "title": j.title,
+                "url": j.url,
+                "created_at": j.listing_created_at or j.created_at,
+            }
+            for j in ref_jobs
         ]
-        
+
         return {
             "total_wbl": total_wbl,
             "applied_count": applied_count,
             "remaining_count": remaining_count,
             "cli_friendly": cli_friendly,
-            "latest_links": latest_links
+            "unsupported_skipped": unsupported_skipped,
+            "latest_links": latest_links,
         }
 
 

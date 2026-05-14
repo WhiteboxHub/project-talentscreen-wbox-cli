@@ -22,6 +22,10 @@ pyreadline3; sys_platform == 'win32'
 # Utilities
 python-dotenv>=1.0.0
 requests>=2.31.0
+# Bridges Python's ssl module to the OS-native root store (Windows cert store,
+# macOS Keychain, Linux trust roots). Fixes "CERTIFICATE_VERIFY_FAILED" errors
+# on machines behind corporate MITM proxies / AV that re-sign HTTPS.
+truststore>=0.9.0; python_version >= "3.10"
 beautifulsoup4>=4.12.0
 lxml>=5.0.0
 python-dateutil>=2.8.0

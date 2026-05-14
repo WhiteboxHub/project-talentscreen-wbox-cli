@@ -10,7 +10,7 @@ import os
 import random
 import time
 import re
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from playwright.sync_api import Error, Page, sync_playwright
 
@@ -881,13 +881,14 @@ class ApplicationEngine:
         
         self.playwright = sync_playwright().start()
         
-        # Use EXTENSION_PATH from config — must point to the unpacked
-        # TalentScreen extension downloaded from the Chrome Web Store.
-        # If not set or the path doesn't exist, run without any extension.
+        # Use the extension path stored in local config — populated by ``jobcli setup``
+        # which auto-downloads the TalentScreen extension to ``~/.jobcli/extension_unpacked``.
+        # If the directory is missing or invalid, run without any extension.
         extension_dir = self.config.extension_path
         if extension_dir and not os.path.exists(extension_dir):
             global_logger.warning(
-                f"EXTENSION_PATH '{extension_dir}' does not exist — launching without extension."
+                f"Extension path '{extension_dir}' does not exist — launching without extension. "
+                "Run `jobcli setup` to re-download."
             )
             extension_dir = None
 
@@ -911,8 +912,10 @@ class ApplicationEngine:
             )
         else:
             global_logger.info("Launching standard browser (no extension path provided or not found).")
+            # Browser is always visible while applying — required for human-in-the-loop checkpoints
+            # and to let the user watch automation in real time.
             self.browser = self.playwright.chromium.launch(
-                headless=self.config.headless,
+                headless=False,
                 args=launch_args,
                 ignore_default_args=IGNORE_DEFAULT_ARGS,
             )
@@ -948,9 +951,23 @@ class ApplicationEngine:
             self.active_agent.remote_resume("cancel")
 
     def _check_stop(self) -> None:
-        """Raise InterruptedError if a stop was requested."""
+        """Raise if a stop was requested via the dashboard or by user exit.
+
+        Two stop sources:
+          * ``self.stop_requested`` — set by the server-side ``request_stop``
+            (Stop button in the dashboard UI). Raises ``InterruptedError``
+            so the existing engine try/except path captures it.
+          * Global ``is_exit_requested()`` — set by the SIGINT handler in
+            :mod:`jobcli.core.exit_signal` when the user pressed Ctrl+C.
+            Raises ``ExitRequested`` which bypasses the engine's
+            ``except Exception`` catch-alls (BaseException subclass) and
+            propagates to the CLI's apply loop for graceful shutdown.
+        """
         if self.stop_requested:
             raise InterruptedError("Process stopped by user")
+        from jobcli.core.exit_signal import ExitRequested, is_exit_requested
+        if is_exit_requested():
+            raise ExitRequested("Ctrl+C detected at engine checkpoint")
 
     def _emit_event(self, event_type: str, data: Any) -> None:
         """Emit an event to the callback if configured."""
@@ -1720,39 +1737,255 @@ class ApplicationEngine:
             logger.log_phase_end(ExecutionPhase.RULES, False)
         return False
 
-    def _inject_resume_into_extension(self, page: Page, logger: JobLogger) -> None:
-        """Inject resume data into TalentScreen extension via its background service worker."""
+    def _run_rules_prefill(
+        self,
+        rules_handler: Any,
+        page: Page,
+        logger: JobLogger,
+        agent: "AgentInterface",
+        extractor: "AccessibilityTreeExtractor",
+        state: "ApplicationState",
+    ) -> Dict[str, bool]:
+        """Run the ATS-specific rule-based fill, then a generic confidence-scored
+        fill for anything the ATS handler couldn't resolve.
+
+        Returns a merged ``{short_key: filled?}`` dict. Each key represents a
+        canonical personal field (``first_name``, ``last_name``, ``email``,
+        ``phone``, ``linkedin``, …). Cheap, deterministic, and re-runnable
+        before AND after the resume upload — which is the seam where most
+        forms reveal additional fields.
+
+        Why this is necessary
+        ---------------------
+        The bundled TalentScreen Chrome extension's autofill is gated behind
+        ``autoRunActive`` AND a "side-panel open" check in
+        ``content.js``. Neither is satisfied in a Playwright session, so the
+        extension never fires. Doing the deterministic fill ourselves keeps
+        the LLM phase focused on compliance / long-form questions that
+        actually need reasoning.
+        """
+        merged: Dict[str, bool] = {}
+
+        # 1) ATS-handler narrow selectors (Ashby uses input[name='firstName']
+        #    etc., Greenhouse uses id contains, Workday uses data-automation-id,
+        #    Lever uses name attribute). These succeed in O(ms) when present.
         try:
-            context = page.context
-            bg_target = None
-            
+            ats_filled = rules_handler.fill_form(self.config.resume_pdf_path) or {}
+            for k, v in ats_filled.items():
+                if v:
+                    merged[k] = True
+        except Exception as e:
+            logger.warning(
+                f"ATS-specific fill_form raised {e!r}; continuing with generic pass.",
+                phase=ExecutionPhase.RULES,
+            )
+
+        # 2) Generic confidence-scored fill for whatever wasn't filled yet.
+        #    Uses FieldConfidenceScorer with the FIELD_KEYWORDS map ported
+        #    from the extension's ``genericStrategy.js``, so it catches
+        #    label/aria/name/placeholder variants the ATS handler doesn't
+        #    hard-code. Critically, this also runs even when the detected
+        #    ATS is UNKNOWN.
+        try:
+            from jobcli.locators.form_fields import FormFiller
+
+            generic_filler = FormFiller(page, self.resume, logger)
+            generic_results = generic_filler.fill_personal_info() or {}
+            for k, v in generic_results.items():
+                if v and k not in merged:
+                    merged[k] = True
+        except Exception as e:
+            logger.warning(
+                f"Generic confidence fill raised {e!r}; continuing.",
+                phase=ExecutionPhase.RULES,
+            )
+
+        filled = [k for k, v in merged.items() if v]
+        if filled:
+            agent.show_success(
+                f"Rules filled {len(filled)} field(s): " + ", ".join(filled)
+            )
+            logger.info(
+                f"ATS pre-pass filled {len(filled)} fields: {filled}",
+                phase=ExecutionPhase.RULES,
+            )
+            # Let React state settle before we re-read the DOM.
+            page.wait_for_timeout(500)
+        else:
+            logger.info(
+                "ATS pre-pass produced no fills — form may use unusual field "
+                "names; LLM will handle it.",
+                phase=ExecutionPhase.RULES,
+            )
+
+        return merged
+
+    def _get_extension_service_worker(self, page: Page, logger: JobLogger, timeout_ms: int = 5000):
+        """Return the TalentScreen extension's MV3 service worker, waking it if necessary.
+
+        MV3 workers are lazy: they don't appear in ``context.service_workers``
+        until *something* triggers them (an event, a message, or first
+        ``chrome.runtime`` use from a content script on a host they match).
+        If we naively call ``context.service_workers[0]``, the list is empty
+        right after browser launch and storage injection silently no-ops —
+        which is one of the two root causes of "extension doesn't autofill".
+
+        We poll up to ``timeout_ms`` for a worker to appear (Chrome wakes it
+        automatically once a matching page navigates). Returns ``None`` if it
+        never wakes (extension not loaded, wrong manifest, etc.) — caller
+        treats that as "extension unavailable, rely on the Python rules
+        pre-pass instead".
+        """
+        context = page.context
+        # Fast path
+        if context.service_workers:
+            return context.service_workers[0]
+        if context.background_pages:
+            return context.background_pages[0]
+        # Poll – the worker typically wakes within a few hundred ms of the
+        # first content-script-matching navigation.
+        import time as _time
+        deadline = _time.monotonic() + (timeout_ms / 1000.0)
+        while _time.monotonic() < deadline:
+            try:
+                page.wait_for_timeout(150)
+            except Exception:
+                _time.sleep(0.15)
             if context.service_workers:
-                bg_target = context.service_workers[0]
-            elif context.background_pages:
-                bg_target = context.background_pages[0]
-                
-            if not bg_target:
-                logger.debug("No extension service worker/background page found in context.")
-                return
-                
+                return context.service_workers[0]
+            if context.background_pages:
+                return context.background_pages[0]
+        logger.debug(
+            f"No extension service worker after {timeout_ms}ms wait — "
+            "the bundled TalentScreen extension may not be loaded. Rules "
+            "pre-pass will still fill the deterministic fields."
+        )
+        return None
+
+    def _inject_resume_into_extension(self, page: Page, logger: JobLogger) -> None:
+        """Make the TalentScreen autofill extension actually fire on this tab.
+
+        Reading the extension's own ``content.js`` (downloaded into
+        ``~/.jobcli/extension_unpacked/``) shows ``attemptAutoFill`` is gated
+        behind TWO conditions that are not satisfied in a Playwright session:
+
+        1. The side panel must be open in the **current Chrome window**
+           (`checkSidePanelStatus` message). Playwright cannot open the side
+           panel programmatically.
+        2. ``chrome.storage.local.autoRunActive`` must be true. The original
+           injection only set ``autoTriggerEnabled``, which the content
+           script doesn't even read.
+
+        So the previous implementation always wrote the resume into storage,
+        and the extension always ignored it. We fix that here by:
+
+        - Waking the service worker before evaluating any JS.
+        - Setting **every** storage key the extension's pageload listener
+          actually reads (``normalizedData``, ``autoTriggerEnabled``,
+          ``autoRunActive``, ``currentJobIndex``, ``totalJobs``).
+        - Reading back to confirm the write landed.
+        - Sending a direct ``{action: 'fill_form'}`` message to the tab. The
+          content script handles this with ``force=true`` and bypasses both
+          gates — see ``content.js`` line 23-27.
+
+        On failure we log at debug level and fall through; the Python rules
+        pre-pass (see ``_run_rules_prefill``) provides the deterministic
+        baseline, so a missing extension never blocks the user.
+        """
+        try:
             if not self.resume:
                 return
-                
+
+            bg_target = self._get_extension_service_worker(page, logger)
+            if not bg_target:
+                # Already logged at debug; nothing more to do.
+                return
+
+            import json as _json
             resume_dict = self.resume.model_dump(exclude_none=True)
-            import json
-            resume_json = json.dumps(resume_dict)
-            
+            resume_json = _json.dumps(resume_dict)
+
+            # Atomic set + verify-readback. The promise resolves with the
+            # actual stored value so we can confirm the write was honored.
             inject_js = f"""
-                chrome.storage.local.set({{
-                    normalizedData: {resume_json},
-                    autoTriggerEnabled: true
-                }}, () => {{
-                    console.log('Resume data injected into extension storage.');
-                }});
+                async () => {{
+                    await new Promise((resolve) => chrome.storage.local.set({{
+                        normalizedData: {resume_json},
+                        autoTriggerEnabled: true,
+                        autoRunActive: true,
+                        currentJobIndex: 0,
+                        totalJobs: 1
+                    }}, resolve));
+                    const verify = await new Promise((resolve) => chrome.storage.local.get(
+                        ['normalizedData', 'autoRunActive', 'autoTriggerEnabled'],
+                        resolve
+                    ));
+                    return {{
+                        wrote_normalized: !!verify.normalizedData,
+                        autoRunActive: verify.autoRunActive === true,
+                        autoTriggerEnabled: verify.autoTriggerEnabled === true,
+                    }};
+                }}
             """
-            bg_target.evaluate(inject_js)
+            try:
+                verify = bg_target.evaluate(inject_js)
+            except Exception as e:
+                logger.debug(f"Service-worker evaluate failed during injection: {e}")
+                return
+
+            if not (verify and verify.get("wrote_normalized")):
+                logger.debug(
+                    "Resume write to chrome.storage.local did not verify — "
+                    "extension may be sandboxed."
+                )
+                return
+
             logger.info("Successfully injected resume into extension storage.")
-            
+
+            # Bonus: poke every tab the extension matches and ask it to
+            # fillForm directly. The content script's onMessage handler runs
+            # ``fillForm(data, true, ...)`` with ``manual=true``, which
+            # bypasses the side-panel-open AND autoRunActive gates. This is
+            # best-effort — if the content script hasn't injected yet (page
+            # still loading), the sendMessage simply errors, which is fine.
+            try:
+                poke_js = f"""
+                    async () => {{
+                        const tabs = await new Promise(r =>
+                            chrome.tabs.query({{}}, r)
+                        );
+                        let poked = 0;
+                        for (const t of tabs) {{
+                            if (!t.id) continue;
+                            try {{
+                                await new Promise((resolve) => {{
+                                    chrome.tabs.sendMessage(
+                                        t.id,
+                                        {{
+                                            action: 'fill_form',
+                                            normalizedData: {resume_json},
+                                            resumeFile: null,
+                                            manualEdits: {{}}
+                                        }},
+                                        () => {{
+                                            // Ignore lastError; tab just may not have the CS loaded.
+                                            const _ = chrome.runtime.lastError;
+                                            resolve();
+                                        }}
+                                    );
+                                }});
+                                poked += 1;
+                            }} catch (e) {{ /* swallow */ }}
+                        }}
+                        return poked;
+                    }}
+                """
+                bg_target.evaluate(poke_js)
+            except Exception:
+                # Bonus path — failure is expected on pages that haven't
+                # loaded the content script yet. Not worth logging.
+                pass
+
         except Exception as e:
             logger.error(f"Failed to inject resume into extension: {e}")
 
@@ -1930,7 +2163,20 @@ class ApplicationEngine:
             # common fields (firstName, lastName, email, phone, linkedin,
             # resume upload) AND for the common "click option" patterns
             # (Yes/No radios, custom dropdowns).
+            #
+            # We deliberately do NOT delegate this to the bundled TalentScreen
+            # Chrome extension. The extension's content.js (see
+            # `~/.jobcli/extension_unpacked/content.js`) gates ``fillForm``
+            # behind two conditions that are not satisfied in a Playwright
+            # session: the side-panel must be open in this window AND
+            # ``autoRunActive`` must be true. Neither is true here, so the
+            # extension's pageload listener returns immediately without
+            # touching the form. Running this Python pass guarantees the
+            # cheap-and-deterministic fields are filled BEFORE the LLM is
+            # consulted — which keeps token cost low and is robust to
+            # extension version drift.
             rules_handler = None
+            self._last_rules_filled_count = 0
             try:
                 rules_handler = ATSHandlerFactory.create_handler(
                     state.detected_ats, page, self.resume, logger
@@ -1941,40 +2187,24 @@ class ApplicationEngine:
                         f"Running {state.detected_ats.value} handler for known fields…",
                         phase=ExecutionPhase.RULES,
                     )
-                    try:
-                        # Disable rule-based form fill to let the TalentScreen extension
-                        # handle the autofill natively.
-                        prefill_results = {} # rules_handler.fill_form(self.config.resume_pdf_path)
-                        filled = [k for k, v in (prefill_results or {}).items() if v]
-                        if filled:
-                            agent.show_success(
-                                f"{state.detected_ats.value} handler filled: "
-                                + ", ".join(filled)
-                            )
-                            logger.info(
-                                f"ATS pre-pass filled {len(filled)} fields: {filled}",
-                                phase=ExecutionPhase.RULES,
-                            )
-                            # Re-extract so the LLM doesn't see fields we
-                            # already handled — avoids re-proposing them.
-                            page.wait_for_timeout(800)
+                    prefill_results = self._run_rules_prefill(
+                        rules_handler, page, logger, agent, extractor, state
+                    )
+                    filled = [k for k, v in (prefill_results or {}).items() if v]
+                    self._last_rules_filled_count = len(filled)
+                    if filled:
+                        try:
                             ax_tree = extractor.extract()
                             logger.save_structured_dom(
                                 ax_tree.model_dump(),
                                 "ax_tree_after_rules_prefill",
                                 ExecutionPhase.LLM,
                             )
-                        else:
-                            logger.info(
-                                "ATS pre-pass produced no fills — form may use "
-                                "non-standard field names; LLM will handle it.",
+                        except Exception as e:
+                            logger.debug(
+                                f"Re-extract after rules prefill failed: {e}",
                                 phase=ExecutionPhase.RULES,
                             )
-                    except Exception as e:
-                        logger.warning(
-                            f"ATS pre-pass raised {e!r}; falling through to LLM.",
-                            phase=ExecutionPhase.RULES,
-                        )
             except Exception as e:
                 logger.debug(
                     f"Could not create pre-pass handler: {e}",
@@ -2040,12 +2270,44 @@ class ApplicationEngine:
                         + "\n".join(prefilled_fields)
                     )
                 agent.show_status(f"AI is thinking — Consulting {provider}...", phase=ExecutionPhase.LLM)
-                llm_response = llm_client.analyze_page_from_axtree(
-                    ax_tree, self.resume, task=task,
-                    memory_context=memory_context,
-                    dropdown_options=ax_tree.dropdown_fields,
-                    resume_pdf_path=resume_pdf_path,
-                )
+                # ``analyze_page_from_axtree`` raises ``TLSConnectionError``
+                # immediately on first attempt when the failure is a TLS-trust
+                # issue (retrying never helps), so we render a remediation
+                # message instead of the generic "AI unavailable" hand-off.
+                from jobcli.llm.client import TLSConnectionError
+                try:
+                    llm_response = llm_client.analyze_page_from_axtree(
+                        ax_tree, self.resume, task=task,
+                        memory_context=memory_context,
+                        dropdown_options=ax_tree.dropdown_fields,
+                        resume_pdf_path=resume_pdf_path,
+                    )
+                except TLSConnectionError as tls_err:
+                    agent.show_error(
+                        "AI provider unreachable — TLS certificate verification failed."
+                    )
+                    handoff = agent.handoff_to_human(
+                        reason=f"TLS handshake to the AI provider failed. {tls_err}",
+                        hint=(
+                            "This is NOT a quota or API-key issue — your Python "
+                            "ssl module can't validate the AI provider's HTTPS "
+                            "cert. Fix it once and 'jobcli apply' will Just Work:\n"
+                            "  1. Preferred — install your corporate root CA into "
+                            "Windows 'Trusted Root Certification Authorities' (or "
+                            "macOS Keychain) and restart your terminal.\n"
+                            "  2. Or set JOBCLI_SSL_CA_BUNDLE=<path-to-ca.pem> "
+                            "pointing at a PEM containing the chain root.\n"
+                            "  3. Last resort — set JOBCLI_INSECURE_TLS=1 in this "
+                            "shell to skip verification (insecure).\n"
+                            "You can still complete THIS form manually now."
+                        ),
+                    )
+                    logger.log_phase_end(ExecutionPhase.LLM, not handoff.cancelled)
+                    if handoff.cancelled:
+                        return False
+                    page = handoff.page
+                    agent.page = page
+                    return handoff.advanced or self._submission_looks_plausible(page)
 
                 if not llm_response:
                     # Most common cause: 429 insufficient_quota, transient
@@ -2273,6 +2535,26 @@ class ApplicationEngine:
                     wait_time = 8000
                     agent.show_status(f"Upload done — waiting {wait_time/1000}s for autofill...", phase=ExecutionPhase.LLM)
                     page.wait_for_timeout(wait_time)
+                    # Re-run the deterministic rules pass NOW: many ATSes
+                    # only reveal personal-info fields after the resume is
+                    # uploaded (Ashby/Greenhouse reveal LinkedIn / phone /
+                    # location only post-upload), and we want those filled
+                    # before the LLM iteration sees the page again. This
+                    # significantly cuts LLM token usage and keeps the loop
+                    # from re-asking for already-known data.
+                    if rules_handler is not None:
+                        try:
+                            post_upload_results = self._run_rules_prefill(
+                                rules_handler, page, logger, agent, extractor, state
+                            )
+                            self._last_rules_filled_count += sum(
+                                1 for v in (post_upload_results or {}).values() if v
+                            )
+                        except Exception as e:
+                            logger.debug(
+                                f"Post-upload rules pass raised {e!r}",
+                                phase=ExecutionPhase.RULES,
+                            )
                     ax_tree = extractor.extract()
                     continue
 
@@ -2497,6 +2779,25 @@ class ApplicationEngine:
 
                 if not failed_actions and not ask_actions:
                     agent.show_success("All actions completed.")
+                    # One-line tally so the user can see who did the work.
+                    # ``_last_rules_filled_count`` is set by
+                    # ``_run_rules_prefill`` (deterministic Python pass).
+                    # ``llm_response.actions`` is the LLM's *latest* plan;
+                    # we approximate LLM cost as the number of FILL/SELECT/
+                    # CLICK actions it had to issue.
+                    try:
+                        llm_actions = len([
+                            a for a in (llm_response.actions or [])
+                            if a.action in (ActionType.FILL, ActionType.SELECT, ActionType.CLICK, ActionType.TYPE, ActionType.UPLOAD)
+                        ])
+                        rules_n = getattr(self, "_last_rules_filled_count", 0) or 0
+                        logger.info(
+                            f"Fill summary — rules pre-pass: {rules_n} field(s), "
+                            f"LLM iteration {loop_count}: {llm_actions} action(s).",
+                            phase=ExecutionPhase.LLM,
+                        )
+                    except Exception:
+                        pass
                     break
 
             # ── Multi-page form loop ──────────────────────────────────────

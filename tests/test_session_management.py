@@ -25,7 +25,7 @@ def test_database():
 
 def test_session_closes_on_success(test_database):
     """Test that session closes after successful operation."""
-    job = Job(url="https://example.com/job/1")
+    job = Job(url="https://example.com/job/1", is_cli_friendly=True, is_already_applied=False)
 
     with get_db_session(test_database) as session:
         repo = JobRepository(session)
@@ -63,8 +63,8 @@ def test_session_closes_on_error(test_database):
 
 def test_transaction_commits_all_or_nothing(test_database):
     """Test that transaction commits all operations or rolls back all."""
-    job1 = Job(url="https://example.com/job/1")
-    job2 = Job(url="https://example.com/job/2")
+    job1 = Job(url="https://example.com/job/1", is_cli_friendly=True, is_already_applied=False)
+    job2 = Job(url="https://example.com/job/2", is_cli_friendly=True, is_already_applied=False)
 
     # Successful transaction
     with get_db_transaction(test_database) as session:
@@ -121,7 +121,11 @@ def test_multiple_sequential_sessions(test_database):
     for i in range(10):
         with get_db_session(test_database) as session:
             repo = JobRepository(session)
-            job = Job(url=f"https://example.com/job/{i}")
+            job = Job(
+                url=f"https://example.com/job/{i}",
+                is_cli_friendly=True,
+                is_already_applied=False,
+            )
             created = repo.create(job)
             jobs_created.append(created.id)
 
@@ -141,7 +145,9 @@ def test_no_connection_leaks(test_database):
         # SQLite :memory: uses SingletonThreadPool — skip checkout accounting
         for i in range(20):
             with get_db_session(test_database) as session:
-                JobRepository(session).create(Job(url=f"https://example.com/leak/{i}"))
+                JobRepository(session).create(
+                    Job(url=f"https://example.com/leak/{i}", is_cli_friendly=True, is_already_applied=False)
+                )
         return
 
     initial_connections = pool.checkedout()
@@ -149,7 +155,9 @@ def test_no_connection_leaks(test_database):
         with get_db_session(test_database) as session:
             repo = JobRepository(session)
             if i < 50:
-                repo.create(Job(url=f"https://example.com/job/{i}"))
+                repo.create(
+                    Job(url=f"https://example.com/job/{i}", is_cli_friendly=True, is_already_applied=False)
+                )
     assert pool.checkedout() == initial_connections
 
 

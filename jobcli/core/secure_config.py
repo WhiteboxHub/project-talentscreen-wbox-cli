@@ -5,11 +5,15 @@ from pathlib import Path
 from typing import Optional
 
 from cryptography.fernet import Fernet
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv  # legacy: used only by tests that expect this symbol
+except ImportError:  # pragma: no cover
+    def load_dotenv(*_a: object, **_k: object) -> None:
+        return None
 from pydantic import BaseModel, Field
 
 # Load environment variables from .env file
-load_dotenv()
+# Intentionally do NOT auto-load .env. Configuration is stored in ~/.jobcli/jobcli.db.
 
 
 class SecureConfig(BaseModel):
@@ -61,7 +65,7 @@ class SecureConfig(BaseModel):
     # Paths
     resume_pdf_path: Optional[str] = None
     resume_json_path: Optional[str] = None
-    extension_path: Optional[str] = Field(default_factory=lambda: os.getenv("EXTENSION_PATH"))
+    extension_path: Optional[str] = None  # Auto-populated by ``jobcli setup``; not read from .env.
     log_directory: str = Field(default="logs")
     database_path: str = Field(default="~/.jobcli/jobcli.db")
 
@@ -143,37 +147,6 @@ def load_secure_config(
         pass
 
     return config
-
-
-def create_env_template(output_path: Path = Path(".env.template")) -> None:
-    """Create .env template file for users.
-
-    Usage:
-        create_env_template()
-        # User copies .env.template to .env and fills in values
-    """
-    template = """# JobCLI Configuration
-# Copy this file to .env and fill in your credentials
-# NEVER commit .env to version control!
-
-# Job Board Credentials
-JOBCLI_USERNAME=your_username
-JOBCLI_PASSWORD=your_password
-
-# LLM API Keys (get from respective providers)
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-GEMINI_API_KEY=...
-
-# Application Settings (optional)
-JOBCLI_DEFAULT_LLM=openai
-JOBCLI_HEADLESS=true
-JOBCLI_MAX_RETRIES=3
-"""
-
-    output_path.write_text(template)
-    print(f"Created {output_path}")
-    print("Copy to .env and fill in your credentials")
 
 
 def validate_api_keys(config: SecureConfig) -> dict[str, bool]:

@@ -1,7 +1,7 @@
 """Entry point for the `wboxcli` command.
 
 - No arguments  → launches the interactive TUI (Claude Code style)
-- With arguments → forwards to the standard Typer CLI (e.g. `wboxcli apply --batch`)
+- With arguments → forwards to the standard Typer CLI (e.g. `wboxcli apply`)
 """
 
 import sys

@@ -10,6 +10,10 @@ from typing import Optional
 if hasattr(sys.stdout, 'reconfigure') and sys.stdout.encoding.lower() != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
+# NOTE: TLS trust roots are configured in ``jobcli/__init__.py`` so that all
+# entry points (CLI, tests, interactive) inherit OS-native CA support before
+# any HTTP client is built. See ``jobcli/core/tls.py``.
+
 import typer
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
@@ -31,12 +35,61 @@ app = typer.Typer(
     help="Production-grade CLI for automated job applications",
 )
 
+db_app = typer.Typer(help="Local database maintenance")
+app.add_typer(db_app, name="db")
+
 console = Console()
 
 # Default config directory
 CONFIG_DIR = Path.home() / ".jobcli"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 DATABASE_FILE = CONFIG_DIR / "jobcli.db"
+
+
+def _print_next_step(command: str, hint: str = "") -> None:
+    """Print a prominent boxed "Next" hint after every command succeeds.
+
+    Keeps the flow visible to the user at every step:
+        login → resume-upload → setup → discover → apply
+
+    The hint is rendered as a Rich panel so it sticks out from regular log
+    output and the user can't miss it as the terminal scrolls.
+    """
+    from rich.panel import Panel
+    body_lines = [f"  [bold cyan]jobcli {command}[/bold cyan]"]
+    if hint:
+        body_lines.append(f"  [dim]{hint}[/dim]")
+    console.print()
+    console.print(
+        Panel(
+            "\n".join(body_lines),
+            title="[bold green]▶ Next step[/bold green]",
+            title_align="left",
+            border_style="green",
+            padding=(0, 1),
+        )
+    )
+
+
+def _suggest_after_login_or_resume() -> tuple[str, str]:
+    """Pick the right next command based on what's still missing.
+
+    Walks the canonical flow login → resume-upload → setup → discover → apply
+    and returns the first step the user hasn't completed yet.
+    """
+    cfg = get_config()
+    if not (cfg.resume_pdf_path and cfg.resume_json_path):
+        return "resume-upload --pdf <file.pdf> --json <file.json>", "load your resume"
+    ext = (cfg.extension_path or "").strip()
+    if not ext or not Path(ext).exists():
+        return "setup", "download the TalentScreen extension and verify your setup"
+    return "discover", "pull job listings from WBL"
+
+# ``jobcli config --key`` accepts these env-style names as aliases for the stored field.
+CONFIG_CMD_KEY_ALIASES: dict[str, str] = {
+    "JOBCLI_SYNC_SERVER_URL": "sync_server_url",
+    "NEXT_PUBLIC_API_URL": "sync_server_url",
+}
 
 
 def ensure_config_dir() -> None:
@@ -58,21 +111,24 @@ def get_database() -> Database:
     return db
 
 
+def resolve_active_sqlite_database_path() -> Path:
+    """Filesystem path to the active SQLite DB (same rules as ``get_database``)."""
+    raw = os.getenv("DATABASE_PATH")
+    if raw:
+        return Path(os.path.expandvars(os.path.expanduser(raw))).resolve()
+    ensure_config_dir()
+    return DATABASE_FILE.resolve()
+
+
 def get_config() -> Config:
-    """Load configuration, with ``.env`` always winning over the SQLite DB.
+    """Load configuration from the local SQLite ``config`` table.
 
-    Order of precedence (highest first):
-      1. Environment variables loaded from ``.env`` (or the real shell env).
-      2. Values previously persisted to the SQLite ``config`` table.
-      3. Schema defaults.
-
-    This means rotating an API key in ``.env`` takes effect on the very next
-    run — no need to re-run ``jobcli login`` or hand-edit the DB.
+    There is **no ``.env`` loading** — all settings (credentials, LLM keys,
+    resume paths, API base URL, extension path) are written by interactive
+    commands (``login``, ``resume-upload``, ``setup``) and persisted in
+    ``~/.jobcli/jobcli.db``. To change a value later, use
+    ``jobcli config --key <name> --set <value>`` or re-run ``jobcli login``.
     """
-    from dotenv import load_dotenv
-    # override=True so a freshly-edited .env beats stale shell env vars too.
-    load_dotenv(override=True)
-
     db = get_database()
     session = db.get_session()
     config_repo = ConfigRepository(session)
@@ -82,32 +138,8 @@ def get_config() -> Config:
     except Exception:
         config = Config()
 
-    # ── .env overrides ──────────────────────────────────────────────
-    # Anything present and non-empty in the environment wins.
-    env_overrides: list[tuple[str, str]] = [
-        ("OPENAI_API_KEY", "openai_api_key"),
-        ("ANTHROPIC_API_KEY", "anthropic_api_key"),
-        ("GEMINI_API_KEY", "gemini_api_key"),
-        ("DEFAULT_LLM_PROVIDER", "default_llm_provider"),
-        ("EXTENSION_PATH", "extension_path"),
-        ("DATABASE_PATH", "database_path"),
-        ("LOG_DIRECTORY", "log_directory"),
-        ("JOBCLI_USERNAME", "job_board_username"),
-        ("JOBCLI_PASSWORD", "job_board_password"),
-        ("LINKEDIN_USERNAME", "linkedin_username"),
-        ("LINKEDIN_PASSWORD", "linkedin_password"),
-    ]
-    for env_key, attr in env_overrides:
-        val = os.getenv(env_key)
-        if val and hasattr(config, attr):
-            try:
-                setattr(config, attr, val)
-            except Exception:
-                pass
-
-    env_headless = os.getenv("HEADLESS")
-    if env_headless is not None:
-        config.headless = env_headless.lower() == "true"
+    # Browser must always be visible while applying — no env switch.
+    config.headless = False
 
     session.close()
     return config
@@ -122,16 +154,27 @@ def save_config(config: Config) -> None:
     session.close()
 
 
+def _require_wbl_credentials_for_discovery(config: Config) -> None:
+    """Exit with a clear message unless WBL username/password are available (DB or env)."""
+    u = (config.job_board_username or os.getenv("JOBCLI_USERNAME") or "").strip()
+    p = config.job_board_password or os.getenv("JOBCLI_PASSWORD")
+    if not u or not p:
+        console.print(
+            "[red]Missing WBL credentials or API URL. Run [cyan]setup[/cyan] or [cyan]login[/cyan] first.[/red]"
+        )
+        raise typer.Exit(1)
+
+
 def ensure_configured(config: Config, require_job_board: bool = True) -> None:
     """Ensure the user has logged in and configured required credentials."""
     if require_job_board and (not config.job_board_username or not config.job_board_password):
         console.print("[yellow]Warning: Missing job board credentials.[/yellow]")
-        console.print("Run [cyan]jobcli login[/cyan] if you need to discover jobs of view Whitebox-hosted listings.")
+        console.print("Run [cyan]login[/cyan] if you need to discover jobs or view Whitebox-hosted listings.")
         
     has_llm = config.openai_api_key or config.anthropic_api_key or config.gemini_api_key
     if not has_llm:
         console.print("\n[yellow]Warning: No LLM API keys configured. Phase 2 (Autonomous Reasoning) will be disabled.[/yellow]")
-        console.print("Run [cyan]jobcli login[/cyan] to unlock full AI automation capabilities.\n")
+        console.print("Run [cyan]login[/cyan] to unlock full AI automation capabilities.\n")
 
 
 def print_dashboard_summary(session):
@@ -148,13 +191,14 @@ def print_dashboard_summary(session):
         f"[bold white]Total Jobs present in WBL for last {DASHBOARD_SUMMARY_DAYS} days:[/] [bold cyan]{stats['total_wbl']}[/]\n"
         f"[bold white]Already applied for you -[/] [bold green]{stats['applied_count']}[/]\n"
         f"[bold white]Remaining total jobs -[/] [bold #f0abfc]{stats['remaining_count']}[/]\n"
-        f"[bold white]CLI friendly -[/] [bold #c084fc]{stats['cli_friendly']}[/]"
+        f"[bold white]CLI friendly -[/] [bold #c084fc]{stats['cli_friendly']}[/]\n"
+        f"[bold white]Unsupported / skipped -[/] [bold yellow]{stats.get('unsupported_skipped', 0)}[/]"
     )
     
     console.print(Panel(summary_text, title="[bold #c084fc]WBox Dashboard Summary[/]", border_style="#c084fc", expand=False))
     
     if stats['latest_links']:
-        console.print(f"\n[bold #f0abfc]Latest {len(stats['latest_links'])} job links for reference:[/]")
+        console.print(f"\n[bold #f0abfc]Oldest-first {len(stats['latest_links'])} job links for reference:[/]")
         table = Table(box=box.SIMPLE, show_header=True, header_style="bold #c084fc")
         table.add_column("Title", style="cyan")
         table.add_column("URL", style="blue")
@@ -162,55 +206,211 @@ def print_dashboard_summary(session):
         
         for job in stats['latest_links']:
             url = job['url'][:50] + "..." if len(job['url']) > 50 else job['url']
-            table.add_row(job['title'] or "Untitled", url, job['created_at'].strftime("%Y-%m-%d"))
+            ca = job['created_at']
+            date_s = ca.strftime("%Y-%m-%d") if hasattr(ca, "strftime") else str(ca)
+            table.add_row(job['title'] or "Untitled", url, date_s)
         
         console.print(table)
 
 
 @app.command()
 def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uninstall without confirmation")) -> None:
-    """Remove all JobCLI configuration and databases."""
+    """Remove all JobCLI configuration, databases, and global shims.
+
+    Works on Windows and macOS/Linux. On Windows we cannot delete the active
+    venv while ``jobcli.exe`` is still running, so the venv is left for the
+    bundled ``scripts/uninstall.ps1`` to clean up (or a manual rm after the
+    process exits).
+    """
     import shutil
+
     console.print("[bold red]JobCLI Uninstall[/bold red]\n")
     if not force:
         confirm = Confirm.ask(
-            "Are you sure you want to delete all JobCLI data (including ~/.jobcli)?\n"
-            "This will permanently delete your job history, settings, and local memory.",
+            "Delete all JobCLI data in ~/.jobcli (config, jobs, logs, resume, memory) and the wboxcli/jobcli shims?",
             default=False,
         )
         if not confirm:
             console.print("[yellow]Uninstall cancelled.[/yellow]")
             return
 
-    # Shutdown logger to release file locks on Windows
+    # Release SQLite/log file handles so Windows lets us delete them.
     from jobcli.core.logger import global_logger
     global_logger.shutdown()
+    try:
+        get_database().engine.dispose()
+    except Exception:
+        pass
+
+    # Detect "are we running from inside ~/.jobcli/venv?" — if so, skip the venv
+    # subtree so we don't hit "file in use" on Windows.
+    is_windows = os.name == "nt"
+    venv_dir = CONFIG_DIR / "venv"
+    running_from_venv = False
+    try:
+        exe_path = Path(sys.executable).resolve()
+        running_from_venv = venv_dir.resolve() in exe_path.parents
+    except Exception:
+        running_from_venv = False
+
+    leftover_paths: list[Path] = []
 
     if CONFIG_DIR.exists():
-        try:
-            shutil.rmtree(CONFIG_DIR)
-            console.print(f"[green]✓ Successfully deleted {CONFIG_DIR}[/green]")
-        except Exception as e:
-            console.print(f"[red]Failed to delete {CONFIG_DIR}: {e}[/red]")
+        if running_from_venv:
+            # Delete everything inside ~/.jobcli except the venv subtree.
+            for child in CONFIG_DIR.iterdir():
+                if child.resolve() == venv_dir.resolve():
+                    leftover_paths.append(child)
+                    continue
+                try:
+                    if child.is_dir():
+                        shutil.rmtree(child, ignore_errors=False)
+                    else:
+                        child.unlink()
+                    console.print(f"[green]✓ Removed {child}[/green]")
+                except Exception as e:
+                    console.print(f"[red]✗ Failed to remove {child}: {e}[/red]")
+                    leftover_paths.append(child)
+        else:
+            try:
+                shutil.rmtree(CONFIG_DIR)
+                console.print(f"[green]✓ Removed {CONFIG_DIR}[/green]")
+            except Exception as e:
+                console.print(f"[red]✗ Failed to remove {CONFIG_DIR}: {e}[/red]")
+                leftover_paths.append(CONFIG_DIR)
     else:
-        console.print(f"[yellow]No configuration directory found at {CONFIG_DIR}.[/yellow]")
+        console.print(f"[yellow]— No configuration directory at {CONFIG_DIR}[/yellow]")
+
+    # Remove the global shims dropped by install.ps1 / install.sh
+    bin_dir = Path.home() / ".local" / "bin"
+    shim_names = ("wboxcli.cmd", "jobcli.cmd") if is_windows else ("wboxcli", "jobcli")
+    for name in shim_names:
+        shim = bin_dir / name
+        if shim.exists() or shim.is_symlink():
+            try:
+                shim.unlink()
+                console.print(f"[green]✓ Removed {shim}[/green]")
+            except Exception as e:
+                console.print(f"[yellow]— Could not remove {shim}: {e}[/yellow]")
+                leftover_paths.append(shim)
+
+    if leftover_paths:
+        console.print()
+        console.print("[yellow]Some files could not be removed while jobcli was still running.[/yellow]")
+        console.print("[yellow]Close this terminal and finish cleanup with:[/yellow]")
+        if is_windows:
+            console.print('  [cyan]Remove-Item -Recurse -Force "$env:USERPROFILE\\.jobcli"[/cyan]')
+            console.print('  [cyan]Remove-Item -Force "$env:USERPROFILE\\.local\\bin\\wboxcli.cmd","$env:USERPROFILE\\.local\\bin\\jobcli.cmd"[/cyan]')
+            console.print('  [dim](or)[/dim] [cyan]irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.ps1 | iex[/cyan]')
+        else:
+            console.print('  [cyan]rm -rf ~/.jobcli ~/.local/bin/wboxcli ~/.local/bin/jobcli[/cyan]')
+            console.print('  [dim](or)[/dim] [cyan]curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.sh | bash[/cyan]')
+    else:
+        console.print("\n[green]JobCLI has been fully uninstalled.[/green]")
+
+
+@db_app.command("clear-jobs")
+def db_clear_jobs(
+    force: bool = typer.Option(False, "--force", "-f", help="Delete without confirmation"),
+) -> None:
+    """Delete all local jobs and job-scoped logs (preserves resume, config, memory)."""
+    console.print("[bold cyan]Clear job data[/bold cyan]\n")
+    if not force:
+        if not Confirm.ask(
+            "Delete all jobs and application logs from the local database?\n"
+            "(Resume, field answers, learned locators, and config are kept.)",
+            default=False,
+        ):
+            console.print("[yellow]Cancelled.[/yellow]")
+            return
+    db = get_database()
+    session = db.get_session()
+    try:
+        n = JobRepository(session).clear_job_related_data()
+        console.print(f"[green]✓ Removed {n} job record(s) and related logs.[/green]")
+    finally:
+        session.close()
+
+
+def _run_db_reset(force: bool) -> None:
+    """Delete the SQLite DB file (+ WAL/SHM/journal) and recreate an empty schema."""
+    from jobcli.sync.client import reset_sync_client_singleton
+    from jobcli.storage.models import Database
+
+    console.print("[bold red]Reset local JobCLI database[/bold red]\n")
+    if not force:
+        if not Confirm.ask(
+            "This will delete the entire local JobCLI SQLite database, including saved login, "
+            "resume data, jobs, logs, memory, learned locators, and sync metadata. Continue?",
+            default=False,
+        ):
+            console.print("[yellow]Cancelled.[/yellow]")
+            return
+
+    db_path = resolve_active_sqlite_database_path()
+    url_s = str(db_path)
+    if ":memory:" in url_s:
+        console.print("[red]Cannot reset an in-memory database. Point DATABASE_PATH at a file path.[/red]")
+        raise typer.Exit(1)
+
+    from jobcli.core.logger import global_logger
+
+    global_logger.shutdown()
+
+    try:
+        db = get_database()
+        db.engine.dispose()
+    except Exception:
+        pass
+
+    reset_sync_client_singleton()
+
+    paths_to_remove = [
+        db_path,
+        Path(f"{db_path}-wal"),
+        Path(f"{db_path}-shm"),
+        Path(f"{db_path}-journal"),
+    ]
+    for p in paths_to_remove:
+        if p.exists():
+            try:
+                p.unlink()
+            except OSError as e:
+                console.print(f"[red]Failed to delete {p}: {e}[/red]")
+                raise typer.Exit(1) from e
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    fresh = Database(f"sqlite:///{db_path.as_posix()}")
+    fresh.create_tables()
+    console.print(
+        "[green]Local JobCLI database reset successfully. Run [cyan]setup[/cyan] to configure credentials again.[/green]"
+    )
+
+
+@db_app.command("reset")
+def db_reset(
+    force: bool = typer.Option(False, "--force", "-f", help="Reset without confirmation"),
+) -> None:
+    """Delete the entire local SQLite database file and recreate empty tables.
+
+    Does not remove ``~/.jobcli`` wholesale, log files, or resume PDFs.
+    """
+    _run_db_reset(force)
+
 
 @app.command()
 def setup() -> None:
-    """Full one-shot setup: loads .env, saves config, uploads resume, and discovers all jobs.
+    """One-shot setup: validate stored config, load resume from saved paths, discover, browser test.
 
-    This is the only command you need to run before jobcli apply --batch.
-    All values are read automatically from the .env file — no prompts.
+    Run ``login`` first to save credentials (no ``.env`` file is used). Then ``setup`` will
+    pick those up from local config and continue with resume, discover, and a browser test.
     """
-    from dotenv import load_dotenv
-    load_dotenv(override=True)
-
     console.print("[bold cyan]╔══════════════════════════════════════╗[/bold cyan]")
     console.print("[bold cyan]║       W-BOX CLI — One-Shot Setup     ║[/bold cyan]")
     console.print("[bold cyan]╚══════════════════════════════════════╝[/bold cyan]\n")
 
     # ── STEP 1: Config ────────────────────────────────────────────────────────
-    console.print("[bold]Step 1/5 — Loading credentials from .env...[/bold]")
+    console.print("[bold]Step 1/5 — Verifying configuration in local store (~/.jobcli/jobcli.db)...[/bold]")
     ensure_config_dir()
     db = get_database()
     config = get_config()
@@ -222,25 +422,29 @@ def setup() -> None:
     if has_llm:
         console.print(f"  [green]✓ LLM provider: {config.default_llm_provider}[/green]")
     else:
-        console.print("  [red]✗ No LLM API key found in .env (OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY)[/red]")
-        console.print("    [yellow]AI form-filling will be disabled. Add a key to .env and re-run setup.[/yellow]")
+        console.print("  [red]✗ No LLM API key configured.[/red]")
+        console.print("    [yellow]AI form-filling will be disabled. Run [cyan]login[/cyan] and add at least one LLM key.[/yellow]")
 
     if has_wbox:
-        console.print(f"  [green]✓ Whitebox credentials found for: {config.job_board_username}[/green]")
+        api_hint = (config.sync_server_url or "default https://whitebox-learning.com/api").strip()
+        console.print(f"  [green]✓ Whitebox credentials for: {config.job_board_username}[/green]")
+        console.print(f"    [dim]API base: {api_hint}[/dim]")
     else:
-        console.print("  [yellow]⚠ No Whitebox credentials found (JOBCLI_USERNAME / JOBCLI_PASSWORD).[/yellow]")
+        console.print("  [yellow]⚠ No Whitebox credentials. Run [cyan]login[/cyan].[/yellow]")
         console.print("    Job discovery will be skipped.")
 
     # ── STEP 2: Resume ────────────────────────────────────────────────────────
-    console.print("\n[bold]Step 2/5 — Loading resume from .env paths...[/bold]")
+    console.print("\n[bold]Step 2/5 — Checking resume (saved paths from previous resume-upload)...[/bold]")
 
     pdf_path_str = config.resume_pdf_path
     json_path_str = config.resume_json_path
 
     resume_loaded = False
     if not pdf_path_str or not json_path_str:
-        console.print("  [yellow]⚠ RESUME_PDF_PATH or RESUME_JSON_PATH not set in .env — skipping resume upload.[/yellow]")
-        console.print("    Add these paths to .env and re-run setup, or run [cyan]jobcli resume upload[/cyan] manually.")
+        console.print("  [yellow]⚠ No resume in local config.[/yellow]")
+        console.print(
+            "    Run [cyan]resume-upload --pdf <file.pdf> --json <file.json>[/cyan] to load one."
+        )
     else:
         pdf_path = Path(pdf_path_str.strip('"').strip("'"))
         json_path = Path(json_path_str.strip('"').strip("'"))
@@ -278,12 +482,12 @@ def setup() -> None:
 
     jobs_found = 0
     if not has_wbox:
-        console.print("  [yellow]⚠ Skipped — no Whitebox credentials in .env.[/yellow]")
+        console.print("  [yellow]⚠ Skipped — no Whitebox credentials. Run [cyan]login[/cyan].[/yellow]")
     else:
         try:
             session = db.get_session()
-            discoverer = WboxDiscoverer(session)
-            with console.status("[bold green]Logging in and scanning dashboard (this may take ~30s)..."):
+            discoverer = WboxDiscoverer(session, config=config)
+            with console.status("[bold green]Fetching jobs from WBL (API)..."):
                 new_jobs = discoverer.discover(headless=config.headless)
             session.close()
 
@@ -294,7 +498,7 @@ def setup() -> None:
                 console.print("  [yellow]⚠ No new jobs found (they may already be in your database).[/yellow]")
         except Exception as e:
             console.print(f"  [red]✗ Job discovery failed: {e}[/red]")
-            console.print("    You can run [cyan]jobcli discover[/cyan] manually later.")
+            console.print("    You can run [cyan]discover[/cyan] manually later.")
 
 
     # ── STEP 4: Browser & Extension Test ─────────────────────────────────────
@@ -329,7 +533,7 @@ def setup() -> None:
             ext_dir = None
 
     if not ext_dir:
-        console.print("  [red]✗ EXTENSION_PATH could not be configured automatically.[/red]")
+        console.print("  [red]✗ Extension could not be downloaded automatically.[/red]")
         browser_error = "Failed to download extension"
     else:
         console.print(f"  [green]✓ Extension directory ready: {ext_dir}[/green]")
@@ -393,19 +597,20 @@ def setup() -> None:
         console.print(f"  Extension      : [green]✓ loaded[/green]")
     console.print("─" * 45)
 
-    # ── STEP 4: Summary ───────────────────────────────────────────────────────
- 
-
     if has_llm and resume_loaded and browser_ok:
         console.print("\n[bold green]✓ Setup complete! You are ready to apply.[/bold green]")
-        console.print("\nRun: [bold cyan]jobcli apply --batch[/bold cyan]")
+        _print_next_step("discover", "pull listings, then run apply")
     else:
         console.print("\n[bold yellow]⚠ Setup finished with warnings. Fix the issues above, then re-run setup.[/bold yellow]")
+        if not resume_loaded:
+            _print_next_step("resume-upload --pdf <file.pdf> --json <file.json>", "load your resume")
+        else:
+            _print_next_step("setup", "re-run after fixing the issues above")
 
 
 @app.command()
 def login(
-    auto: bool = typer.Option(False, "--auto", help="Skip prompts if credentials exist in .env or config"),
+    auto: bool = typer.Option(False, "--auto", help="Skip prompts if credentials already saved in local config"),
 ) -> None:
     """Configure credentials for job boards and LLM APIs."""
     console.print("[bold cyan]JobCLI Login[/bold cyan]\n")
@@ -413,7 +618,7 @@ def login(
     config = get_config()
     
     if auto and config.job_board_username and (config.openai_api_key or config.anthropic_api_key or config.gemini_api_key):
-        console.print("[green]✓ Credentials automatically loaded from config/.env! Skipping manual entry.[/green]")
+        console.print("[green]✓ Credentials already saved in local config. Skipping manual entry.[/green]")
         return
 
     # Job board credentials
@@ -431,6 +636,56 @@ def login(
         config.job_board_username = job_board_username
     if job_board_password:
         config.job_board_password = job_board_password
+
+    # Auto-detect the WBL API base URL. Two endpoints are hardcoded:
+    #   1. https://whitebox-learning.com/api   (production)
+    #   2. http://127.0.0.1:8000/api           (local backend)
+    # Probe both with the supplied credentials and save the first that
+    # authenticates. The user is never prompted for the URL, but if the probe
+    # uncovers actionable issues (bad creds, TLS) we surface a concise warning.
+    from jobcli.sync.client import (
+        probe_wbl_api_detailed,
+        WBL_API_CANDIDATES,
+        LOGIN_ERR_BAD_CREDENTIALS,
+        LOGIN_ERR_ACCOUNT_LOCKED,
+        LOGIN_ERR_SSL,
+        LOGIN_ERR_RATE_LIMIT,
+    )
+
+    probe_warning_lines: list[str] = []
+    if job_board_username and job_board_password:
+        winning, probe_errors = probe_wbl_api_detailed(job_board_username, job_board_password)
+        config.sync_server_url = winning or WBL_API_CANDIDATES[0]
+        if not winning and probe_errors:
+            kinds = {e["kind"] for e in probe_errors}
+            # Only flag what the user can act on right now. Pure network errors
+            # (local backend down, no VPN) stay silent — login still saves
+            # credentials and discover retries on demand.
+            if LOGIN_ERR_BAD_CREDENTIALS in kinds:
+                probe_warning_lines.append(
+                    "WBL did not accept these credentials. Re-run 'jobcli login' "
+                    "with the correct email/password — discover will fail otherwise."
+                )
+            if LOGIN_ERR_ACCOUNT_LOCKED in kinds:
+                probe_warning_lines.append(
+                    "Your WBL account appears inactive/locked. Contact Recruiting "
+                    "before running 'jobcli discover'."
+                )
+            if LOGIN_ERR_SSL in kinds:
+                probe_warning_lines.append(
+                    "TLS certificate verification failed for the WBL API. "
+                    "Set JOBCLI_SSL_CA_BUNDLE=<path-to-ca.pem> (preferred) or "
+                    "JOBCLI_INSECURE_TLS=1 (insecure) before 'jobcli discover'."
+                )
+            if LOGIN_ERR_RATE_LIMIT in kinds:
+                probe_warning_lines.append(
+                    "WBL rate-limited the login probe. Wait a minute, then run "
+                    "'jobcli discover' — credentials were saved successfully."
+                )
+    else:
+        # No creds yet — save the production URL so SyncClient has a starting point.
+        if not (config.sync_server_url or "").strip():
+            config.sync_server_url = WBL_API_CANDIDATES[0]
 
     # LLM API keys
     console.print("\n[bold]LLM API Keys (optional)[/bold]")
@@ -472,30 +727,43 @@ def login(
     save_config(config)
 
     console.print("\n[bold green]✓ Credentials saved successfully[/bold green]")
+    for line in probe_warning_lines:
+        console.print(f"[yellow]⚠ {line}[/yellow]")
+    cmd, hint = _suggest_after_login_or_resume()
+    _print_next_step(cmd, hint)
 
 
 @app.command()
 def config_cmd(
-    key: Optional[str] = typer.Option(None, help="Configuration key to view"),
+    key: Optional[str] = typer.Option(None, "--key", "-k", help="Configuration key to view or set"),
     set_value: Optional[str] = typer.Option(None, "--set", help="Set configuration value"),
 ) -> None:
-    """View or modify configuration."""
+    """View or modify configuration.
+
+    Use ``sync_server_url`` for the WBL API base (aliases: JOBCLI_SYNC_SERVER_URL, NEXT_PUBLIC_API_URL), e.g.:
+
+        jobcli config --key sync_server_url --set http://127.0.0.1:8000/api
+    """
     config = get_config()
+
+    resolved_key = CONFIG_CMD_KEY_ALIASES.get(key, key) if key else None
 
     if key and set_value:
         # Set configuration
-        if hasattr(config, key):
-            setattr(config, key, set_value)
+        rk = resolved_key or key
+        if rk and hasattr(config, rk):
+            setattr(config, rk, set_value)
             save_config(config)
-            console.print(f"[green]✓ Set {key} = {set_value}[/green]")
+            console.print(f"[green]✓ Set {rk} = {set_value}[/green]")
         else:
             console.print(f"[red]Unknown configuration key: {key}[/red]")
 
     elif key:
         # View specific key
-        if hasattr(config, key):
-            value = getattr(config, key)
-            console.print(f"{key}: {value}")
+        rk = resolved_key or key
+        if rk and hasattr(config, rk):
+            value = getattr(config, rk)
+            console.print(f"{rk}: {value}")
         else:
             console.print(f"[red]Unknown configuration key: {key}[/red]")
 
@@ -599,6 +867,8 @@ def resume_upload(
     save_config(config)
 
     console.print("\n[bold green]✓ Resume uploaded successfully[/bold green]")
+    cmd, hint = _suggest_after_login_or_resume()
+    _print_next_step(cmd, hint)
 
 
 
@@ -658,43 +928,53 @@ def questions() -> None:
     console.print("\n[bold green]✓ Answers saved successfully[/bold green]")
 
 
-@app.command()
-def apply(
-    url: Optional[str] = typer.Option(None, help="Single job URL to apply"),
-    batch: bool = typer.Option(False, "--batch", help="Apply to all pending jobs (default when no --url given)"),
-    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of jobs in batch mode"),
-    sort: str = typer.Option("oldest", "--sort", "-s", help="Sort order for batch mode (oldest, newest)"),
-    mode: str = typer.Option(
-        "supervised",
-        "--mode", "-m",
-        help="Interaction mode: auto (fully autonomous), supervised (AI + human checkpoints, default), manual (pause at every step)",
-    ),
+def _run_apply(
+    *,
+    url: Optional[str],
+    limit: Optional[int],
+    sort: str,
+    mode: str,
 ) -> None:
-    """Apply to all pending jobs (or a single URL with --url).
+    """Shared implementation for ``jobcli apply`` (single URL or batch).
 
-    Running `jobcli apply` with no arguments automatically starts batch mode
-    and processes every pending job discovered from your dashboard.
-
-    The --mode flag controls how tightly you are integrated into the agent loop:
-
-      auto       – fully autonomous; only stops for CAPTCHA / fatal errors.
-      supervised – (default) AI drives, but pauses for submission confirmation,
-                   missing fields, and failed actions — like Claude Code.
-      manual     – pauses before every action batch for explicit approval.
+    Exit semantics
+    --------------
+    The user can quit at any interactive prompt by typing one of
+    ``q``/``quit``/``exit``/``:q`` or pressing **Ctrl+C** (twice in 2s to
+    force-quit). Both raise :class:`ExitRequested`, which we catch here to
+    close the browser cleanly, persist learned state, and print a tally —
+    distinct from an unexpected crash. This is wired uniformly across
+    every prompt the engine exposes (handoff, submit confirm, ASK
+    actions, LinkedIn-skip yes/no, manual pauses) via
+    ``AgentInterface._get_user_input``.
     """
+    from jobcli.core.exit_signal import (
+        ExitRequested,
+        install_global_sigint_handler,
+        is_exit_requested,
+    )
+
     console.print("[bold cyan]Job Application[/bold cyan]\n")
+
+    # Install the SIGINT handler before we touch any blocking primitive so
+    # Ctrl+C in PowerShell wakes us cleanly instead of leaving daemon-thread
+    # input() calls dangling. Safe to call multiple times.
+    install_global_sigint_handler()
 
     config = get_config()
     ensure_configured(config, require_job_board=False)
 
-    # Apply interaction mode
     try:
         config.interaction_mode = InteractionMode(mode)
     except ValueError:
         console.print(f"[red]Invalid mode '{mode}'. Choose from: auto, supervised, manual[/red]")
         raise typer.Exit(1)
 
-    console.print(f"Mode: [cyan]{config.interaction_mode.value}[/cyan]\n")
+    console.print(f"Mode: [cyan]{config.interaction_mode.value}[/cyan]")
+    console.print(
+        "[dim]Press [bold]Ctrl+C[/bold] or type [bold]q[/bold] / [bold]quit[/bold] / "
+        "[bold]exit[/bold] at any prompt to stop cleanly. Two Ctrl+C within 2s force quits.[/dim]\n"
+    )
 
     db = get_database()
     session = db.get_session()
@@ -704,13 +984,15 @@ def apply(
 
     resume = user_data_repo.get_resume()
     if not resume:
-        console.print("[red]No resume uploaded. Run 'jobcli resume upload' first.[/red]")
+        console.print(
+            "[red]No resume in the local database.[/red] Run "
+            "[cyan]resume-upload --pdf <file.pdf> --json <file.json>[/cyan]."
+        )
         raise typer.Exit(1)
 
     jobs = []
 
     if url:
-        # Single-job mode
         job = job_repo.get_by_url(url)
         if not job:
             job = job_repo.create(
@@ -721,28 +1003,25 @@ def apply(
         jobs = [job]
 
     else:
-        # Batch mode — either explicit --batch flag or plain `jobcli apply`
         jobs = job_repo.list_pending()
         if sort.lower() == "newest":
-            jobs.reverse()  # list_pending is ASC (oldest) by default
+            jobs.reverse()
 
         if limit:
             jobs = jobs[:limit]
 
         if not jobs:
-            console.print("[yellow]No pending jobs found. Run 'jobcli discover' first.[/yellow]")
+            console.print("[yellow]No pending jobs found. Run [cyan]discover[/cyan] first.[/yellow]")
             raise typer.Exit(0)
 
-    # Filter jobs to only include those supported by extension strategies
-    # (Exclude Workday which require logins, but allow LinkedIn for manual looping)
-    
     original_count = len(jobs)
     jobs = [
-        j for j in jobs 
+        j
+        for j in jobs
         if any(d in j.url.lower() for d in SUPPORTED_DOMAINS)
         and "myworkdayjobs.com" not in j.url.lower()
     ]
-    
+
     if len(jobs) < original_count:
         console.print(f"[yellow]Filtered out {original_count - len(jobs)} unsupported jobs (Workday, etc.).[/yellow]")
 
@@ -755,76 +1034,195 @@ def apply(
 
     engine = ApplicationEngine(config, resume, db)
 
+    # Tally counters so the summary panel is meaningful regardless of how
+    # we exit (clean finish, ExitRequested, or unexpected crash).
+    submitted = 0
+    skipped = 0
+    failed = 0
+    processed = 0
+    exit_reason: Optional[str] = None
+
     try:
-        engine.start_session()
-        for i, job in enumerate(jobs, 1):
-            console.print(f"[bold]Job {i}/{len(jobs)}[/bold]: {job.url}")
-            try:
-                status = engine.apply_to_job(job)
-                console.print(f"Status: [green]{status.value}[/green]\n")
-            except KeyboardInterrupt:
-                console.print("\n[yellow]Interrupted by user[/yellow]")
-                break
-            except Exception as e:
-                console.print(f"[red]Error: {e}[/red]\n")
-                continue
+        try:
+            engine.start_session()
+            for i, job in enumerate(jobs, 1):
+                # Allow Ctrl+C between jobs to exit before opening a new tab.
+                if is_exit_requested():
+                    exit_reason = "Ctrl+C between jobs"
+                    break
+                console.print(f"[bold]Job {i}/{len(jobs)}[/bold]: {job.url}")
+                try:
+                    status = engine.apply_to_job(job)
+                    console.print(f"Status: [green]{status.value}[/green]\n")
+                    processed += 1
+                    # Match on the enum value to avoid importing every status.
+                    sv = getattr(status, "value", str(status)).lower()
+                    if "submit" in sv or "success" in sv or "complete" in sv:
+                        submitted += 1
+                    elif "skip" in sv or "cancel" in sv:
+                        skipped += 1
+                    else:
+                        failed += 1
+                except ExitRequested as ex:
+                    exit_reason = ex.reason
+                    break
+                except KeyboardInterrupt:
+                    # Fallback path if the SIGINT handler wasn't installed
+                    # (e.g. running under an embedded interpreter). Treated
+                    # identically to an ExitRequested.
+                    exit_reason = "Ctrl+C (KeyboardInterrupt)"
+                    break
+                except Exception as e:
+                    console.print(f"[red]Error: {e}[/red]\n")
+                    failed += 1
+                    processed += 1
+                    continue
+        except ExitRequested as ex:
+            # ExitRequested raised by ``engine.start_session()`` (i.e. user
+            # quit during browser startup) — handled identically to the
+            # per-job path, just no jobs processed.
+            exit_reason = ex.reason
+        except KeyboardInterrupt:
+            exit_reason = "Ctrl+C during startup"
     finally:
-        engine.stop_session()
+        # ``stop_session`` closes the Playwright browser context. Guarded
+        # because a Ctrl+C during start_session() leaves no browser to
+        # close and we don't want the cleanup itself to throw.
+        try:
+            engine.stop_session()
+        except Exception as e:
+            console.print(f"[dim red]Warning: error during session shutdown: {e}[/dim red]")
 
     session.close()
-    console.print("[bold green]Application process completed[/bold green]")
-    
-    # Auto-sync knowledge if enabled (default to true)
+
+    # -----------------------------------------------------------------
+    # Final summary — always rendered, branded for both clean-finish and
+    # user-initiated exit so the operator immediately sees what got done.
+    # -----------------------------------------------------------------
+    from rich.panel import Panel
+    tally = (
+        f"Processed: [bold]{processed}[/bold] of {len(jobs)}\n"
+        f"Submitted: [green]{submitted}[/green]   "
+        f"Skipped: [yellow]{skipped}[/yellow]   "
+        f"Failed: [red]{failed}[/red]"
+    )
+    if exit_reason:
+        console.print(
+            Panel(
+                f"[yellow]Exit requested:[/yellow] {exit_reason}\n\n{tally}",
+                title="[bold yellow]>>> JobCLI stopped at your request <<<[/bold yellow]",
+                border_style="yellow",
+                expand=True,
+            )
+        )
+    else:
+        console.print(
+            Panel(
+                tally,
+                title="[bold green]>>> Application run complete <<<[/bold green]",
+                border_style="green",
+                expand=True,
+            )
+        )
+
+    # Sync learned patterns even on an early-exit run — the data we
+    # captured before the user quit is still valuable for future runs.
     try:
         from jobcli.sync.manager import SyncManager
+
         db = get_database()
         with db.get_session() as sync_session:
             manager = SyncManager(sync_session)
             console.print("\n[dim]Auto-syncing learned patterns...[/dim]")
             manager.perform_sync()
-    except Exception as e:
-        # Silently fail auto-sync to avoid confusing the user at the very end
+    except Exception:
         pass
+
+    if exit_reason:
+        # User-initiated exit is success (0), not an error — consistent
+        # with Unix shells (Ctrl+C generally exits programs gracefully).
+        raise typer.Exit(0)
+
+    _print_next_step("discover", "refresh listings, then run apply again")
+
+
+@app.command()
+def apply(
+    url: Optional[str] = typer.Option(None, "--url", "-u", help="Single job URL to apply"),
+    batch: bool = typer.Option(
+        False,
+        "--batch",
+        help="[Deprecated] No effect — `jobcli apply` already applies to all pending jobs when no --url is given.",
+    ),
+    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of jobs when applying to many"),
+    sort: str = typer.Option("oldest", "--sort", "-s", help="Sort when applying to many: oldest | newest"),
+    mode: str = typer.Option(
+        "supervised",
+        "--mode", "-m",
+        help="Interaction mode: auto (fully autonomous), supervised (AI + human checkpoints, default), manual (pause at every step)",
+    ),
+) -> None:
+    """Apply to all pending jobs from ``discover`` (or one job with ``--url``).
+
+    Flow: ``login`` → ``resume-upload`` → ``discover`` → ``apply``.
+
+    Modes: **auto** (minimal stops), **supervised** (default), **manual** (approve each batch).
+    """
+    _ = batch  # accepted for backward compatibility with scripts using ``--batch``
+    _run_apply(url=url, limit=limit, sort=sort, mode=mode)
 
 
 @app.command()
 def discover(
-    headless: bool = typer.Option(False, help="Run browser in headless mode"),
+    headless: bool = typer.Option(False, help="Run browser in headless mode (legacy UI mode only)"),
+    legacy_ui: bool = typer.Option(
+        False,
+        "--legacy-ui",
+        help="Use Playwright user_dashboard scrape instead of WBL API (also: WBOX_DISCOVER_MODE=browser)",
+    ),
 ) -> None:
-    """Discover jobs from Whitebox Learning dashboard."""
+    """Discover jobs from Whitebox Learning via API (GET /positions/cli_window).
+
+    After login, local jobs are replaced with a mirror of the server listing set
+    (default: all time, ``open`` only), paged until every row is fetched — same
+    data model as the dashboard Jobs grid. Tune with ``JOBCLI_DISCOVER_DAYS``,
+    ``JOBCLI_DISCOVER_PAGE_SIZE``, ``JOBCLI_DISCOVER_STATUS``. Use ``--legacy-ui``
+    only for the old dashboard scraper.
+    """
     console.print("[bold cyan]Job Discovery[/bold cyan]\n")
 
     config = get_config()
+    _require_wbl_credentials_for_discovery(config)
     ensure_configured(config)
 
     db = get_database()
     session = db.get_session()
 
     try:
-        job_repo = JobRepository(session)
-        
-        # 1. Deduplicate first
-        with console.status("[bold green]Erasing duplicate links from database..."):
-            removed = job_repo.deduplicate_jobs()
-        if removed > 0:
-            console.print(f"[dim]✓ Cleaned up {removed} duplicate job(s).[/dim]")
-            
-        # 2. Discover
-        discoverer = WboxDiscoverer(session)
-        with console.status("[bold green]Discovering jobs from Wbox dashboard..."):
-            new_jobs = discoverer.discover(headless=headless)
+        discoverer = WboxDiscoverer(session, config=config)
+        with console.status("[bold green]Fetching jobs from WBL API..."):
+            new_jobs = discoverer.discover(headless=headless, legacy_ui=legacy_ui)
 
-        # 3. Show Dashboard Summary
         print_dashboard_summary(session)
-        
+
         if new_jobs:
-            console.print(f"\n[bold green]✓ Discovered {len(new_jobs)} new jobs in this session![/bold green]")
-            console.print("Run [cyan]jobcli apply --batch[/cyan] to start applying.")
+            console.print(f"\n[bold green]✓ Imported {len(new_jobs)} job(s) from WBL.[/bold green]")
+            _print_next_step("apply", "start applying to pending jobs")
         else:
-            console.print("\n[yellow]No new jobs found in this scan.[/yellow]")
+            console.print("\n[yellow]No jobs imported (empty window or missing credentials).[/yellow]")
+            _print_next_step("login", "verify credentials & API base URL, then re-run discover")
 
     except Exception as e:
-        console.print(f"\n[red]Discovery failed: {e}[/red]")
+        msg = str(e)
+        # When SyncClient produced its own classified, multi-line "Next step:"
+        # block, render it as-is without the generic panel below it.
+        if "Authentication failed against all WBL API candidates" in msg:
+            console.print("\n[red]Discovery failed: WBL login failed.[/red]")
+            for line in msg.splitlines()[1:]:  # skip the leading "WBL login failed." line
+                console.print(line)
+        else:
+            console.print(f"\n[red]Discovery failed: {e}[/red]")
+            _print_next_step("login", "fix credentials / API base URL, then re-run discover")
     finally:
         session.close()
 
@@ -835,13 +1233,14 @@ def open_dashboard() -> None:
     console.print("[bold cyan]Opening Dashboard[/bold cyan]\n")
     
     config = get_config()
+    _require_wbl_credentials_for_discovery(config)
     ensure_configured(config)
     
     db = get_database()
     session = db.get_session()
     
     try:
-        discoverer = WboxDiscoverer(session)
+        discoverer = WboxDiscoverer(session, config=config)
         discoverer.open_interactive()
     except KeyboardInterrupt:
         console.print("\n[yellow]Browser closed.[/yellow]")
@@ -1008,7 +1407,7 @@ def agent(
     ensure_configured(config, require_job_board=False)
     
     if not config.default_llm_provider:
-        console.print("[red]No default LLM provider configured. Run 'jobcli login' to set one.[/red]")
+        console.print("[red]No default LLM provider configured. Run [cyan]login[/cyan] to set one.[/red]")
         raise typer.Exit(1)
         
     try:
@@ -1018,6 +1417,14 @@ def agent(
         console.print("\n[yellow]Agent stopped by user.[/yellow]")
     except Exception as e:
         console.print(f"\n[red]Fatal Error: {e}[/red]")
+
+
+@app.command("reset")
+def cli_reset(
+    force: bool = typer.Option(False, "--force", "-f", help="Same as jobcli db reset --force"),
+) -> None:
+    """Alias for ``jobcli db reset`` — full local SQLite database wipe (keeps ~/.jobcli logs)."""
+    _run_db_reset(force)
 
 
 if __name__ == "__main__":

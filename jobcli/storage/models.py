@@ -34,6 +34,13 @@ class JobModel(Base):
     evaluation_report_path = Column(String(1000), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    # WBL API / listing metadata (see Database._migrate_sqlite_schema)
+    listing_created_at = Column(DateTime, nullable=True)
+    normalized_url = Column(String(1000), nullable=True)
+    is_cli_friendly = Column(Boolean, nullable=True)
+    is_already_applied = Column(Boolean, nullable=True)
+    source_status = Column(String(100), nullable=True)
+    external_id = Column(String(64), nullable=True)
 
 
 class ApplicationLogModel(Base):
@@ -225,6 +232,18 @@ class Database:
                 if "resolved_url" not in cols:
                     with self.engine.begin() as conn:
                         conn.execute(text("ALTER TABLE jobs ADD COLUMN resolved_url VARCHAR(1000)"))
+                job_extra = [
+                    ("listing_created_at", "DATETIME"),
+                    ("normalized_url", "VARCHAR(1000)"),
+                    ("is_cli_friendly", "INTEGER"),
+                    ("is_already_applied", "INTEGER"),
+                    ("source_status", "VARCHAR(100)"),
+                    ("external_id", "VARCHAR(64)"),
+                ]
+                with self.engine.begin() as conn:
+                    for col_name, col_type in job_extra:
+                        if col_name not in cols:
+                            conn.execute(text(f"ALTER TABLE jobs ADD COLUMN {col_name} {col_type}"))
 
             # Back-fill job_id linkage columns on the memory tables so that
             # rows written from now on carry the originating job, while older

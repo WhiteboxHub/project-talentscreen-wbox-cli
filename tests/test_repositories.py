@@ -59,11 +59,11 @@ def test_confidence_recomputed_on_update(session):
     repo = FieldAnswerRepository(session)
     label = "cover letter"
     # 1 success
-    repo.save_answer("Cover Letter", label, "Motivated...", ATSType.GREENHOUSE, success=True)
+    repo.save_answer("Cover Letter", label, "Motivated...", ATSType.GREENHOUSE, success=True, source="auto")
     # 2nd success
-    repo.save_answer("Cover Letter", label, "Motivated...", ATSType.GREENHOUSE, success=True)
+    repo.save_answer("Cover Letter", label, "Motivated...", ATSType.GREENHOUSE, success=True, source="auto")
     # 1 failure
-    repo.save_answer("Cover Letter", label, "Motivated...", ATSType.GREENHOUSE, success=False)
+    repo.save_answer("Cover Letter", label, "Motivated...", ATSType.GREENHOUSE, success=False, source="auto")
     row = repo.get_raw_by_label(label, ATSType.GREENHOUSE)
     # 2 successes / 3 total = 0.667
     assert row.success_count == 2
@@ -74,7 +74,7 @@ def test_confidence_recomputed_on_update(session):
 def test_confidence_record_outcome(session):
     """record_outcome increments counts without changing the stored value."""
     repo = FieldAnswerRepository(session)
-    repo.save_answer("Years Exp", "years_exp", "5", ATSType.WORKDAY, success=True)
+    repo.save_answer("Years Exp", "years_exp", "5", ATSType.WORKDAY, success=True, source="auto")
     # Record 2 more successes without re-saving
     repo.record_outcome("years_exp", ATSType.WORKDAY, success=True)
     repo.record_outcome("years_exp", ATSType.WORKDAY, success=True)
@@ -146,7 +146,7 @@ def test_get_by_normalized_label_below_threshold_returns_none(session):
     """A record below the confidence gate is not returned by get_by_normalized_label."""
     repo = FieldAnswerRepository(session)
     # 1 success only — below MIN_SUCCESS_COUNT=3
-    repo.save_answer("Pronouns", "pronouns", "They/Them", ATSType.GREENHOUSE, success=True)
+    repo.save_answer("Pronouns", "pronouns", "They/Them", ATSType.GREENHOUSE, success=True, source="auto")
     result = repo.get_by_normalized_label("pronouns", ATSType.GREENHOUSE)
     assert result is None
 
@@ -154,7 +154,7 @@ def test_get_by_normalized_label_below_threshold_returns_none(session):
 def _make_high_confidence_answer(repo, label, ats_type, value="Yes"):
     """Helper: insert MIN_SUCCESS_COUNT successes so the row passes the gate."""
     for _ in range(MIN_SUCCESS_COUNT):
-        repo.save_answer(label.title(), label.lower(), value, ats_type, success=True)
+        repo.save_answer(label.title(), label.lower(), value, ats_type, success=True, source="auto")
 
 
 def test_get_by_normalized_label_above_threshold_returns_row(session):
@@ -171,7 +171,7 @@ def test_get_by_normalized_label_above_threshold_returns_row(session):
 def test_get_universal_below_threshold_returns_none(session):
     """Universal lookup also respects the confidence gate."""
     repo = FieldAnswerRepository(session)
-    repo.save_answer("Years", "years", "5", ATSType.UNKNOWN, success=True)
+    repo.save_answer("Years", "years", "5", ATSType.UNKNOWN, success=True, source="auto")
     assert repo.get_universal("years") is None
 
 
@@ -324,7 +324,11 @@ def test_job_create_strips_tracking_query_params(test_database):
 
 def test_unique_url_constraint(test_database):
     """Duplicate URLs are rejected."""
-    job1 = Job(url="https://example.com/job/1")
+    job1 = Job(
+        url="https://example.com/job/1",
+        is_cli_friendly=True,
+        is_already_applied=False,
+    )
     with get_db_session(test_database) as session:
         repo = JobRepository(session)
         repo.create(job1)
@@ -332,7 +336,79 @@ def test_unique_url_constraint(test_database):
     with pytest.raises(Exception):
         with get_db_session(test_database) as session:
             repo = JobRepository(session)
-            repo.create(Job(url="https://example.com/job/1"))
+            repo.create(
+                Job(
+                    url="https://example.com/job/1",
+                    is_cli_friendly=True,
+                    is_already_applied=False,
+                )
+            )
+
+
+def test_clear_job_related_data_keeps_config(test_database):
+    """clear_job_related_data removes jobs but not config rows."""
+    from datetime import datetime, timedelta
+
+    from jobcli.storage.repositories import ConfigRepository
+
+    listing_at = datetime.utcnow() - timedelta(days=1)
+    job = Job(
+        url="https://boards.greenhouse.io/acme/jobs/999",
+        title="Role",
+        scan_source="wbox_api",
+        listing_created_at=listing_at,
+        is_cli_friendly=True,
+        is_already_applied=False,
+    )
+    with get_db_session(test_database) as session:
+        ConfigRepository(session).set("keep_me", "yes")
+        JobRepository(session).create(job)
+
+    with get_db_session(test_database) as session:
+        n = JobRepository(session).clear_job_related_data()
+        assert n == 1
+        assert JobRepository(session).get_by_url("https://boards.greenhouse.io/acme/jobs/999") is None
+
+    with get_db_session(test_database) as session:
+        assert ConfigRepository(session).get("keep_me") == "yes"
+
+
+def test_get_dashboard_stats_wbox_api_window(test_database):
+    """Stats use listing_created_at + wbox_api, not local created_at."""
+    from datetime import datetime, timedelta
+
+    listing_at = datetime.utcnow() - timedelta(days=1)
+    old_listing = datetime.utcnow() - timedelta(days=30)
+
+    with get_db_session(test_database) as session:
+        repo = JobRepository(session)
+        repo.create(
+            Job(
+                url="https://boards.greenhouse.io/a/jobs/1",
+                scan_source="wbox_api",
+                listing_created_at=listing_at,
+                is_cli_friendly=True,
+                is_already_applied=False,
+                status=ApplicationStatus.PENDING,
+            )
+        )
+        repo.create(
+            Job(
+                url="https://boards.greenhouse.io/a/jobs/2",
+                scan_source="wbox_api",
+                listing_created_at=old_listing,
+                is_cli_friendly=True,
+                is_already_applied=True,
+                status=ApplicationStatus.SUBMITTED,
+            )
+        )
+
+    with get_db_session(test_database) as session:
+        stats = JobRepository(session).get_dashboard_stats(days=7)
+        assert stats["total_wbl"] == 1
+        assert stats["applied_count"] == 0
+        assert stats["remaining_count"] == 1
+        assert stats["cli_friendly"] == 1
 
 
 if __name__ == "__main__":

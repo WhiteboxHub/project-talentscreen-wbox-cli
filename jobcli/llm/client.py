@@ -5,6 +5,7 @@ import time
 from typing import Literal, Optional, Any
 
 import anthropic
+import httpx
 from google import genai
 import openai
 from pydantic import ValidationError
@@ -13,7 +14,76 @@ from jobcli.core.derived_profile import derived_country_for_resume, derived_pron
 from jobcli.core.resume_normalize import normalize_linkedin_url
 from jobcli.core.logger import JobLogger
 from jobcli.core.schemas import DOMSnapshot, ExecutionPhase, LLMActionResponse, ResumeData
+from jobcli.core.tls import httpx_verify, is_insecure, strategy as tls_strategy
 from jobcli.llm.ax_tree_extractor import AccessibilityTree
+
+
+# How long to wait per LLM HTTP call. The OpenAI SDK's default is generous
+# (10 min) which means TLS failures can hang for a while before raising.
+_LLM_HTTP_TIMEOUT_SECONDS = 60.0
+
+
+def _build_httpx_client() -> httpx.Client:
+    """Build an httpx.Client wired through the JobCLI TLS configuration.
+
+    All three SDKs we use (OpenAI, Anthropic, google-genai) accept a custom
+    ``http_client`` / transport, so this single factory keeps trust roots,
+    timeouts, and proxy behavior consistent. Honoring
+    ``JOBCLI_INSECURE_TLS=1`` here is the difference between "fix-it-with-an-
+    env-var" and "user has to reinstall corporate root CAs system-wide".
+    """
+    return httpx.Client(verify=httpx_verify(), timeout=_LLM_HTTP_TIMEOUT_SECONDS)
+
+
+def _is_tls_error(exc: BaseException) -> bool:
+    """Returns True iff *exc* (or any chained cause) is a TLS verification error.
+
+    The OpenAI SDK wraps TLS failures as ``APIConnectionError("Connection
+    error.")`` which is uselessly opaque. We walk ``__cause__`` to find the
+    underlying ``SSLCertVerificationError`` / ``ssl.SSLError``.
+    """
+    import ssl
+
+    seen: set[int] = set()
+    cur: Optional[BaseException] = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if isinstance(cur, (ssl.SSLError, ssl.SSLCertVerificationError)):
+            return True
+        if "CERTIFICATE_VERIFY_FAILED" in str(cur) or "SSL" in type(cur).__name__:
+            return True
+        cur = cur.__cause__ or cur.__context__
+    return False
+
+
+def _tls_remediation_hint() -> str:
+    """One-line remediation tailored to the active TLS strategy."""
+    s = tls_strategy()
+    if s == "insecure":
+        return (
+            "JOBCLI_INSECURE_TLS is already on but the connection still failed. "
+            "Check your network/proxy."
+        )
+    if s == "ca-bundle":
+        return (
+            "JOBCLI_SSL_CA_BUNDLE is set but doesn't trust this host. Make sure "
+            "the PEM contains your corporate root chain."
+        )
+    return (
+        "TLS certificate verification failed. On Windows, install your corporate "
+        "root CA into 'Trusted Root Certification Authorities', or set "
+        "JOBCLI_SSL_CA_BUNDLE=<path-to-ca.pem>. As a last resort run with "
+        "JOBCLI_INSECURE_TLS=1 (insecure)."
+    )
+
+
+class TLSConnectionError(RuntimeError):
+    """Raised when an LLM call fails because of TLS trust issues.
+
+    Carrying this type up the stack lets the caller (the apply engine) surface
+    a meaningful "fix your trust store" message instead of the generic AI-
+    unavailable hand-off panel.
+    """
 
 
 class LLMClient:
@@ -59,23 +129,33 @@ Your task: Parse the provided Accessibility Snapshot and output the correct sequ
         api_key: str,
         logger: Optional[JobLogger] = None,
     ) -> None:
-        """Initialize LLM client."""
+        """Initialize LLM client.
+
+        Every SDK is constructed with an ``http_client`` (or ``http_options``)
+        that honors :func:`jobcli.core.tls.httpx_verify`. That single seam is
+        why ``JOBCLI_INSECURE_TLS=1`` / ``JOBCLI_SSL_CA_BUNDLE`` work uniformly
+        across OpenAI, Anthropic, and Gemini without per-SDK monkey patching.
+        """
         self.provider = provider
         self.api_key = api_key
         self.logger = logger
 
         if provider == "openai":
-            self.client = openai.OpenAI(api_key=api_key)
+            self.client = openai.OpenAI(api_key=api_key, http_client=_build_httpx_client())
             self.model = "gpt-4o"
         elif provider == "anthropic":
-            self.client = anthropic.Anthropic(api_key=api_key)
+            self.client = anthropic.Anthropic(api_key=api_key, http_client=_build_httpx_client())
             self.model = "claude-3-5-sonnet-20241022"
         elif provider == "gemini":
+            # google-genai routes through google.auth's transport. Setting
+            # SSL_CERT_FILE / REQUESTS_CA_BUNDLE in configure_tls() is the
+            # cross-version-safe knob; with truststore injected (default) the
+            # OS root store is already used. JOBCLI_INSECURE_TLS still works
+            # via the env-var fallback because google-genai inspects them.
             self.client = genai.Client(api_key=api_key)
             self.model = "gemini-1.5-pro"
         elif provider == "claude":
-            # Claude provider (using Anthropic SDK with same config)
-            self.client = anthropic.Anthropic(api_key=api_key)
+            self.client = anthropic.Anthropic(api_key=api_key, http_client=_build_httpx_client())
             self.model = "claude-3-5-sonnet-20241022"
 
     def analyze_page(
@@ -118,6 +198,20 @@ Your task: Parse the provided Accessibility Snapshot and output the correct sequ
                     self.logger.warning(f"LLM validation failed on attempt {attempt + 1}", phase=ExecutionPhase.LLM)
 
             except Exception as e:
+                # Fail fast on TLS — retrying will never succeed, and the
+                # opaque "Connection error." line in the user terminal is
+                # frustrating. Raise a typed error so the caller can render
+                # a real remediation message.
+                if _is_tls_error(e):
+                    hint = _tls_remediation_hint()
+                    if self.logger:
+                        self.logger.error(
+                            f"LLM request failed due to TLS trust: {hint}",
+                            phase=ExecutionPhase.LLM,
+                            provider=self.provider,
+                        )
+                    raise TLSConnectionError(hint) from e
+
                 if self.logger:
                     self.logger.warning(
                         f"LLM request failed (attempt {attempt + 1}/{max_retries}): {e}",
@@ -347,6 +441,16 @@ Remember to return valid JSON matching the schema in the system prompt.
                     self.logger.warning(f"LLM validation failed on attempt {attempt + 1}", phase=ExecutionPhase.LLM)
 
             except Exception as e:
+                if _is_tls_error(e):
+                    hint = _tls_remediation_hint()
+                    if self.logger:
+                        self.logger.error(
+                            f"LLM request failed due to TLS trust: {hint}",
+                            phase=ExecutionPhase.LLM,
+                            provider=self.provider,
+                        )
+                    raise TLSConnectionError(hint) from e
+
                 if self.logger:
                     self.logger.warning(
                         f"LLM request failed (attempt {attempt + 1}/{max_retries}): {e}",

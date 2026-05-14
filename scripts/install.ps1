@@ -164,14 +164,7 @@ if ($CurrentUserPath -notlike "*$BinDir*") {
     $NeedsRestart = $false
 }
 
-# -- Step 7: Copy .env template ---------------------------------------
-$EnvFile     = Join-Path $InstallDir ".env"
-$EnvTemplate = Join-Path $SrcDir ".env.template"
-
-if (-not (Test-Path $EnvFile) -and (Test-Path $EnvTemplate)) {
-    Copy-Item $EnvTemplate $EnvFile
-    Write-Step "Created default config at $EnvFile."
-}
+# -- Step 7: (no .env — config is saved interactively via `jobcli login`) ---
 
 # -- Done! -------------------------------------------------------------
 Write-Host ""

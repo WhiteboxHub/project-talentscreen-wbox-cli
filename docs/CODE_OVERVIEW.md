@@ -89,7 +89,7 @@ wbox-cli/
 | `scan`            | Zero-token API scan of Greenhouse/Lever/Ashby/BambooHR boards.         |
 | `doctor`          | Validate Playwright, SQLite, config, resume; optional Wbox smoke test. |
 
-`get_config()` enforces precedence **`.env` → SQLite `config` table → schema defaults**, so rotating an API key in `.env` takes effect on the next run.
+`get_config()` reads only the local SQLite `config` table (no `.env` is loaded). Settings are populated by `login`, `resume-upload`, `setup`, or `config --key … --set …`.
 
 ---
 
@@ -225,10 +225,10 @@ Thin façades over SQLAlchemy: `JobRepository`, `ApplicationLogRepository`, `Lea
 
 ## 11. Configuration & Files
 
-- `~/.jobcli/config.json` — main config (also persisted to SQLite).
-- `~/.jobcli/jobcli.db` — SQLite DB (jobs, learned locators, memory, etc.).
+- `~/.jobcli/jobcli.db` — SQLite DB (credentials, LLM keys, resume paths, jobs, learned locators, memory, etc.). The single source of truth.
+- `~/.jobcli/extension_unpacked/` — TalentScreen Chrome extension (downloaded by `jobcli setup`).
 - `logs/<job-id>/…` — per-job log dir with screenshots and DOM snapshots.
-- `.env` (project root) — `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `JOBCLI_USERNAME`, `JOBCLI_PASSWORD`, `WBOX_LOGIN_URL`, `WBOX_DASHBOARD_URL`, `HEADLESS`, `LINKEDIN_*`, etc.
+- No `.env` file is read or written by the CLI. Optional runtime knobs (e.g. `DATABASE_PATH`, `JOBCLI_DISCOVER_*`, `JOBCLI_SSL_CA_BUNDLE`) are read directly from the shell environment.
 - `config/portals.example.yml`, `config/profile.example.yml` — templates for `jobcli scan`.
 - `example_resume.json`, `example_resume_standard.json` — reference resume schema fixtures.
 
@@ -250,7 +250,7 @@ Entry point: `jobcli = "jobcli.cli.main:app"` (defined in `[project.scripts]`).
 ## 13. End-to-End Flow (typical apply run)
 
 1. **`jobcli discover`** — `WboxDiscoverer` logs into the Whitebox dashboard, scrapes new job rows, inserts into `jobs` table.
-2. **`jobcli apply --batch --mode supervised`** — for every pending job:
+2. **`jobcli apply --mode supervised`** — for every pending job:
    1. Engine launches Chromium with **stealth** flags + init script.
    2. `ATSDetector` identifies the platform → `ATSHandlerFactory` returns a dedicated handler.
    3. Handler / `ApplyButtonLocator` clicks Apply (with iframe reach-through and "adopt" logic for new tabs).

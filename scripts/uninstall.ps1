@@ -6,35 +6,56 @@
 # ──────────────────────────────────────────────────────────────────────
 
 $InstallDir = Join-Path $env:USERPROFILE ".jobcli"
-$Wrapper    = Join-Path $env:USERPROFILE ".local\bin\jobcli.cmd"
+$BinDir     = Join-Path $env:USERPROFILE ".local\bin"
+$Wrappers   = @(
+    (Join-Path $BinDir "wboxcli.cmd"),
+    (Join-Path $BinDir "jobcli.cmd")
+)
 
 Write-Host ""
-Write-Host "JobCLI — Uninstaller" -ForegroundColor Red
+Write-Host "JobCLI - Uninstaller" -ForegroundColor Red
 Write-Host ""
 
-$confirm = Read-Host "This will delete $InstallDir and $Wrapper. Continue? [y/N]"
+$confirm = Read-Host "This will delete $InstallDir and the wboxcli/jobcli shims in $BinDir. Continue? [y/N]"
 if ($confirm -notmatch "^[Yy]$") {
     Write-Host "Cancelled." -ForegroundColor Yellow
     exit 0
 }
 
-# Remove wrapper
-if (Test-Path $Wrapper) {
-    Remove-Item -Force $Wrapper
-    Write-Host "[✓] Removed $Wrapper" -ForegroundColor Green
-} else {
-    Write-Host "[—] Wrapper not found at $Wrapper" -ForegroundColor Yellow
+# Remove wrappers
+foreach ($w in $Wrappers) {
+    if (Test-Path $w) {
+        try {
+            Remove-Item -Force $w
+            Write-Host "[OK]    Removed $w" -ForegroundColor Green
+        } catch {
+            Write-Host "[WARN]  Could not remove $w : $_" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "[--]    Not found: $w" -ForegroundColor Yellow
+    }
 }
 
-# Remove install dir
+# Remove install dir (retry once after a short pause in case Python locked the venv)
 if (Test-Path $InstallDir) {
-    Remove-Item -Recurse -Force $InstallDir
-    Write-Host "[✓] Removed $InstallDir" -ForegroundColor Green
+    try {
+        Remove-Item -Recurse -Force $InstallDir -ErrorAction Stop
+        Write-Host "[OK]    Removed $InstallDir" -ForegroundColor Green
+    } catch {
+        Start-Sleep -Seconds 1
+        try {
+            Remove-Item -Recurse -Force $InstallDir -ErrorAction Stop
+            Write-Host "[OK]    Removed $InstallDir" -ForegroundColor Green
+        } catch {
+            Write-Host "[FAIL]  Could not delete $InstallDir : $_" -ForegroundColor Red
+            Write-Host "        Close any open terminals running wboxcli/jobcli and re-run this script." -ForegroundColor Yellow
+        }
+    }
 } else {
-    Write-Host "[—] Install directory not found at $InstallDir" -ForegroundColor Yellow
+    Write-Host "[--]    Install directory not found at $InstallDir" -ForegroundColor Yellow
 }
 
 Write-Host ""
 Write-Host "JobCLI has been uninstalled." -ForegroundColor Green
-Write-Host "Note: The PATH entry was left intact — remove it manually from System Environment Variables if you wish." -ForegroundColor Yellow
+Write-Host "Note: The PATH entry was left intact - remove $BinDir manually from System Environment Variables if you wish." -ForegroundColor Yellow
 Write-Host ""

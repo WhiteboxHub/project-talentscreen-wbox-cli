@@ -18,26 +18,29 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 INSTALL_DIR="$HOME/.jobcli"
-WRAPPER="$HOME/.local/bin/jobcli"
+BIN_DIR="$HOME/.local/bin"
+WRAPPERS=("$BIN_DIR/wboxcli" "$BIN_DIR/jobcli")
 
 echo ""
 echo -e "${BOLD}${RED}JobCLI — Uninstaller${NC}"
 echo ""
 
 # Confirm
-read -r -p "This will delete $INSTALL_DIR and $WRAPPER. Continue? [y/N] " confirm
+read -r -p "This will delete $INSTALL_DIR and the wboxcli/jobcli shims in $BIN_DIR. Continue? [y/N] " confirm
 if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
     echo -e "${YELLOW}Cancelled.${NC}"
     exit 0
 fi
 
-# Remove wrapper
-if [ -f "$WRAPPER" ]; then
-    rm -f "$WRAPPER"
-    echo -e "${GREEN}[✓]${NC} Removed $WRAPPER"
-else
-    echo -e "${YELLOW}[—]${NC} Wrapper not found at $WRAPPER"
-fi
+# Remove wrappers
+for w in "${WRAPPERS[@]}"; do
+    if [ -f "$w" ] || [ -L "$w" ]; then
+        rm -f "$w"
+        echo -e "${GREEN}[✓]${NC} Removed $w"
+    else
+        echo -e "${YELLOW}[—]${NC} Not found: $w"
+    fi
+done
 
 # Remove install dir
 if [ -d "$INSTALL_DIR" ]; then
@@ -49,5 +52,5 @@ fi
 
 echo ""
 echo -e "${GREEN}JobCLI has been uninstalled.${NC}"
-echo -e "${YELLOW}Note:${NC} The PATH entry in your shell profile (~/.zshrc) was left intact — remove it manually if you wish."
+echo -e "${YELLOW}Note:${NC} The PATH entry in your shell profile (~/.zshrc or ~/.bashrc) was left intact — remove it manually if you wish."
 echo ""
