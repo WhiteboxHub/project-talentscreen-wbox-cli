@@ -501,8 +501,10 @@ def _dispatch(raw: str):
         _exec(["apply"] + args)
         return
 
-    # Resume alias
-    if cmd == "resume":
+    # Resume aliases — accept the short form ``resume`` *and* the full
+    # underlying CLI command ``resume-upload`` so users who copy a command
+    # from the README into the TUI don't get an "unknown command" wall.
+    if cmd in ("resume", "resume-upload"):
         _exec(["resume-upload"] + args)
         return
 
