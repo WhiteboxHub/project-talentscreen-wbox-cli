@@ -426,7 +426,7 @@ def setup() -> None:
         console.print("    [yellow]AI form-filling will be disabled. Run [cyan]login[/cyan] and add at least one LLM key.[/yellow]")
 
     if has_wbox:
-        api_hint = (config.sync_server_url or "default https://whitebox-learning.com/api").strip()
+        api_hint = (config.sync_server_url or "default https://api.whitebox-learning.com/api").strip()
         console.print(f"  [green]✓ Whitebox credentials for: {config.job_board_username}[/green]")
         console.print(f"    [dim]API base: {api_hint}[/dim]")
     else:
@@ -637,12 +637,15 @@ def login(
     if job_board_password:
         config.job_board_password = job_board_password
 
-    # Auto-detect the WBL API base URL. Two endpoints are hardcoded:
-    #   1. https://whitebox-learning.com/api   (production)
-    #   2. http://127.0.0.1:8000/api           (local backend)
-    # Probe both with the supplied credentials and save the first that
-    # authenticates. The user is never prompted for the URL, but if the probe
-    # uncovers actionable issues (bad creds, TLS) we surface a concise warning.
+    # Auto-detect the WBL API base URL. Only one endpoint is probed:
+    #   - https://api.whitebox-learning.com/api   (production)
+    # Probe it with the supplied credentials and save it if authentication
+    # succeeds. The legacy ``127.0.0.1:8000`` localhost probe was removed
+    # because it added noise to error messages on machines with no local
+    # backend running. Developers who need a local backend can still set it
+    # explicitly via ``jobcli config --key sync_server_url --set <url>``.
+    # If the probe uncovers actionable issues (bad creds, TLS) we surface a
+    # concise warning.
     from jobcli.sync.client import (
         probe_wbl_api_detailed,
         WBL_API_CANDIDATES,
@@ -742,7 +745,7 @@ def config_cmd(
 
     Use ``sync_server_url`` for the WBL API base (aliases: JOBCLI_SYNC_SERVER_URL, NEXT_PUBLIC_API_URL), e.g.:
 
-        jobcli config --key sync_server_url --set http://127.0.0.1:8000/api
+        jobcli config --key sync_server_url --set https://api.whitebox-learning.com/api
     """
     config = get_config()
 

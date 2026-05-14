@@ -9,14 +9,22 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_WBL_API_BASE = "https://whitebox-learning.com/api"
+_DEFAULT_WBL_API_BASE = "https://api.whitebox-learning.com/api"
 
 # Hardcoded API base URL candidates tried automatically in order. The first one
 # that authenticates wins and is cached in local config. The user is never
 # prompted for an API base URL.
+#
+# Only the production WBL API is probed — the legacy ``127.0.0.1:8000``
+# local-backend candidate was removed because (a) running both probes against
+# every login wasted ~5s on the localhost connection refusal on the vast
+# majority of machines where no local backend was running, and (b) the
+# resulting "WBL login failed" error block confusingly showed a
+# ``connection failed`` for localhost even when the production endpoint was
+# the real problem. Developers running a local FastAPI can still point at it
+# manually via ``jobcli config --key sync_server_url --set http://127.0.0.1:8000/api``.
 WBL_API_CANDIDATES: tuple[str, ...] = (
-    "https://whitebox-learning.com/api",
-    "http://127.0.0.1:8000/api",
+    "https://api.whitebox-learning.com/api",
 )
 
 

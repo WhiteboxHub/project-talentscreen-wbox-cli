@@ -126,7 +126,7 @@ You'll be prompted for:
 - LLM API keys (at least one of OpenAI, Anthropic, Gemini)
 - Default LLM provider (`openai` / `anthropic` / `gemini`)
 
-You are **never asked for the WBL API base URL**. The CLI silently probes both hardcoded endpoints — `https://whitebox-learning.com/api` (production) and `http://127.0.0.1:8000/api` (local backend) — with the credentials you just entered, and saves whichever authenticates first. If neither is reachable at login time, the next `jobcli discover` re-probes automatically.
+You are **never asked for the WBL API base URL**. The CLI silently probes the hardcoded production endpoint — `https://api.whitebox-learning.com/api` — with the credentials you just entered, and saves it if authentication succeeds. If it's unreachable at login time, the next `jobcli discover` re-probes automatically. Developers running a local backend can override the saved URL with `jobcli config --key sync_server_url --set <url>`.
 
 Re-running `jobcli login` updates the saved values. `jobcli login --auto` skips prompts entirely if credentials are already saved.
 
