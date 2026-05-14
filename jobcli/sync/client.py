@@ -28,6 +28,39 @@ WBL_API_CANDIDATES: tuple[str, ...] = (
 )
 
 
+def _looks_like_missing_cli_window(response: Optional[requests.Response]) -> bool:
+    """Detect "production hasn't deployed /positions/cli_window yet".
+
+    Older backends only have ``/positions/{position_id}`` and the literal
+    ``cli_window`` path segment is routed there, failing as an integer
+    parse error::
+
+        {"detail":[{"type":"int_parsing","loc":["path","position_id"],
+                    "input":"cli_window"}]}
+
+    A naive ``status == 422`` check would over-match (the new backend also
+    returns 422 for genuinely invalid query params). We tighten the match
+    to the exact path-int-parse pattern above so a legitimate validation
+    failure still propagates as an error.
+    """
+    if response is None or response.status_code != 422:
+        return False
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    if not isinstance(body, dict):
+        return False
+    for entry in body.get("detail") or []:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("type") == "int_parsing" \
+                and entry.get("loc") == ["path", "position_id"] \
+                and entry.get("input") == "cli_window":
+            return True
+    return False
+
+
 # Login error classification kinds. Used so callers (CLI commands) can render
 # remediation hints instead of dumping raw stack-trace style strings.
 LOGIN_ERR_BAD_CREDENTIALS = "bad_credentials"
@@ -320,6 +353,23 @@ class SyncClient:
         ``days=0`` requests no ``created_at`` lower bound (full listing set with
         job URLs). Use ``offset`` + ``page_size`` to page; responses include
         ``total_in_window`` for the full matching row count.
+
+        Production-API fallback
+        -----------------------
+        The current production deployment at ``api.whitebox-learning.com``
+        is running an older backend that does **not** have the
+        ``/cli_window`` route mounted. Hitting it lands on the generic
+        ``/positions/{position_id}`` route, which FastAPI tries to parse
+        as an integer — the resulting 422 body is::
+
+            {"detail":[{"type":"int_parsing","loc":["path","position_id"],
+                        "input":"cli_window"}]}
+
+        When we detect that exact signature we transparently fall back to
+        the deployed-everywhere ``/positions/paginated`` endpoint and
+        shape its response to match what callers expect from
+        ``cli_window``. Once production redeploys the new backend this
+        fallback becomes inert.
         """
         headers = self.get_auth_headers()
         if not headers:
@@ -343,6 +393,19 @@ class SyncClient:
             )
             response.raise_for_status()
         except requests.HTTPError as e:
+            # Detect the "production hasn't deployed cli_window yet" case
+            # and fall back to /positions/paginated instead of erroring out.
+            if _looks_like_missing_cli_window(response):
+                logger.info(
+                    "cli_window endpoint not available on this backend; "
+                    "falling back to /positions/paginated."
+                )
+                return self._fetch_listings_via_paginated(
+                    headers=headers,
+                    requested_offset=int(offset or 0),
+                    requested_page_size=int(page_size),
+                    status=status,
+                )
             # Surface the server's actual rejection reason (FastAPI 422
             # validation errors put a JSON ``detail`` array in the body —
             # without printing it the user just sees the useless
@@ -357,10 +420,10 @@ class SyncClient:
                         body_text = response.text[:600]
             except Exception:
                 pass
-            status = response.status_code if response is not None else "?"
+            http_status = response.status_code if response is not None else "?"
             extra = f" — body: {body_text[:600]}" if body_text else ""
             raise RuntimeError(
-                f"cli_window request failed: HTTP {status} for {url}?"
+                f"cli_window request failed: HTTP {http_status} for {url}?"
                 f"{requests.compat.urlencode(params)}{extra}"
             ) from e
         except requests.RequestException as e:
@@ -372,6 +435,90 @@ class SyncClient:
         if not isinstance(data, dict) or "data" not in data:
             raise RuntimeError("cli_window response missing 'data' array")
         return data
+
+    def _fetch_listings_via_paginated(
+        self,
+        *,
+        headers: Dict[str, str],
+        requested_offset: int,
+        requested_page_size: int,
+        status: Optional[str],
+    ) -> dict:
+        """Fallback for backends without the ``/cli_window`` route.
+
+        Walks ``/positions/paginated`` until either all rows are fetched or
+        ``requested_page_size`` rows have been collected, applies the same
+        status filter client-side, and returns a dict shaped like a
+        ``cli_window`` response so the caller (``WboxDiscoverer``) doesn't
+        need to branch.
+
+        The paginated endpoint caps ``page_size`` at 500 server-side, so we
+        loop through pages and aggregate. ``requested_offset`` is honored
+        by skipping rows after status filtering — preserves caller
+        semantics even though the upstream endpoint uses page numbers
+        rather than row offsets.
+        """
+        base = f"{self._get_server_url()}/positions/paginated"
+        # Server caps paginated page_size at 500 (see backend
+        # routes/job_listing.py). Always request its maximum so we
+        # minimize round-trips.
+        upstream_page_size = 500
+        want_status = (status or "").strip().lower()
+        keep_all_statuses = want_status in ("", "all", "any")
+
+        collected: List[dict] = []
+        total_records: Optional[int] = None
+        page = 1
+        # Hard cap loop iterations so a buggy server can't trap us forever.
+        max_pages = 200
+        while page <= max_pages:
+            resp = requests.get(
+                base,
+                headers=headers,
+                params={"page": page, "page_size": upstream_page_size},
+                timeout=120,
+                verify=_requests_verify(),
+            )
+            resp.raise_for_status()
+            try:
+                payload = resp.json()
+            except ValueError as e:
+                raise RuntimeError("paginated returned non-JSON body") from e
+            if not isinstance(payload, dict):
+                raise RuntimeError("paginated returned unexpected body shape")
+            if total_records is None:
+                try:
+                    total_records = int(payload.get("total_records") or 0)
+                except (TypeError, ValueError):
+                    total_records = 0
+            batch = payload.get("data") or []
+            for row in batch:
+                if keep_all_statuses or (str(row.get("status") or "").lower() == want_status):
+                    collected.append(row)
+            if not payload.get("has_next"):
+                break
+            if len(batch) < upstream_page_size:
+                break
+            page += 1
+
+        # Apply the caller's offset/page_size window over the filtered rows.
+        if requested_offset > 0:
+            collected = collected[requested_offset:]
+        if requested_page_size > 0:
+            collected = collected[:requested_page_size]
+
+        return {
+            "data": collected,
+            "days": 0,
+            "page_size": requested_page_size,
+            "offset": requested_offset,
+            # ``total_in_window`` is the WBL/cli_window contract; populate it
+            # from the count of returned rows so the discoverer's paging
+            # loop terminates after one call (we already paginated above).
+            "total_in_window": len(collected),
+            "returned_count": len(collected),
+            "sort": "id_desc",  # paginated returns newest-first by id desc
+        }
 
     def fetch_job_types(self) -> List[Dict[str, Any]]:
         """Fetch available job types from the server for mapping."""
