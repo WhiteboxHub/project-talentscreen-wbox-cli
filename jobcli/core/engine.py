@@ -867,6 +867,98 @@ class ApplicationEngine:
         self.active_page = None
         self.user_data_dir = None
 
+    def _resolve_extension_dir(self) -> Optional[str]:
+        """Pick a valid TalentScreen extension directory or return ``None``.
+
+        Validation rule: a directory is considered valid only when it
+        exists *and* contains a ``manifest.json`` file at its root. A
+        configured path that's missing or partially populated is treated
+        the same — fall through to the next tier.
+
+        The resolved path is persisted back to ``config.extension_path``
+        whenever it differs from what was stored, so subsequent runs skip
+        the search/download work.
+        """
+        from pathlib import Path as _Path
+        candidates: list[tuple[str, str]] = []
+
+        configured = (self.config.extension_path or "").strip()
+        if configured:
+            candidates.append(("config.extension_path", configured))
+
+        # Canonical fallback — every machine running JobCLI uses this same
+        # subdirectory of the user's home, regardless of OS.
+        default_path = _Path.home() / ".jobcli" / "extension_unpacked"
+        candidates.append(("~/.jobcli/extension_unpacked", str(default_path)))
+
+        for source, path in candidates:
+            p = _Path(path).expanduser()
+            if p.is_dir() and (p / "manifest.json").is_file():
+                resolved = str(p.resolve())
+                if resolved != configured:
+                    global_logger.info(
+                        f"Extension resolved from {source}: {resolved} "
+                        f"(was {configured!r}). Updating saved config."
+                    )
+                    self._persist_extension_path(resolved)
+                else:
+                    global_logger.info(f"Extension found at {resolved}")
+                return resolved
+            else:
+                global_logger.info(
+                    f"Extension candidate '{path}' from {source} is missing or "
+                    f"lacks manifest.json — trying next fallback."
+                )
+
+        # Last resort: auto-download via ExtensionManager. Skipped if the
+        # network is unreachable; the caller logs a clear warning so the
+        # user knows autofill will rely on LLM only.
+        try:
+            from jobcli.core.extension_manager import ExtensionManager
+            ts_ext_id = "bebdlhhpgmegdebdballinfmfnlpmeio"
+            target = default_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            global_logger.warning(
+                f"No valid extension found locally; auto-downloading to {target} "
+                "(equivalent to `jobcli setup`)."
+            )
+            ok = ExtensionManager.download_and_extract(ts_ext_id, target)
+            if ok and (target / "manifest.json").is_file():
+                resolved = str(target.resolve())
+                self._persist_extension_path(resolved)
+                global_logger.info(f"Extension auto-downloaded to {resolved}")
+                return resolved
+            global_logger.warning(
+                "Extension auto-download failed. Form autofill will rely on "
+                "Python rules + LLM only — run `jobcli setup` once you have "
+                "network connectivity to restore the extension path."
+            )
+        except Exception as e:
+            global_logger.warning(
+                f"Extension auto-download skipped due to error: {e}. "
+                "Run `jobcli setup` to retry."
+            )
+        return None
+
+    def _persist_extension_path(self, resolved: str) -> None:
+        """Update ``self.config.extension_path`` in memory and on disk.
+
+        Done via ``jobcli.cli.main.save_config`` so the write goes through
+        the same code path as the interactive commands (``login``,
+        ``setup``). Failures are non-fatal — the in-memory update is
+        always applied so the current session still uses the resolved
+        path even if the DB write fails (e.g. SQLite is locked).
+        """
+        self.config.extension_path = resolved
+        try:
+            from jobcli.cli.main import save_config
+            save_config(self.config)
+        except Exception as e:
+            global_logger.warning(
+                f"Could not persist resolved extension_path to DB: {e}. "
+                "It will still be used for the current session."
+            )
+
     def start_session(self) -> None:
         """Start a single browser session for the duration of the batch."""
         if self.context:
@@ -880,18 +972,22 @@ class ApplicationEngine:
         )
         
         self.playwright = sync_playwright().start()
-        
-        # Use the extension path stored in local config — populated by ``jobcli setup``
-        # which auto-downloads the TalentScreen extension to ``~/.jobcli/extension_unpacked``.
-        # If the directory is missing or invalid, run without any extension.
-        extension_dir = self.config.extension_path
-        if extension_dir and not os.path.exists(extension_dir):
-            global_logger.warning(
-                f"Extension path '{extension_dir}' does not exist — launching without extension. "
-                "Run `jobcli setup` to re-download."
-            )
-            extension_dir = None
 
+        # Resolve the TalentScreen extension directory with three fallback
+        # tiers, so the engine remains usable even when ``config.extension_path``
+        # is stale (e.g. the DB was copied from another machine where the
+        # path was ``C:\Users\OTHER\.jobcli\extension_unpacked\`` and that
+        # path does not exist locally). Without this auto-recovery the
+        # browser silently launched without the extension and form
+        # autofill was 100% dependent on the LLM — which was the failure
+        # the user reported.
+        #
+        # Order (each tier validated by ``manifest.json`` presence, since
+        # an empty / partial directory is worse than no extension at all):
+        #   1. ``config.extension_path`` (what ``jobcli setup`` wrote)
+        #   2. ``~/.jobcli/extension_unpacked`` — the canonical default
+        #   3. Auto-download via :class:`ExtensionManager` on the fly
+        extension_dir = self._resolve_extension_dir()
         self.extension_dir = extension_dir
         launch_args = list(LAUNCH_ARGS)
         
