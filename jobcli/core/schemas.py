@@ -372,6 +372,11 @@ class BrowserAction(BaseModel):
     selector_type: Optional[SelectorType] = None
     value: Optional[str] = None
     field_label: Optional[str] = None
+    # ``required`` is propagated from the Accessibility Tree (``aria-required``,
+    # ``required`` attribute, or visible ``*`` next to the label) so downstream
+    # code can split the human-handoff prompt into "must answer" vs
+    # "press Enter to skip" without re-inspecting the DOM.
+    required: bool = False
     confidence: float = Field(ge=0.0, le=1.0, default=1.0)
     timeout: int = Field(default=5000, description="Timeout in milliseconds")
 

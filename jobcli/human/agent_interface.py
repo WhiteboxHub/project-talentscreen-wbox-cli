@@ -1051,11 +1051,20 @@ class AgentInterface:
     ) -> list[BrowserAction]:
         """For each failed field: try DB first, then prompt human.
 
+        Splits failed fields into two tiers:
+
+        * **Required** — the field's ``required`` flag is true (propagated
+          from the AX tree). Prompted first, one by one, with a red
+          ``*required`` tag so the user can't miss them.
+        * **Optional** — everything else. Shown afterwards in a dim section
+          with ``(optional, press Enter to skip)``; the user can skip any
+          of them by pressing Enter.
+
         Returns a list of new :class:`BrowserAction` objects with the
         collected values populated, ready to be re-executed against the
-        browser.  Every human-supplied answer is also saved to the DB (via
-        ``request_field_input`` → ``AgentMemory.save_field_answer``) so the
-        next job on this ATS reuses it automatically.
+        browser. Every human-supplied answer is also saved to the DB (via
+        ``request_field_input`` → ``AgentMemory.save_field_answer``) so
+        the next job on this ATS reuses it automatically.
         """
         if not failed_actions:
             return []
@@ -1068,37 +1077,64 @@ class AgentInterface:
         if not actionable:
             return []
 
-        # Header banner — clear "agent stopped" signal
+        # Split into required vs optional. We rely on the AX-tree-driven
+        # ``required`` flag that the LLM client propagates onto each
+        # action; anything unmarked is treated as optional.
+        required = [a for a in actionable if a.required]
+        optional = [a for a in actionable if not a.required]
+
+        # Header banner — clear "agent stopped" signal with counts so the
+        # user sees the scope at a glance.
         if self.mode != InteractionMode.AUTO:
             self.console.print(
                 Panel(
-                    f"[bold]The agent could not fill {len(actionable)} field(s).[/bold]\n"
-                    "[dim]Each one will be checked against the DB first; you'll only be\n"
-                    "asked for values that have never been answered before. All your\n"
-                    "answers are saved and reused on future applications.[/dim]",
+                    (
+                        f"[bold]Required fields:[/bold] [yellow]{len(required)}[/yellow]    "
+                        f"[dim]Optional fields:[/dim] [dim]{len(optional)}[/dim]\n"
+                        "[dim]Required fields must be answered. Optional fields can be "
+                        "skipped by pressing Enter. Every answer you give is saved and "
+                        "reused on future applications.[/dim]"
+                    ),
                     title="[bold yellow]>>> AGENT PAUSED — REVIEW NEEDED <<<[/bold yellow]",
                     border_style="yellow",
                 )
             )
 
         filled: list[BrowserAction] = []
-        for act in actionable:
+
+        def _collect(act: BrowserAction, label_suffix: str) -> None:
             label = act.field_label or act.selector
             options = (dropdown_options_by_selector or {}).get(act.selector)
-            answer = self.request_field_input(label, options=options)
+            answer = self.request_field_input(
+                f"{label}{label_suffix}",
+                options=options,
+            )
             if not answer:
-                continue
-            # Build a fresh BrowserAction that preserves the original
-            # selector/selector_type/field_label but now carries the value
-            # we just collected.  If the field has a known dropdown option
-            # list, coerce FILL → SELECT so the executor uses the
-            # dropdown-friendly strategy.
+                return
+            # Coerce FILL → SELECT when the field is a known dropdown so the
+            # executor uses the dropdown-friendly strategy.
             action_type = act.action
             if options and action_type in (ActionType.FILL, ActionType.TYPE):
                 action_type = ActionType.SELECT
             filled.append(
                 act.model_copy(update={"value": answer, "action": action_type})
             )
+
+        if required:
+            self.console.print(
+                f"\n  [bold yellow]Required fields[/bold yellow] "
+                f"[dim](must answer, {len(required)} total)[/dim]"
+            )
+            for act in required:
+                _collect(act, "  [red]*required[/red]")
+
+        if optional and self.mode != InteractionMode.AUTO:
+            self.console.print(
+                f"\n  [dim]Optional fields ({len(optional)} total — press Enter to skip)[/dim]"
+            )
+            for act in optional:
+                _collect(act, "  [dim](optional, Enter to skip)[/dim]")
+
         return filled
 
     def final_browser_pause(self) -> None:

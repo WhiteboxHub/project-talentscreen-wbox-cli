@@ -358,6 +358,37 @@ Remember to return valid JSON matching the schema in the system prompt.
             return self._call_anthropic(message, system_prompt=system_prompt, json_mode=False)
         return "Chat not implemented for this provider yet."
 
+    @staticmethod
+    def _propagate_required_flag(
+        validated: "LLMActionResponse",
+        ax_tree: "AccessibilityTree",
+    ) -> None:
+        """Copy ``required=True`` from the AX tree onto each FILL/TYPE/SELECT
+        action whose target field is marked required.
+
+        The match is on a normalized lowercase label so it survives the
+        LLM's tendency to use the user-visible field title as the selector
+        (e.g. ``"First Name"``) rather than the underlying attribute
+        (``#first_name``).
+        """
+        required_labels: set[str] = set()
+        for f in getattr(ax_tree, "form_fields", []) or []:
+            if not f.get("required"):
+                continue
+            for key in ("name", "label", "placeholder"):
+                val = f.get(key)
+                if isinstance(val, str) and val.strip():
+                    required_labels.add(val.strip().lower())
+        if not required_labels:
+            return
+
+        for act in validated.actions:
+            lbl = (act.field_label or act.selector or "").strip().lower()
+            if not lbl:
+                continue
+            if lbl in required_labels or any(rl in lbl or lbl in rl for rl in required_labels):
+                act.required = True
+
     def _validate_response(self, response_text: str) -> Optional[LLMActionResponse]:
         """Validate and parse LLM response."""
         try:
@@ -435,6 +466,11 @@ Remember to return valid JSON matching the schema in the system prompt.
                 # Validate and parse response
                 validated = self._validate_response(response)
                 if validated:
+                    # Propagate the ``required`` flag from the AX tree onto
+                    # each fill/select action so the human-handoff prompt
+                    # can split fields into "must answer" vs "skip with
+                    # Enter" without re-inspecting the DOM.
+                    self._propagate_required_flag(validated, ax_tree)
                     return validated
 
                 if self.logger:

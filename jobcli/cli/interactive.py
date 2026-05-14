@@ -83,6 +83,35 @@ def _setup_readline():
     return history_path
 
 
+# ── Next-step hints ───────────────────────────────────────────────────
+def _next_step_panel(command: str, hint: str = "") -> None:
+    """Prominent panel showing the next command to type at the TUI prompt.
+
+    Mirrors ``main.py:_print_next_step`` but uses the bare TUI command name
+    (``apply``, ``discover`` …) since the user is already inside the
+    interactive shell and never needs to prefix with ``jobcli``.
+    """
+    from rich.panel import Panel
+    body_lines = [f"  [bold #f0abfc]> {command}[/]"]
+    if hint:
+        body_lines.append(f"  [{D}]{hint}[/]")
+    console.print()
+    console.print(
+        Panel(
+            "\n".join(body_lines),
+            title="[bold #d946ef]▶ Next step[/]",
+            title_align="left",
+            border_style="#c084fc",
+            padding=(0, 1),
+        )
+    )
+
+
+def _next_hint(text: str) -> None:
+    """Lightweight inline breadcrumb between onboarding steps."""
+    console.print(f"  [{D}]▶ Next:[/] [{K}]{text}[/]")
+
+
 # ── Welcome ───────────────────────────────────────────────────────────
 def _animate_banner():
     """Claude Code style welcome: boxed title + block ASCII banner."""
@@ -146,22 +175,120 @@ def _validate_llm(provider: str, api_key: str) -> bool:
         return False
 
 
-def _validate_wbox(email: str, password: str) -> bool:
-    """Validate Whitebox Learning credentials."""
+def _validate_wbox_and_extension(
+    email: str,
+    password: str,
+    ext_dir: str | None = None,
+) -> tuple[bool, bool, str | None, str]:
+    """Validate Whitebox credentials AND load the TalentScreen extension in
+    a single visible Chrome launch.
+
+    One browser window proves three things at once:
+      1. ``Open browser``       — Chromium launches with the stealth args.
+      2. ``Plugin load``        — TalentScreen registers a service worker
+                                  (MV3) or background page (MV2) inside
+                                  the persistent context.
+      3. ``Test successful``    — the credentials reach ``/user_dashboard``.
+
+    The extension is auto-downloaded into ``~/.jobcli/extension_unpacked``
+    if ``ext_dir`` is missing or invalid (same logic as ``jobcli setup``).
+
+    Returns
+    -------
+    ``(login_ok, extension_ok, resolved_ext_dir, error_message)``
+    """
+    import tempfile
+
     try:
+        from jobcli.core.extension_manager import ExtensionManager
+        from jobcli.core.stealth import (
+            LAUNCH_ARGS,
+            IGNORE_DEFAULT_ARGS,
+            CONTEXT_OPTIONS,
+        )
         from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            page.goto("https://whitebox-learning.com/login")
-            page.fill('input[name="email"]', email)
-            page.fill('input[name="password"]', password)
-            page.click('button:has-text("Login")')
-            page.wait_for_url("**/user_dashboard**", timeout=5000)
-            browser.close()
-            return True
-    except Exception:
-        return False
+    except Exception as e:
+        return (False, False, None, f"Missing dependency: {e}")
+
+    ts_ext_id = "bebdlhhpgmegdebdballinfmfnlpmeio"
+    config_dir = os.path.join(os.path.expanduser("~"), ".jobcli")
+
+    if ext_dir:
+        try:
+            from pathlib import Path as _Path
+            ext_dir = str(_Path(ext_dir).expanduser().resolve())
+        except Exception:
+            ext_dir = None
+
+    from pathlib import Path as _Path
+    if (
+        not ext_dir
+        or not _Path(ext_dir).is_dir()
+        or not (_Path(ext_dir) / "manifest.json").exists()
+    ):
+        auto_ext_dir = _Path(config_dir) / "extension_unpacked"
+        ok = ExtensionManager.download_and_extract(ts_ext_id, auto_ext_dir)
+        if not ok:
+            return (False, False, None, "Failed to download TalentScreen extension")
+        ext_dir = str(auto_ext_dir)
+
+    user_data_dir = tempfile.mkdtemp(prefix="jobcli_onboarding_")
+    launch_args = list(LAUNCH_ARGS)
+    launch_args.extend([
+        f"--disable-extensions-except={ext_dir}",
+        f"--load-extension={ext_dir}",
+    ])
+
+    try:
+        with sync_playwright() as pw:
+            ctx = pw.chromium.launch_persistent_context(
+                user_data_dir,
+                headless=False,
+                args=launch_args,
+                ignore_default_args=IGNORE_DEFAULT_ARGS,
+                **CONTEXT_OPTIONS,
+            )
+            try:
+                page = ctx.new_page()
+                try:
+                    page.goto(
+                        "https://whitebox-learning.com/login",
+                        timeout=30000,
+                        wait_until="domcontentloaded",
+                    )
+                except Exception as e:
+                    return (False, False, ext_dir, f"Could not reach login page: {e}")
+
+                try:
+                    page.fill('input[name="email"]', email)
+                    page.fill('input[name="password"]', password)
+                    page.click('button:has-text("Login")')
+                except Exception as e:
+                    return (False, False, ext_dir, f"Could not interact with login form: {e}")
+
+                try:
+                    page.wait_for_url("**/user_dashboard**", timeout=10000)
+                    login_ok = True
+                except Exception:
+                    login_ok = False
+
+                # Service workers (MV3) or background pages (MV2) only appear
+                # if Chrome actually registered the unpacked extension.
+                try:
+                    sw = list(ctx.service_workers)
+                    bp = list(ctx.background_pages)
+                    extension_ok = bool(sw or bp)
+                except Exception:
+                    extension_ok = False
+
+                return (login_ok, extension_ok, ext_dir, "")
+            finally:
+                try:
+                    ctx.close()
+                except Exception:
+                    pass
+    except Exception as e:
+        return (False, False, ext_dir, f"Browser launch failed: {e}")
 
 
 def _run_onboarding(force: bool = False):
@@ -183,34 +310,80 @@ def _run_onboarding(force: bool = False):
         has_resume = resume_data is not None
         
         if force or not has_llm or not has_wbox or not has_resume:
-            console.print("[bold]Select LLM Provider for Automation:[/bold]")
+            PURP = "\033[1;38;2;192;132;252m"
+            RST = "\033[0m"
+
+            repo = ConfigRepository(session)
+            db_config = repo.get_all()
+
+            # ── Step 1 — Whitebox Learning Login + Browser/Extension Test ──
+            # Per the desired flow the user must authenticate FIRST. A single
+            # visible Chrome window doubles as the credential check and the
+            # extension smoke test, so we never launch two browsers in a row.
+            console.print(f"[{D}]Step 1/4[/] — [bold]Whitebox Learning Credentials[/bold]")
+            if force or not db_config.job_board_username or not db_config.job_board_password:
+                while True:
+                    email = input(f"{PURP}Whitebox Email: {RST}").strip()
+                    password = getpass.getpass(f"{PURP}Whitebox Password: {RST}").strip()
+
+                    with console.status(
+                        f"[{D}]Opening browser, loading TalentScreen extension, validating login...[/]",
+                        spinner="dots",
+                        spinner_style="#e879f9",
+                    ):
+                        login_ok, extension_ok, ext_dir, err = _validate_wbox_and_extension(
+                            email, password, db_config.extension_path
+                        )
+
+                    if login_ok:
+                        db_config.job_board_username = email
+                        db_config.job_board_password = password
+                        if ext_dir:
+                            db_config.extension_path = ext_dir
+                        console.print(f"[bold white on #d946ef] ✓ [/] [green]Open browser[/green]")
+                        if extension_ok:
+                            console.print(f"[bold white on #d946ef] ✓ [/] [green]Plugin load (extension loaded)[/green]")
+                        else:
+                            console.print(f"[yellow]  ⚠ Plugin load could not be confirmed (extension may load on first apply).[/yellow]")
+                        console.print(f"[bold white on #d946ef] ✓ [/] [green]Test successful[/green]")
+                        break
+                    else:
+                        if err:
+                            console.print(f"[bold white on #c026d3] ✗ [/] [red]Login failed: {err}[/red]")
+                        else:
+                            console.print(f"[bold white on #c026d3] ✗ [/] [red]Invalid email or password. Please try again.[/red]")
+
+            # Persist Whitebox + extension path immediately so that even if the
+            # user Ctrl+C's during the LLM step we don't lose verified creds.
+            repo.save_config(db_config)
+            session.commit()
+            # Credentials are persisted only in ~/.jobcli/jobcli.db — no ``.env`` is written.
+            _next_hint("configure your AI provider so the agent can fill complex forms")
+
+            # ── Step 2 — LLM Provider + API Key ──
+            console.print()
+            console.print(f"[{D}]Step 2/4[/] — [bold]Select LLM Provider for Automation[/bold]")
             console.print()
             console.print(f"[{K}]> 1. OpenAI (Recommended)[/]")
             console.print(f"  [{D}]Requires OPENAI_API_KEY[/]")
             console.print(f"  2. Anthropic")
             console.print(f"  3. Gemini")
             console.print()
-            
-            PURP = "\033[1;38;2;192;132;252m"
-            RST = "\033[0m"
-            
-            repo = ConfigRepository(session)
-            db_config = repo.get_all()
-            
+
             choice = ""
             while True:
                 choice = input(f"{PURP}Select provider (1-3) > {RST}").strip()
                 if choice not in ("1", "2", "3"):
                     continue
-                    
+
                 provider = "openai" if choice == "1" else "anthropic" if choice == "2" else "gemini"
                 prompt_name = "OpenAI" if choice == "1" else "Anthropic" if choice == "2" else "Gemini"
-                
+
                 api_key = input(f"{PURP}Enter {prompt_name} API Key: {RST}").strip()
-                
+
                 with console.status(f"[{D}]Validating API key...[/]", spinner="dots", spinner_style="#e879f9"):
                     is_valid = _validate_llm(provider, api_key)
-                
+
                 if is_valid:
                     db_config.default_llm_provider = provider
                     if provider == "openai":
@@ -223,50 +396,32 @@ def _run_onboarding(force: bool = False):
                     break
                 else:
                     console.print(f"[bold white on #c026d3] ✗ [/] [red]Invalid {prompt_name} API key. Please try again.[/red]")
-                    
-            console.print()
-            console.print("[bold]Whitebox Learning Credentials:[/bold]")
-            if force or not db_config.job_board_username or not db_config.job_board_password:
-                while True:
-                    email = input(f"{PURP}Whitebox Email: {RST}").strip()
-                    password = getpass.getpass(f"{PURP}Whitebox Password: {RST}").strip()
-                    
-                    with console.status(f"[{D}]Connecting to whitebox-learning.com...[/]", spinner="dots", spinner_style="#e879f9"):
-                        is_valid = _validate_wbox(email, password)
-                    
-                    if is_valid:
-                        db_config.job_board_username = email
-                        db_config.job_board_password = password
-                        console.print(f"[bold white on #d946ef] ✓ [/] [green]Credentials verified successfully[/green]")
-                        break
-                    else:
-                        console.print(f"[bold white on #c026d3] ✗ [/] [red]Invalid email or password. Please try again.[/red]")
-                
+
             repo.save_config(db_config)
             session.commit()
-            # Credentials are persisted only in ~/.jobcli/jobcli.db — no ``.env`` is written.
+            _next_hint("upload your resume (PDF + JSON) so the agent can answer for you")
 
+            # ── Step 3 — Resume Upload ──
             console.print()
-            console.print("[bold]Resume Upload:[/bold]")
+            console.print(f"[{D}]Step 3/4[/] — [bold]Resume Upload[/bold]")
             if force or not has_resume:
                 pdf_path = input(f"{PURP}Path to Resume PDF: {RST}").strip()
                 json_path = input(f"{PURP}Path to Resume JSON: {RST}").strip()
-                session.close() # Close session before running subprocess
-                
-                # Use absolute paths and expand ~
+                session.close()  # Close session before running subprocess
+
                 pdf_path = os.path.abspath(os.path.expanduser(pdf_path))
                 json_path = os.path.abspath(os.path.expanduser(json_path))
-                
+
                 console.print(f"\n[{D}]Uploading resume...[/]")
                 _exec(["resume-upload", "--pdf", pdf_path, "--json", json_path])
-                
-                # Automatically discover jobs after setup
-                console.print(f"\n[{D}]Discovering jobs from Whitebox Learning...[/]")
+
+                # ── Step 4 — Discover jobs from Whitebox dashboard ──
+                console.print(f"\n[{D}]Step 4/4[/] — [bold]Discovering jobs from Whitebox Learning...[/]")
                 _exec(["discover"])
             else:
                 session.close()
-            
-            console.print(f"\n[{K}]✓ Setup complete! You are ready to apply to jobs.[/]\n")
+
+            console.print(f"\n[{K}]✓ Setup complete! You are ready to apply to jobs.[/]")
     except Exception as e:
         import traceback
         console.print(f"[red]Error during setup: {e}[/red]")
@@ -303,6 +458,8 @@ def _print_welcome():
 
     greeting_str = f"{greeting}, {name}" if name else greeting
 
+    pending_eligible = 0
+    state_known = False
     try:
         from jobcli.cli.main import get_database
         from jobcli.storage.repositories import JobRepository
@@ -312,14 +469,27 @@ def _print_welcome():
         repo = JobRepository(session)
         pending_eligible = len(repo.list_pending())
         session.close()
+        state_known = True
 
         console.print(f"  {greeting_str}.")
         console.print()
-        console.print(f"  [dim]You have [bold]{pending_eligible}[/bold] pending CLI-friendly job(s) in the local queue.[/dim]")
-        console.print(f"  [dim]Run [bold cyan]jobcli discover[/bold cyan] to refresh jobs from WBL (API), then [bold cyan]jobcli apply[/bold cyan] to apply.[/dim]")
+        console.print(f"  [{D}]You have [bold]{pending_eligible}[/bold] pending CLI-friendly job(s) in the local queue.[/]")
     except Exception:
         console.print(f"  {greeting_str}.")
-        console.print(f"  [dim]Run [bold cyan]jobcli discover[/bold cyan] to refresh WBL jobs and stats.[/dim]")
+
+    # Prominent next-step panel — picks the single most useful command
+    # based on local state so the user never has to guess what to type.
+    if state_known and pending_eligible > 0:
+        _next_step_panel(
+            "apply",
+            f"start applying to your {pending_eligible} pending job(s) "
+            "(Chrome opens visibly; type `q` or Ctrl+C to stop)",
+        )
+    else:
+        _next_step_panel(
+            "discover",
+            "pull fresh job listings from Whitebox, then run `apply`",
+        )
 
     console.print()
     console.print(f"  [{D}]Type a command to get started, or[/] [{K}]help[/] [{D}]to see options.[/]")

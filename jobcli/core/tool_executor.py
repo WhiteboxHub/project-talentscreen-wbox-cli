@@ -30,6 +30,14 @@ _ATS_IFRAME_PATTERNS = [
     "myworkdayjobs.com",
 ]
 
+# Values that look "filled" but are really still the placeholder option of
+# a select element. We treat these as empty so the executor is allowed to
+# overwrite them. Kept in sync with engine._SNAPSHOT_PLACEHOLDERS.
+_PLACEHOLDER_VALUES = frozenset({
+    "select", "choose", "please choose", "select...", "select an option",
+    "-- select --", "none", "n/a", "na",
+})
+
 
 class ToolExecutor:
     """Execute browser actions safely with validation."""
@@ -142,6 +150,36 @@ class ToolExecutor:
                 
         return roots
 
+    def _read_live_value(self, selector: str) -> Optional[str]:
+        """Best-effort read of the current value of an input/textarea/select.
+
+        Used by the FILL/TYPE skip-refill guard. Returns ``None`` if the
+        selector doesn't resolve, the element isn't a fillable input, or
+        anything else goes wrong — callers MUST treat ``None`` as "I don't
+        know" (i.e. proceed with the fill) rather than as "empty".
+        """
+        if not selector:
+            return None
+        try:
+            loc = self.page.locator(selector).first
+            if loc.count() == 0:
+                return None
+            try:
+                val = loc.input_value(timeout=500)
+            except Exception:
+                # Not an <input>/<textarea>/<select>, or detached element.
+                try:
+                    val = loc.evaluate(
+                        "el => (el.tagName === 'SELECT' && el.selectedIndex >= 0)"
+                        " ? el.options[el.selectedIndex].text"
+                        " : (el.value !== undefined ? el.value : '')"
+                    )
+                except Exception:
+                    return None
+            return val if isinstance(val, str) else None
+        except Exception:
+            return None
+
     def execute_action(self, action: BrowserAction) -> bool:
         """Execute a single browser action."""
         if self.logger:
@@ -167,6 +205,30 @@ class ToolExecutor:
                         phase=ExecutionPhase.LLM,
                     )
                 return False
+
+        # Last-line-of-defense skip guard. The engine already filters
+        # already-filled fields out of the LLM response before they reach
+        # the executor (see ``ApplicationEngine._snapshot_filled``), but
+        # other phases (rules, ATS handlers, ASK-resolved retries) can
+        # also call ``execute_action`` directly. Treat a field that
+        # currently has a real value as already-done so no phase
+        # overwrites it.
+        if action.action in (ActionType.FILL, ActionType.TYPE):
+            try:
+                live = (self._read_live_value(action.selector) or "").strip()
+                if live and live.lower() not in _PLACEHOLDER_VALUES:
+                    if self.logger:
+                        self.logger.info(
+                            f"[skip-refill] '{action.field_label or action.selector}' "
+                            f"already has '{live}' — not overwriting.",
+                            phase=ExecutionPhase.LLM,
+                        )
+                    return True
+            except Exception:
+                # If the live-read fails (selector doesn't resolve, page
+                # navigated, etc.), fall through to the normal fill path
+                # so we never silently swallow an action that should run.
+                pass
 
         try:
             # Route to appropriate action handler

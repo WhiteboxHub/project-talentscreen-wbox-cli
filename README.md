@@ -8,8 +8,11 @@ Production-grade CLI for automated job applications across multiple ATS platform
 
 ### Core Automation
 - **No `.env` files** — credentials, LLM keys, resume paths, and the API base URL all live in `~/.jobcli/jobcli.db`, written by `jobcli login`, `jobcli resume-upload`, and `jobcli config`. The CLI never reads a `.env` file.
+- **Guided interactive TUI** — running `wboxcli` walks you through onboarding in a fixed order (WBL login → visible browser + extension smoke test → LLM key → resume → discover), and at every step shows a `▶ Next step` panel telling you exactly which command to type next. Non-technical users never have to guess what to run.
 - **Auto-download Extension** — `jobcli setup` downloads the TalentScreen extension into `~/.jobcli/extension_unpacked/` and `apply` loads it automatically — no manual paths required.
 - **Always-visible browser** — `jobcli apply` forces `headless=False`; Chrome is always on screen so you can watch and intervene.
+- **Don't-refill guard** — the extension autofills first; a three-layer guard (engine snapshot → LLM action filter → executor live-read) prevents the LLM or rules from overwriting any field the extension already populated. Placeholder values like `"Select..."` are correctly treated as empty, so real values still flow through.
+- **Required-first human prompt** — when fields stay empty after extension + LLM + rules, the terminal asks for `[red]*required[/red]` fields first (must answer) and `[dim](optional, Enter to skip)[/dim]` fields second (press Enter to skip). The `required` flag is propagated from the page's Accessibility Tree.
 - **WBL job listings API** — `jobcli discover` calls `GET /api/positions/cli_window` (Bearer auth), pages with `offset` until every listing row is fetched (same filters as the dashboard Jobs grid by default: all time, `open` only). Tune with `JOBCLI_DISCOVER_DAYS`, `JOBCLI_DISCOVER_PAGE_SIZE`, `JOBCLI_DISCOVER_STATUS`. Legacy Playwright dashboard scrape: `WBOX_DISCOVER_MODE=browser` or `jobcli discover --legacy-ui`.
 - **Advanced AI Reasoning** — AXTree (Accessibility Tree) analysis for high-accuracy form field mapping
 - **Universal Iframe Support** — Reach-through for Greenhouse, Lever, Paylocity, and nested iframes
@@ -110,7 +113,47 @@ playwright install chromium
 
 ---
 
-## Quick Start
+## Quick Start — Interactive TUI (recommended for first-time users)
+
+Just run:
+
+```powershell
+wboxcli
+```
+
+If `~/.jobcli/` does not exist yet, the CLI walks you through onboarding in this exact order:
+
+| # | Step | What happens |
+|---|---|---|
+| 1 | **WBL Login + Browser test** | Enter your Whitebox email and password. Chrome opens visibly, the **TalentScreen** extension loads, the dashboard renders, and you see `✓ Open browser`, `✓ Plugin load`, `✓ Test successful`. Credentials are saved to `~/.jobcli/jobcli.db`. |
+| 2 | **LLM provider + API key** | Pick `openai` / `anthropic` / `gemini`, paste your key. Validation is done in-process. |
+| 3 | **Resume upload** | Enter the full path to your PDF (and JSON if you have one). |
+| 4 | **Discover jobs** | The CLI calls the WBL listings API and tells you how many pending jobs are in the queue. |
+
+After every step a `▶ Next step` panel appears at the bottom of the terminal showing the exact next command (`apply`, `discover`, etc.) — you never have to remember anything.
+
+Returning users (where `~/.jobcli/jobcli.db` already exists) skip straight to the welcome banner and the `▶ Next step: apply` panel.
+
+### Starting fresh (re-trigger onboarding)
+
+`quit` only closes the session — it does not delete saved state. To go back to Step 1:
+
+```powershell
+Remove-Item -Recurse -Force "$env:USERPROFILE\.jobcli"   # Windows
+# rm -rf ~/.jobcli                                       # macOS / Linux
+wboxcli
+```
+
+Or use the built-in equivalents:
+
+```powershell
+jobcli reset --force     # wipe DB only (keeps extension + logs)
+jobcli uninstall --force # wipe everything under ~/.jobcli/
+```
+
+---
+
+## Quick Start — Direct CLI subcommands
 
 JobCLI is fully **interactive** — there is no `.env` file. All configuration is stored in
 `~/.jobcli/jobcli.db` by the commands below. The same four steps work on PowerShell, zsh, and bash.
@@ -169,6 +212,8 @@ jobcli apply --url "https://boards.greenhouse.io/company/jobs/123"
 ---
 
 ## Cleanup, DB Reset, and Uninstall
+
+> **Heads-up — `quit` does NOT wipe state.** Typing `quit` inside the TUI only closes the session; credentials, LLM keys, resume, and discovered jobs all stay in `~/.jobcli/jobcli.db`, so the next `wboxcli` run skips onboarding and shows the welcome banner. To force the onboarding flow again, use one of the cleanup commands below (or `Remove-Item -Recurse -Force "$env:USERPROFILE\.jobcli"` on Windows / `rm -rf ~/.jobcli` on macOS-Linux).
 
 JobCLI gives you **three levels of cleanup**, smallest to largest. Pick the one that matches what you actually want to wipe.
 
@@ -239,6 +284,17 @@ jobcli apply --mode auto
 # manual — pauses before every action batch for explicit approval
 jobcli apply --mode manual
 ```
+
+### Two-tier human prompt (Supervised / Manual)
+
+When the extension + rules + LLM still leave fields empty, the terminal pauses with a yellow panel summarising the gap, then asks for the missing fields in two passes:
+
+1. **Required fields** — labelled `[red]*required[/red]`. You must type a value; pressing Enter loops the question.
+2. **Optional fields** — labelled `[dim](optional, Enter to skip)[/dim]`. Press Enter to skip; any text you type is filled.
+
+The `required` flag is read directly from the page's Accessibility Tree (`aria-required`, the HTML `required` attribute, or a visible `*` next to the label), so it matches what the form itself considers mandatory.
+
+In `--mode auto`, the optional pass is suppressed entirely and required-but-empty fields fail-fast instead of blocking the loop.
 
 ---
 
@@ -344,9 +400,9 @@ To start the dashboard:
 JobCLI follows a 5-phase strategy to ensure application success:
 
 1. **Phase 1: Discovery** — URL normalization and ATS platform detection.
-2. **Phase 2: Extension Autofill** — High-speed DOM-native filling of standard fields.
-3. **Phase 3: AI Reasoning (LLM)** — Accessibility Tree analysis for complex/custom fields and questionnaires.
-4. **Phase 4: Human-in-the-Loop** — Dashboard-mode pause for validation or missing information.
+2. **Phase 2: Extension Autofill** — High-speed DOM-native filling of standard fields. The engine then waits 1.5 s for the extension to settle and snapshots every populated field.
+3. **Phase 3: AI Reasoning (LLM)** — Accessibility Tree analysis for complex/custom fields and questionnaires. Any LLM action whose target is already in the snapshot is dropped before it reaches the executor (the **don't-refill guard**). A second live-value check at the executor layer guarantees no field is ever filled twice.
+4. **Phase 4: Human-in-the-Loop** — Two-tier prompt: required fields first, optional fields second (press Enter to skip). See [Two-tier human prompt](#two-tier-human-prompt-supervised--manual).
 5. **Phase 5: Submission & Verification** — Final checks and behavioral outcome detection.
 
 ---
@@ -560,7 +616,7 @@ pytest
 
 ## Testing
 
-JobCLI ships with three test strata. Run them before any change that
+JobCLI ships with four test strata. Run them before any change that
 touches browser automation or ATS handlers.
 
 ### 1. Full test suite
@@ -569,13 +625,21 @@ touches browser automation or ATS handlers.
 pytest
 ```
 
-### 2. Stealth / anti-bot verification
+### 2. Don't-refill guard + required-first human prompt
+
+Covers `BrowserAction.required`, the engine's `_snapshot_filled` / `_action_target_already_filled`, the executor's `_read_live_value` + skip-refill guard, `LLMClient._propagate_required_flag`, the two-tier `AgentInterface.show_failed_fields`, and the TUI next-step helpers — 58 tests across 7 groups.
+
+```bash
+pytest tests/test_refill_and_required.py -v
+```
+
+### 3. Stealth / anti-bot verification
 
 ```bash
 pytest tests/test_stealth.py -v
 ```
 
-### 3. Live fingerprint diagnostic
+### 4. Live fingerprint diagnostic
 
 ```bash
 python scripts/stealth_check.py

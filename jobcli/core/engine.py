@@ -2085,6 +2085,100 @@ class ApplicationEngine:
         except Exception as e:
             logger.error(f"Failed to inject resume into extension: {e}")
 
+    # ── Don't-refill snapshot ────────────────────────────────────────────
+    # The TalentScreen extension, the deterministic rule pass, and the LLM
+    # iteration loop all run against the same page. Without a cross-pass
+    # "this field already has a value" view they keep stepping on each
+    # other's toes — the user sees the same field flicker filled twice
+    # or three times. ``_snapshot_filled`` is the single source of truth:
+    # call it after a settle wait, then again at the top of every LLM
+    # iteration. Any FILL / TYPE / SELECT action whose target appears in
+    # the snapshot is dropped before it reaches the executor.
+    # ────────────────────────────────────────────────────────────────────
+
+    # Tunable: how long to wait after page navigation for the TalentScreen
+    # extension's asynchronous autofill to land before we snapshot the DOM.
+    # Bumping this above ~2s significantly slows multi-page wizards.
+    EXTENSION_AUTOFILL_SETTLE_MS = 1500
+
+    # Values that look "filled" but are actually still the placeholder
+    # (dropdowns whose first option is "Select…" etc.). We treat these as
+    # empty so the LLM is allowed to overwrite them.
+    _SNAPSHOT_PLACEHOLDERS = (
+        "select", "choose", "please choose", "select...", "select an option",
+        "-- select --", "none", "n/a", "na",
+    )
+
+    def _snapshot_filled(self, page: Page) -> dict[str, str]:
+        """Return ``{normalized_key: current_value}`` for every form input
+        that currently has a non-empty, non-placeholder value.
+
+        The key set is intentionally wide (name, id, aria-label, placeholder)
+        so a later FILL action proposed against ANY of those identifiers
+        can be deduped without rebuilding the snapshot.
+        """
+        try:
+            raw = page.evaluate(
+                """() => {
+                    const out = [];
+                    document.querySelectorAll('input, select, textarea').forEach(el => {
+                        let val = el.value;
+                        if (el.tagName === 'SELECT' && el.selectedIndex >= 0) {
+                            val = el.options[el.selectedIndex].text;
+                        }
+                        if (!val || !val.trim()) return;
+                        const v = val.trim();
+                        const keys = [];
+                        if (el.name) keys.push('name:' + el.name.toLowerCase());
+                        if (el.id)   keys.push('id:'   + el.id.toLowerCase());
+                        const al = el.getAttribute('aria-label');
+                        if (al) keys.push('label:' + al.toLowerCase());
+                        if (el.placeholder) keys.push('ph:' + el.placeholder.toLowerCase());
+                        if (keys.length) out.push({keys, value: v});
+                    });
+                    return out;
+                }"""
+            )
+        except Exception:
+            return {}
+
+        snap: dict[str, str] = {}
+        for row in raw or []:
+            v = (row.get("value") or "").strip()
+            if not v or v.lower() in self._SNAPSHOT_PLACEHOLDERS:
+                continue
+            for k in row.get("keys", []) or []:
+                if k:
+                    snap[k] = v
+        return snap
+
+    def _action_target_already_filled(
+        self,
+        action: BrowserAction,
+        snapshot: dict[str, str],
+    ) -> Optional[str]:
+        """Return the current live value if ``action``'s target is already
+        populated (per ``snapshot``), else ``None``.
+
+        Matching is permissive: any snapshot key whose identifier appears
+        in the action's selector or matches its label counts as a hit.
+        That's because LLM-proposed selectors are stringly-typed and may
+        reference a field by any of its identifiers.
+        """
+        if action.action not in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT):
+            return None
+        sel = (action.selector or "").lower()
+        lbl = (action.field_label or "").lower()
+        if not sel and not lbl:
+            return None
+        for key, val in snapshot.items():
+            _, _, suffix = key.partition(":")
+            if not suffix:
+                continue
+            if (sel and suffix in sel) or (lbl and (suffix == lbl or suffix in lbl)):
+                return val
+        return None
+
     def _agent_fill_loop(
         self,
         page: Page,
@@ -2144,40 +2238,33 @@ class ApplicationEngine:
             ax_tree = extractor.extract()
             logger.save_structured_dom(ax_tree.model_dump(), "ax_tree_snapshot", ExecutionPhase.LLM)
 
-            # Build a list of fields already filled (by extension or pre-populated)
-            # so the LLM knows NOT to re-fill them.
-            prefilled_fields = []
-            placeholders = ["select", "choose", "please choose", "select...", "select an option", "-- select --"]
-            
-            # 1. Grab actual live values directly from the DOM (most reliable for JS-filled inputs)
-            try:
-                live_vals = page.evaluate("""
-                    () => {
-                        const res = [];
-                        document.querySelectorAll('input, select, textarea').forEach(el => {
-                            let val = el.value;
-                            if (el.tagName === 'SELECT' && el.selectedIndex >= 0) {
-                                val = el.options[el.selectedIndex].text;
-                            }
-                            if (val && val.trim() !== '') {
-                                const label = el.name || el.id || el.getAttribute('aria-label') || '';
-                                if (label) {
-                                    res.push({ label: label, value: val.trim() });
-                                }
-                            }
-                        });
-                        return res;
-                    }
-                """)
-                for f in live_vals:
-                    val = f.get('value', '')
-                    label = f.get('label', '')
-                    if val.lower() not in placeholders and label:
-                        prefilled_fields.append(f"- {label}: already has value '{val}'")
-            except Exception:
-                pass
+            # ── Don't-refill snapshot ──────────────────────────────────────
+            # Single source of truth for "this field is already populated".
+            # Used by the LLM context (so the model is told NOT to re-fill)
+            # AND by the per-iteration action filter further down. Refreshed
+            # at the top of every LLM iteration so it never goes stale.
+            prefilled_snapshot: dict[str, str] = self._snapshot_filled(page)
+            prefilled_fields: list[str] = []
+            seen_pairs: set[tuple[str, str]] = set()
+            placeholders = list(self._SNAPSHOT_PLACEHOLDERS)
 
-            # 2. Add any others from ax_tree that weren't caught
+            # 1. From the live DOM snapshot (most reliable for JS-filled inputs).
+            #    We pick the most descriptive identifier (label > name > id)
+            #    for the human-readable line that gets shown to the LLM.
+            for key, val in prefilled_snapshot.items():
+                prefix, _, ident = key.partition(":")
+                if not ident:
+                    continue
+                pair = (ident, val.lower())
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
+                # Only the highest-quality identifier per (value, prefix) gets
+                # rendered, so the LLM context stays compact.
+                prefilled_fields.append(f"- {ident}: already has value '{val}'")
+
+            # 2. Anything the AX tree saw but the live snapshot missed
+            #    (rare: some custom widgets don't expose ``.value``).
             for field in ax_tree.form_fields:
                 val = str(field.get("value", "")).strip()
                 label = field.get("name") or field.get("label") or "unknown"
@@ -2428,6 +2515,28 @@ class ApplicationEngine:
 
                 if llm_response.requires_human:
                     logger.warning("LLM flagged requires_human — proceeding with actions anyway")
+
+                # ── Don't-refill filter ───────────────────────────────────
+                # Refresh the live snapshot for this iteration and drop any
+                # FILL / TYPE / SELECT whose target already has a value.
+                # The LLM regularly re-proposes fills for fields the
+                # extension or a prior phase already populated; without
+                # this guard those re-fills overwrite good values and the
+                # user sees the same field flicker filled twice or more.
+                prefilled_snapshot = self._snapshot_filled(page)
+                if prefilled_snapshot and llm_response.actions:
+                    kept: list[BrowserAction] = []
+                    for act in llm_response.actions:
+                        hit = self._action_target_already_filled(act, prefilled_snapshot)
+                        if hit is None:
+                            kept.append(act)
+                            continue
+                        logger.info(
+                            f"Skipping re-fill of '{act.field_label or act.selector}' "
+                            f"(already has '{hit}')",
+                            phase=ExecutionPhase.LLM,
+                        )
+                    llm_response.actions = kept
 
                 # ── Handle ASK actions: STOP-AND-WAIT semantics ──────────
                 # When the AI requests info, we do NOT execute any other
