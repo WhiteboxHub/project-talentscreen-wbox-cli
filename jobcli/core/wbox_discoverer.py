@@ -5,6 +5,12 @@ import time
 from datetime import datetime
 from typing import Any, List, Optional
 
+# Key on each WBL API row that carries the dashboard "Source" column
+# (e.g. ``linkedin``, ``jobright``, ``hiring.cafe``, ``trueup.io``).
+# Confirmed via ``scripts/probe_source_key.py``; values arrive lowercased
+# from the server.
+_SOURCE_API_KEY = "source"
+
 from playwright.sync_api import sync_playwright
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -13,8 +19,28 @@ from jobcli.core.logger import JobLogger, global_logger
 from jobcli.core.url_normalize import normalize_job_url
 from jobcli.core.schemas import ApplicationStatus, Config, Job
 from jobcli.core.constants import job_url_is_cli_friendly
+from jobcli.core.source_filter import DEFAULT_SOURCES, normalize_source
 from jobcli.storage.repositories import JobRepository
 from jobcli.sync.client import get_client
+
+
+# Precomputed normalised allow-list for the discover-time Source filter.
+# Built once at import (the values in ``DEFAULT_SOURCES`` are constants).
+_ALLOWED_SOURCES_NORMALIZED: frozenset[str] = frozenset(
+    normalize_source(s) for s in DEFAULT_SOURCES
+)
+
+
+def _is_allowed_source(source: Optional[str]) -> bool:
+    """Return True if the row's ``source`` is in the hardcoded allow-list.
+
+    Rows with a missing/empty source are rejected so legacy listings that
+    pre-date the column (or any future row that the server returns without
+    a source tag) can't sneak into the local DB.
+    """
+    if not source:
+        return False
+    return normalize_source(source) in _ALLOWED_SOURCES_NORMALIZED
 
 
 def _parse_listing_datetime(val: Any) -> Optional[datetime]:
@@ -132,6 +158,7 @@ class WboxDiscoverer:
         seen: set[str] = set()
         duplicate_rows = 0
         integrity_failures = 0
+        skipped_source = 0
         for row in rows:
             raw_url = (row.get("job_url") or "").strip()
             if not raw_url:
@@ -143,6 +170,13 @@ class WboxDiscoverer:
                 duplicate_rows += 1
                 continue
             seen.add(norm)
+
+            # Hard-filter on the WBL "Source" column: rows whose source is
+            # not in the canonical allow-list never touch the local DB.
+            raw_source = row.get(_SOURCE_API_KEY)
+            if not _is_allowed_source(raw_source):
+                skipped_source += 1
+                continue
 
             listing_at = _parse_listing_datetime(row.get("created_at")) or datetime.utcnow()
             api_applied = bool(row.get("already_applied", False))
@@ -170,6 +204,9 @@ class WboxDiscoverer:
                 is_already_applied=already,
                 source_status=str(row.get("status") or ""),
                 external_id=str(row.get("id")) if row.get("id") is not None else None,
+                source=(str(row.get(_SOURCE_API_KEY)).strip() or None)
+                if row.get(_SOURCE_API_KEY) is not None
+                else None,
             )
             try:
                 imported.append(self.job_repo.create(job))
@@ -182,7 +219,9 @@ class WboxDiscoverer:
             self.logger.info(
                 f"Imported {len(imported)} job(s) from WBL cli_window API "
                 f"(days={days}, status={status!r}, fetched_rows={len(rows)}, "
-                f"deduped={duplicate_rows}, integrity_skips={integrity_failures})"
+                f"deduped={duplicate_rows}, integrity_skips={integrity_failures}, "
+                f"skipped_source={skipped_source}, "
+                f"allowed_sources={','.join(DEFAULT_SOURCES)})"
             )
         return imported
 
@@ -240,21 +279,44 @@ class WboxDiscoverer:
                                 discovered_urls.add(canonical)
                                 existing = self.job_repo.get_by_url(canonical)
                                 if not existing:
+                                    # Pull the surrounding ag-grid row first
+                                    # so we can apply the hard source filter
+                                    # before persisting anything.
+                                    row_company: Optional[str] = None
+                                    row_source: Optional[str] = None
+                                    try:
+                                        row_handle = link.evaluate_handle(
+                                            "el => el.closest(\".ag-row\")"
+                                        )
+                                        if row_handle:
+                                            row_el = row_handle.as_element()
+                                            company_cell = row_el.query_selector('[col-id="company"]')
+                                            if company_cell:
+                                                row_company = company_cell.inner_text().strip() or None
+                                            source_cell = row_el.query_selector('[col-id="source"]')
+                                            if source_cell:
+                                                src_text = source_cell.inner_text().strip()
+                                                if src_text:
+                                                    row_source = src_text.lower()
+                                    except Exception:
+                                        pass
+
+                                    # Hard-filter on Source; rows whose
+                                    # source isn't in the allow-list (or
+                                    # whose grid didn't expose a source
+                                    # cell) never reach the local DB.
+                                    if not _is_allowed_source(row_source):
+                                        discovered_urls.discard(canonical)
+                                        continue
+
                                     job = Job(
                                         url=canonical,
                                         title=title,
                                         status=ApplicationStatus.PENDING,
                                         scan_source="wbox",
+                                        company=row_company,
+                                        source=row_source,
                                     )
-                                    try:
-                                        row = link.evaluate_handle("el => el.closest(\".ag-row\")")
-                                        if row:
-                                            company_cell = row.as_element().query_selector('[col-id="company"]')
-                                            if company_cell:
-                                                job.company = company_cell.inner_text().strip()
-                                    except Exception:
-                                        pass
-
                                     self.job_repo.create(job)
                                     discovered_jobs.append(job)
                         except Exception:

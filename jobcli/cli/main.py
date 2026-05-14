@@ -1205,6 +1205,10 @@ def apply(
     Flow: ``login`` → ``resume-upload`` → ``discover`` → ``apply``.
 
     Modes: **auto** (minimal stops), **supervised** (default), **manual** (approve each batch).
+
+    Source filtering happens at ``discover`` time — the local DB only ever
+    contains links from the allow-list (see ``jobcli/core/source_filter.py``),
+    so ``apply`` simply iterates whatever is pending.
     """
     _ = batch  # accepted for backward compatibility with scripts using ``--batch``
     _run_apply(url=url, limit=limit, sort=sort, mode=mode)

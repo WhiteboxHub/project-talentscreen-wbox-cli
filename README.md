@@ -13,6 +13,7 @@ Production-grade CLI for automated job applications across multiple ATS platform
 - **Always-visible browser** — `jobcli apply` forces `headless=False`; Chrome is always on screen so you can watch and intervene.
 - **Don't-refill guard** — the extension autofills first; a three-layer guard (engine snapshot → LLM action filter → executor live-read) prevents the LLM or rules from overwriting any field the extension already populated. Placeholder values like `"Select..."` are correctly treated as empty, so real values still flow through.
 - **Required-first human prompt** — when fields stay empty after extension + LLM + rules, the terminal asks for `[red]*required[/red]` fields first (must answer) and `[dim](optional, Enter to skip)[/dim]` fields second (press Enter to skip). The `required` flag is propagated from the page's Accessibility Tree.
+- **Source-filtered discover** — `jobcli discover` only ingests links whose WBL `Source` value is one of `trueup.io`, `hiring.cafe`, `jobright`, `linkedin`. Other listings (Indeed, Workday, …) are dropped at ingest time and never touch the local DB, so `apply` simply iterates whatever is in the queue. To change the allow-list, edit `DEFAULT_SOURCES` in [`jobcli/core/source_filter.py`](jobcli/core/source_filter.py).
 - **WBL job listings API** — `jobcli discover` calls `GET /api/positions/cli_window` (Bearer auth), pages with `offset` until every listing row is fetched (same filters as the dashboard Jobs grid by default: all time, `open` only). Tune with `JOBCLI_DISCOVER_DAYS`, `JOBCLI_DISCOVER_PAGE_SIZE`, `JOBCLI_DISCOVER_STATUS`. Legacy Playwright dashboard scrape: `WBOX_DISCOVER_MODE=browser` or `jobcli discover --legacy-ui`.
 - **Advanced AI Reasoning** — AXTree (Accessibility Tree) analysis for high-accuracy form field mapping
 - **Universal Iframe Support** — Reach-through for Greenhouse, Lever, Paylocity, and nested iframes
@@ -295,6 +296,32 @@ When the extension + rules + LLM still leave fields empty, the terminal pauses w
 The `required` flag is read directly from the page's Accessibility Tree (`aria-required`, the HTML `required` attribute, or a visible `*` next to the label), so it matches what the form itself considers mandatory.
 
 In `--mode auto`, the optional pass is suppressed entirely and required-but-empty fields fail-fast instead of blocking the loop.
+
+### Filtering by Source
+
+Every job listing carries a `Source` value in the WBL dashboard (visible as the **Source** column — values like `Linkedin`, `Jobright`, `Hiring.Cafe`, `Trueup.Io`, `Indeed`, …). The filter is **unconditional and applied at discover time**: `jobcli discover` only ingests rows whose `Source` matches the allow-list — every other row is dropped before it touches the local SQLite database.
+
+The default allow-list is the four CLI-friendly sources:
+
+- `trueup.io`
+- `hiring.cafe`
+- `jobright`
+- `linkedin`
+
+```bash
+# Pull only allow-listed listings into the local queue.
+# No flag, no env var — the filter is always on.
+jobcli discover
+
+# Apply iterates whatever discover persisted; no source filter needed here.
+jobcli apply
+```
+
+Notes:
+- Comparison is **case- and punctuation-insensitive**: `LinkedIn`, `linkedin`, `LINKEDIN` and `Linked-In` all normalise to the same token.
+- Rows with a missing/empty `source` value are rejected too, so legacy listings predating the column can't sneak through.
+- To change the allow-list, edit the `DEFAULT_SOURCES` tuple in [`jobcli/core/source_filter.py`](jobcli/core/source_filter.py). There is intentionally **no** `--sources` flag or env var — the only change path is the source tuple.
+- **Upgrading?** If you ran `jobcli discover` on a build that pre-dates this filter, your local DB may still contain rows from disallowed sources. Run `jobcli reset --force` then `jobcli discover` to start with a clean, filter-compliant queue.
 
 ---
 

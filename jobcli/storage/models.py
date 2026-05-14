@@ -41,6 +41,11 @@ class JobModel(Base):
     is_already_applied = Column(Boolean, nullable=True)
     source_status = Column(String(100), nullable=True)
     external_id = Column(String(64), nullable=True)
+    # WBL "Source" column (e.g. ``linkedin``, ``jobright``, ``hiring.cafe``,
+    # ``trueup.io``); populated by the discoverer from the API's `source` key.
+    # Lowercased on the server already, but we keep the raw value verbatim
+    # so the UI rendering stays auditable; normalisation happens at filter time.
+    source = Column(String(100), nullable=True)
 
 
 class ApplicationLogModel(Base):
@@ -239,6 +244,7 @@ class Database:
                     ("is_already_applied", "INTEGER"),
                     ("source_status", "VARCHAR(100)"),
                     ("external_id", "VARCHAR(64)"),
+                    ("source", "VARCHAR(100)"),
                 ]
                 with self.engine.begin() as conn:
                     for col_name, col_type in job_extra:

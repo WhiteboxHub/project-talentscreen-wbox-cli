@@ -362,6 +362,11 @@ class Job(BaseModel):
     is_already_applied: Optional[bool] = None
     source_status: Optional[str] = None
     external_id: Optional[str] = None
+    # WBL "Source" column verbatim from the API (e.g. ``linkedin``,
+    # ``jobright``, ``hiring.cafe``, ``trueup.io``). Used by the
+    # ``apply --sources`` filter; ``None`` for legacy rows that were
+    # discovered before the column existed.
+    source: Optional[str] = None
 
 
 class BrowserAction(BaseModel):

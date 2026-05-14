@@ -72,6 +72,7 @@ def _job_model_to_job(jm: JobModel) -> Job:
         is_already_applied=getattr(jm, "is_already_applied", None),
         source_status=getattr(jm, "source_status", None),
         external_id=getattr(jm, "external_id", None),
+        source=getattr(jm, "source", None),
     )
 
 
@@ -109,6 +110,7 @@ class JobRepository:
             is_already_applied=already,
             source_status=job.source_status,
             external_id=job.external_id,
+            source=job.source,
         )
         self.session.add(job_model)
         self.session.commit()

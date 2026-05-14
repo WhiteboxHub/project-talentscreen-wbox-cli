@@ -467,7 +467,8 @@ def _print_welcome():
         db = get_database()
         session = db.get_session()
         repo = JobRepository(session)
-        pending_eligible = len(repo.list_pending())
+        pending_jobs = repo.list_pending()
+        pending_eligible = len(pending_jobs)
         session.close()
         state_known = True
 
