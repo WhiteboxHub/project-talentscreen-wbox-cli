@@ -2,7 +2,7 @@
 #  WboxCLI Global Installer - Windows (PowerShell)
 #
 #  Usage:
-#    irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.ps1 | iex
+#    irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/install.ps1 | iex
 #
 #  What it does:
 #    1. Clones (or updates) the repo into %USERPROFILE%\.jobcli\src
@@ -23,7 +23,7 @@ $BinDir        = Join-Path $env:USERPROFILE ".local\bin"
 $Wrapper       = Join-Path $BinDir "wboxcli.cmd"
 $WrapperJobcli = Join-Path $BinDir "jobcli.cmd"
 $RepoUrl       = "https://github.com/WhiteboxHub/wbox-cli.git"
-$Branch        = if ($env:JOBCLI_BRANCH) { $env:JOBCLI_BRANCH } else { "dev" }
+$Branch        = if ($env:JOBCLI_BRANCH) { $env:JOBCLI_BRANCH } else { "main" }
 
 function Write-Step   { param($msg) Write-Host "[info]  $msg" -ForegroundColor Cyan }
 function Write-Ok     { param($msg) Write-Host "[OK]    $msg" -ForegroundColor Green }
@@ -71,6 +71,13 @@ if (-not (Test-Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 }
 
+$ExtTmpDir = Join-Path $env:TEMP "jobcli_ext_clone_$PID"
+$ExtUrl = "https://github.com/WhiteboxHub/project-talentscreen-autofill-extension.git"
+
+Write-Step "Cloning TalentScreen extension..."
+& git clone --depth 1 $ExtUrl $ExtTmpDir --quiet 2>$null
+Write-Ok "Cloned extension to temporary location"
+
 if (Test-Path (Join-Path $SrcDir ".git")) {
     Write-Step "Existing installation found - pulling latest..."
     & git -C $SrcDir remote set-branches origin '*' 2>$null
@@ -82,6 +89,16 @@ if (Test-Path (Join-Path $SrcDir ".git")) {
     Write-Ok "Cloned $Branch branch"
 }
 
+$BinDirTarget = Join-Path $SrcDir "bin"
+if (-not (Test-Path $BinDirTarget)) {
+    New-Item -ItemType Directory -Path $BinDirTarget -Force | Out-Null
+}
+$ExtTarget = Join-Path $BinDirTarget "project-talentscreen-autofill-extension"
+if (Test-Path $ExtTarget) {
+    Remove-Item -Recurse -Force $ExtTarget
+}
+Move-Item -Path $ExtTmpDir -Destination $ExtTarget -Force
+Write-Ok "Attached extension to bin directory"
 # -- Step 3: Create venv and install ----------------------------------
 Write-Step "Setting up Python virtual environment..."
 

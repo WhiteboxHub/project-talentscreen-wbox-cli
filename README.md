@@ -48,14 +48,30 @@ Production-grade CLI for automated job applications across multiple ATS platform
 
 Requires **Python 3.10+** and **git**.
 
+### Stable Release (Main)
+
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/install.ps1 | iex
+```
+
+### Development Release (Dev)
+
+*For testing the latest features.*
+
+**macOS / Linux:**
+```bash
+JOBCLI_BRANCH=dev curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:JOBCLI_BRANCH="dev"; irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.ps1 | iex
 ```
 
 This installs `wboxcli` globally — available from any terminal, just like `nvm` or `curl`. No virtual environment activation needed. After install, the interactive TUI launches automatically.
@@ -79,22 +95,34 @@ This installs `wboxcli` globally — available from any terminal, just like `nvm
 **To update** (just re-run the installer — same one-liner as above):
 
 ```bash
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.sh | bash
+# macOS / Linux (Main)
+curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/install.sh | bash
+
+# macOS / Linux (Dev)
+JOBCLI_BRANCH=dev curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.sh | bash
 ```
 ```powershell
-# Windows (PowerShell)
-irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.ps1 | iex
+# Windows PowerShell (Main)
+irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/install.ps1 | iex
+
+# Windows PowerShell (Dev)
+$env:JOBCLI_BRANCH="dev"; irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.ps1 | iex
 ```
 
 **To uninstall** (see also [Cleanup, DB Reset, and Uninstall](#cleanup-db-reset-and-uninstall) for finer-grained options):
 
 ```bash
-# macOS / Linux — removes ~/.jobcli, ~/.local/bin/wboxcli, ~/.local/bin/jobcli
+# macOS / Linux (Main)
+curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/uninstall.sh | bash
+
+# macOS / Linux (Dev)
 curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.sh | bash
 ```
 ```powershell
-# Windows — removes ~\.jobcli, ~\.local\bin\wboxcli.cmd, ~\.local\bin\jobcli.cmd
+# Windows PowerShell (Main)
+irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/uninstall.ps1 | iex
+
+# Windows PowerShell (Dev)
 irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.ps1 | iex
 ```
 
@@ -259,11 +287,17 @@ What it does:
 If `jobcli uninstall` ever leaves files behind, the **bundled shell uninstaller** is the always-clean fallback because it doesn't run from inside the venv:
 
 ```bash
-# macOS / Linux
+# macOS / Linux (Main)
+curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/uninstall.sh | bash
+
+# macOS / Linux (Dev)
 curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.sh | bash
 ```
 ```powershell
-# Windows (PowerShell)
+# Windows PowerShell (Main)
+irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/uninstall.ps1 | iex
+
+# Windows PowerShell (Dev)
 irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.ps1 | iex
 ```
 

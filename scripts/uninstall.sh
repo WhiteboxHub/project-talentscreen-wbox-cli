@@ -3,7 +3,7 @@
 #  JobCLI Global Uninstaller
 #
 #  Usage:
-#    curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.sh | bash
+#    curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/uninstall.sh | bash
 #    — or —
 #    bash ~/.jobcli/src/scripts/uninstall.sh
 # ──────────────────────────────────────────────────────────────────────
