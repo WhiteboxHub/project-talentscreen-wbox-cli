@@ -22,7 +22,7 @@ from rich.table import Table
 from jobcli.orchestration.engine import ApplicationEngine
 from jobcli.profile.schemas import ApplicationStatus, CommonQuestions, Config, InteractionMode, Job, ResumeData
 from jobcli.storage.models import Database
-from jobcli.core.wbox_discoverer import WboxDiscoverer
+from jobcli.orchestration.wbox_discoverer import WboxDiscoverer
 from jobcli.storage.repositories import (
     ConfigRepository,
     JobRepository,
@@ -981,7 +981,7 @@ def _run_apply(
     actions, LinkedIn-skip yes/no, manual pauses) via
     ``AgentInterface._get_user_input``.
     """
-    from jobcli.core.exit_signal import (
+    from jobcli.utils.exit_signal import (
         ExitRequested,
         install_global_sigint_handler,
         is_exit_requested,
@@ -1300,7 +1300,7 @@ def scan(
     console.print("[bold cyan]ATS Zero-Token Scanner[/bold cyan]\n")
     
     import yaml
-    from jobcli.core.scanner import ATSScanner
+    from jobcli.orchestration.scanner import ATSScanner
     from jobcli.storage.repositories import JobRepository
     
     try:

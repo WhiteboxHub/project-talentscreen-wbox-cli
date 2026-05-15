@@ -159,7 +159,7 @@ class AgentInterface:
         ---------------------------------
         Typing any of the canonical quit keywords (``q``, ``quit``,
         ``exit``, ``:q``, ``quit-all``) or pressing Ctrl+C raises
-        :class:`jobcli.core.exit_signal.ExitRequested`, which bubbles up
+        :class:`jobcli.utils.exit_signal.ExitRequested`, which bubbles up
         through the engine to the top-level apply loop and triggers a
         graceful shutdown (close browser, persist state, exit 0).
 
@@ -168,7 +168,7 @@ class AgentInterface:
         immediately — Windows PowerShell will otherwise leave a daemon
         thread blocked on ``input()`` until the user types something.
         """
-        from jobcli.core.exit_signal import (
+        from jobcli.utils.exit_signal import (
             ExitRequested,
             is_exit_requested,
             is_quit_keyword,

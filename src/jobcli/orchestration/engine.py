@@ -1009,14 +1009,14 @@ class ApplicationEngine:
             (Stop button in the dashboard UI). Raises ``InterruptedError``
             so the existing engine try/except path captures it.
           * Global ``is_exit_requested()`` — set by the SIGINT handler in
-            :mod:`jobcli.core.exit_signal` when the user pressed Ctrl+C.
+            :mod:`jobcli.utils.exit_signal` when the user pressed Ctrl+C.
             Raises ``ExitRequested`` which bypasses the engine's
             ``except Exception`` catch-alls (BaseException subclass) and
             propagates to the CLI's apply loop for graceful shutdown.
         """
         if self.stop_requested:
             raise InterruptedError("Process stopped by user")
-        from jobcli.core.exit_signal import ExitRequested, is_exit_requested
+        from jobcli.utils.exit_signal import ExitRequested, is_exit_requested
         if is_exit_requested():
             raise ExitRequested("Ctrl+C detected at engine checkpoint")
 
