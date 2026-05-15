@@ -71,7 +71,7 @@ def verify_extension_in_browser(
     email: str,
     password: str,
 ) -> tuple[bool, bool, str]:
-    """Launch a visible browser, load the extension, and attempt login.
+    """Launch a headless browser, load the extension, and attempt login.
 
     Returns ``(login_ok, extension_ok, error_message)``.
 
@@ -100,7 +100,7 @@ def verify_extension_in_browser(
         with sync_playwright() as pw:
             ctx = pw.chromium.launch_persistent_context(
                 user_data_dir,
-                headless=False,
+                headless=True,
                 args=launch_args,
                 ignore_default_args=IGNORE_DEFAULT_ARGS,
                 **CONTEXT_OPTIONS,

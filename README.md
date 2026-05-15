@@ -113,10 +113,10 @@ $env:JOBCLI_BRANCH="dev"; irm https://raw.githubusercontent.com/WhiteboxHub/wbox
 
 ```bash
 # macOS / Linux (Main)
-curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/uninstall.sh | bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/uninstall.sh)"
 
 # macOS / Linux (Dev)
-curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.sh | bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.sh)"
 ```
 ```powershell
 # Windows PowerShell (Main)
@@ -165,20 +165,22 @@ Returning users (where `~/.jobcli/jobcli.db` already exists) skip straight to th
 
 ### Starting fresh (re-trigger onboarding)
 
-`quit` only closes the session — it does not delete saved state. To go back to Step 1:
+`quit` only closes the session — it does not delete saved state. If you have already completed the setup but want to change your API keys, credentials, or resume, the CLI will skip the wizard because your database is preserved. 
 
-```powershell
-Remove-Item -Recurse -Force "$env:USERPROFILE\.jobcli"   # Windows
-# rm -rf ~/.jobcli                                       # macOS / Linux
+To re-trigger the onboarding wizard, use one of the following methods:
+
+**Option 1: Run the setup command directly (Preserves History)**
+```bash
+wboxcli setup
+```
+
+**Option 2: Wipe the database completely to start fresh**
+```bash
+jobcli db reset --force
 wboxcli
 ```
 
-Or use the built-in equivalents:
-
-```powershell
-jobcli reset --force     # wipe DB only (keeps extension + logs)
-jobcli uninstall --force # wipe everything under ~/.jobcli/
-```
+*(Note: Uninstalling and reinstalling the app does not wipe your credentials unless you use the official uninstallation scripts)*
 
 ---
 
@@ -288,10 +290,10 @@ If `jobcli uninstall` ever leaves files behind, the **bundled shell uninstaller*
 
 ```bash
 # macOS / Linux (Main)
-curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/uninstall.sh | bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/uninstall.sh)"
 
 # macOS / Linux (Dev)
-curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.sh | bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.sh)"
 ```
 ```powershell
 # Windows PowerShell (Main)

@@ -223,8 +223,7 @@ def _run_onboarding(force: bool = False):
             db_config = repo.get_all()
 
             # ── Step 1 — Whitebox Learning Login + Browser/Extension Test ──
-            # Per the desired flow the user must authenticate FIRST. A single
-            # visible Chrome window doubles as the credential check and the
+            # A single headless Chrome window doubles as the credential check and the
             # extension smoke test, so we never launch two browsers in a row.
             console.print(f"[{D}]Step 1/4[/] — [bold]Whitebox Learning Credentials[/bold]")
             if force or not db_config.job_board_username or not db_config.job_board_password:
