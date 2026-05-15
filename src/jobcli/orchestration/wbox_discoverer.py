@@ -15,10 +15,10 @@ from playwright.sync_api import sync_playwright
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from jobcli.core.logger import JobLogger, global_logger
-from jobcli.core.url_normalize import normalize_job_url
-from jobcli.core.schemas import ApplicationStatus, Config, Job
-from jobcli.core.constants import job_url_is_cli_friendly
+from jobcli.utils.logger import JobLogger, global_logger
+from jobcli.utils.url_normalize import normalize_job_url
+from jobcli.profile.schemas import ApplicationStatus, Config, Job
+from jobcli.utils.constants import job_url_is_cli_friendly
 from jobcli.orchestration.source_filter import DEFAULT_SOURCES, normalize_source
 from jobcli.storage.repositories import JobRepository
 from jobcli.sync.client import get_client

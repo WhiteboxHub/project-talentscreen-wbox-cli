@@ -12,7 +12,7 @@ if hasattr(sys.stdout, 'reconfigure') and sys.stdout.encoding.lower() != 'utf-8'
 
 # NOTE: TLS trust roots are configured in ``jobcli/__init__.py`` so that all
 # entry points (CLI, tests, interactive) inherit OS-native CA support before
-# any HTTP client is built. See ``jobcli/core/tls.py``.
+# any HTTP client is built. See ``jobcli/utils/tls.py``.
 
 import typer
 from rich.console import Console
@@ -1202,7 +1202,7 @@ def apply(
     Modes: **auto** (minimal stops), **supervised** (default), **manual** (approve each batch).
 
     Source filtering happens at ``discover`` time — the local DB only ever
-    contains links from the allow-list (see ``jobcli/core/source_filter.py``),
+    contains links from the allow-list (see ``jobcli/orchestration/source_filter.py``),
     so ``apply`` simply iterates whatever is pending.
     """
     _ = batch  # accepted for backward compatibility with scripts using ``--batch``
@@ -1435,7 +1435,7 @@ def agent(
     prompt: str = typer.Argument(..., help="The task you want the agent to perform"),
     max_steps: int = typer.Option(12, help="Maximum number of steps the agent can take"),
 ) -> None:
-    """Launch the autonomous coding agent (Claude Code style)."""
+    """Launch the autonomous coding agent."""
     from jobcli.agents.coder.agent import CodingAgent
     
     console.print(f"[bold cyan]JobCLI Autonomous Coder[/bold cyan]\n")

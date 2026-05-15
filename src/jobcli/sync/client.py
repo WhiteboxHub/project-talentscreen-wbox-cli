@@ -213,7 +213,7 @@ def _normalize_wbl_api_base(url: str) -> str:
 
 
 def _requests_verify() -> Any:
-    """Delegate to the shared TLS configuration (see ``jobcli.core.tls``)."""
+    """Delegate to the shared TLS configuration (see ``jobcli.utils.tls``)."""
     from jobcli.utils.tls import requests_verify
 
     return requests_verify()

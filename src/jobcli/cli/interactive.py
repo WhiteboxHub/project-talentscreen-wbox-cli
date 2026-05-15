@@ -1,4 +1,4 @@
-"""Interactive TUI for WboxCLI — clean, minimal, Claude Code-style.
+"""Interactive TUI for WboxCLI — clean, minimal.
 
 Just a clean prompt. No heavy panels. Information when you need it.
 """
@@ -114,7 +114,7 @@ def _next_hint(text: str) -> None:
 
 # ── Welcome ───────────────────────────────────────────────────────────
 def _animate_banner():
-    """Claude Code style welcome: boxed title + block ASCII banner."""
+    """Interactive welcome: boxed title + block ASCII banner."""
     # The small boxed welcome at the top left
     welcome_box = Panel(
         "[bold #f0abfc]◈ Welcome to W-BOX CLI[/]", 
@@ -198,7 +198,7 @@ def _validate_wbox_and_extension(
 
 
 def _run_onboarding(force: bool = False):
-    """Claude Code style interactive onboarding selection."""
+    """Interactive onboarding selection."""
     try:
         from jobcli.cli.main import get_config, get_database
         from jobcli.storage.repositories import ConfigRepository
@@ -335,7 +335,7 @@ def _run_onboarding(force: bool = False):
 
 
 def _print_welcome():
-    """Claude Code-style welcome and onboarding."""
+    """Interactive welcome and onboarding."""
     _animate_banner()
     _run_onboarding()
 

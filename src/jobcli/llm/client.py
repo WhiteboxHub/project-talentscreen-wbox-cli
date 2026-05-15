@@ -132,7 +132,7 @@ Your task: Parse the provided Accessibility Snapshot and output the correct sequ
         """Initialize LLM client.
 
         Every SDK is constructed with an ``http_client`` (or ``http_options``)
-        that honors :func:`jobcli.core.tls.httpx_verify`. That single seam is
+        that honors :func:`jobcli.utils.tls.httpx_verify`. That single seam is
         why ``JOBCLI_INSECURE_TLS=1`` / ``JOBCLI_SSL_CA_BUNDLE`` work uniformly
         across OpenAI, Anthropic, and Gemini without per-SDK monkey patching.
         """

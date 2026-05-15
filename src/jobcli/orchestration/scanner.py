@@ -11,7 +11,7 @@ from typing import Any, Optional
 import requests
 from bs4 import BeautifulSoup
 
-from jobcli.core.schemas import ATSType, Job
+from jobcli.profile.schemas import ATSType, Job
 
 
 class ATSScanner:

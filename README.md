@@ -80,7 +80,7 @@ This installs `wboxcli` globally — available from any terminal, just like `nvm
 
 | Command | What it does |
 |---|---|
-| `wboxcli` | Opens the interactive TUI (Claude Code style) |
+| `wboxcli` | Opens the interactive TUI |
 | `wboxcli setup` | Runs a subcommand directly (any `jobcli` subcommand works under `wboxcli`) |
 | `jobcli apply` | Direct CLI — apply to all pending jobs after `discover` |
 

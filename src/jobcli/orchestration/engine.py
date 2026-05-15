@@ -3,7 +3,7 @@
 Instead of a three-phase waterfall (LLM → Rules → Human), the engine runs a
 single agent loop.  Human interaction is woven inline via ``AgentInterface``,
 whose behaviour adapts to the configured ``InteractionMode`` (auto / supervised
-/ manual) — similar to how Claude Code integrates approval into its tool loop.
+/ manual) — integrating approval into its tool loop.
 """
 
 import os

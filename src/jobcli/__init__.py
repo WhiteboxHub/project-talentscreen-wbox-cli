@@ -7,7 +7,7 @@ Anthropic, Gemini, ``requests``, ``httpx``) authenticates HTTPS against the
 same roots — including the corporate MITM roots that Windows users typically
 have installed system-wide but **not** in Python's bundled ``certifi`` store.
 
-See :mod:`jobcli.core.tls` for the configuration knobs
+See :mod:`jobcli.utils.tls` for the configuration knobs
 (``JOBCLI_INSECURE_TLS``, ``JOBCLI_SSL_CA_BUNDLE``, ``JOBCLI_TLS_DEBUG``).
 """
 

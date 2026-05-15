@@ -1,7 +1,7 @@
 """Unified agent interface — integrates human-in-the-loop inline with auto-apply.
 
 Instead of a separate "human phase", this interface is called at checkpoints
-throughout the agent loop, similar to how Claude Code works: the agent runs
+throughout the agent loop: the agent runs
 autonomously but pauses at key moments for human review / input / confirmation.
 
 Key behaviours:
@@ -564,7 +564,7 @@ class AgentInterface:
         self.console.print(f"  {prefix} {message}")
 
     def show_action_plan(self, actions: list[BrowserAction]) -> None:
-        """Display what the agent is about to do (like Claude Code's tool-use display)."""
+        """Display what the agent is about to do."""
         if not actions:
             return
         table = Table(title="Agent Action Plan", show_lines=True, expand=False)

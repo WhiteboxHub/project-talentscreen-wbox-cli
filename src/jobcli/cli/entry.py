@@ -1,6 +1,6 @@
 """Entry point for the `wboxcli` command.
 
-- No arguments  → launches the interactive TUI (Claude Code style)
+- No arguments  → launches the interactive TUI
 - With arguments → forwards to the standard Typer CLI (e.g. `wboxcli apply`)
 """
 
