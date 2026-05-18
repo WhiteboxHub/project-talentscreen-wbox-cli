@@ -10,6 +10,7 @@ import os
 import random
 import time
 import re
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from playwright.sync_api import Error, Page, sync_playwright
@@ -948,12 +949,19 @@ class ApplicationEngine:
         
         if self.extension_dir and os.path.exists(self.extension_dir):
             import tempfile
+
+            from jobcli.extension.helpers import (
+                chromium_extension_launch_args,
+                read_extension_manifest_version,
+            )
+
             self.user_data_dir = tempfile.mkdtemp(prefix="jobcli_ext_profile_")
-            launch_args.extend([
-                f"--disable-extensions-except={self.extension_dir}",
-                f"--load-extension={self.extension_dir}"
-            ])
-            global_logger.info(f"Launching persistent browser context with extension from: {self.extension_dir}")
+            launch_args.extend(chromium_extension_launch_args(self.extension_dir))
+            ext_ver = read_extension_manifest_version(self.extension_dir)
+            ver_hint = f" v{ext_ver}" if ext_ver else ""
+            global_logger.info(
+                f"Launching persistent browser context with TalentScreen{ver_hint} from: {self.extension_dir}"
+            )
             self.context = self.playwright.chromium.launch_persistent_context(
                 self.user_data_dir,
                 headless=False,
@@ -1298,10 +1306,8 @@ class ApplicationEngine:
                 apply_stealth(self.context, logger=logger)
             self.anti_bot.logger = logger
 
-            # Resume data is injected into the TalentScreen extension's storage
-            # via chrome.storage.local through the background service worker
-            # (see engine._inject_resume_into_extension), not via DOM attributes.
-            self._inject_resume_into_extension(page, logger)
+            # TalentScreen v2 autofill runs after navigation (see _agent_fill_loop)
+            # via window.AutofillExtension on the job page — not before goto.
 
             # AgentInterface is created once and used throughout the loop.
             # Memory + ATS type are populated as soon as we know them so every
@@ -1806,14 +1812,9 @@ class ApplicationEngine:
         before AND after the resume upload — which is the seam where most
         forms reveal additional fields.
 
-        Why this is necessary
-        ---------------------
-        The bundled TalentScreen Chrome extension's autofill is gated behind
-        ``autoRunActive`` AND a "side-panel open" check in
-        ``content.js``. Neither is satisfied in a Playwright session, so the
-        extension never fires. Doing the deterministic fill ourselves keeps
-        the LLM phase focused on compliance / long-form questions that
-        actually need reasoning.
+        Extension autofill (TalentScreen v2 ``window.AutofillExtension``) runs
+        in ``_agent_fill_loop`` before this pass. These rules fill any gaps
+        the extension missed (unusual field names, ATS-specific selectors).
         """
         merged: Dict[str, bool] = {}
 
@@ -1871,174 +1872,44 @@ class ApplicationEngine:
 
         return merged
 
-    def _get_extension_service_worker(self, page: Page, logger: JobLogger, timeout_ms: int = 5000):
-        """Return the TalentScreen extension's MV3 service worker, waking it if necessary.
-
-        MV3 workers are lazy: they don't appear in ``context.service_workers``
-        until *something* triggers them (an event, a message, or first
-        ``chrome.runtime`` use from a content script on a host they match).
-        If we naively call ``context.service_workers[0]``, the list is empty
-        right after browser launch and storage injection silently no-ops —
-        which is one of the two root causes of "extension doesn't autofill".
-
-        We poll up to ``timeout_ms`` for a worker to appear (Chrome wakes it
-        automatically once a matching page navigates). Returns ``None`` if it
-        never wakes (extension not loaded, wrong manifest, etc.) — caller
-        treats that as "extension unavailable, rely on the Python rules
-        pre-pass instead".
-        """
-        context = page.context
-        # Fast path
-        if context.service_workers:
-            return context.service_workers[0]
-        if context.background_pages:
-            return context.background_pages[0]
-        # Poll – the worker typically wakes within a few hundred ms of the
-        # first content-script-matching navigation.
-        import time as _time
-        deadline = _time.monotonic() + (timeout_ms / 1000.0)
-        while _time.monotonic() < deadline:
-            try:
-                page.wait_for_timeout(150)
-            except Exception:
-                _time.sleep(0.15)
-            if context.service_workers:
-                return context.service_workers[0]
-            if context.background_pages:
-                return context.background_pages[0]
-        logger.debug(
-            f"No extension service worker after {timeout_ms}ms wait — "
-            "the bundled TalentScreen extension may not be loaded. Rules "
-            "pre-pass will still fill the deterministic fields."
+    def _run_extension_autofill(self, page: Page, logger: JobLogger):
+        """Run TalentScreen v2 autofill via ``window.AutofillExtension`` on *page*."""
+        from jobcli.extension.autofill_bridge import (
+            ExtensionAutofillResult,
+            run_extension_autofill,
         )
-        return None
 
-    def _inject_resume_into_extension(self, page: Page, logger: JobLogger) -> None:
-        """Make the TalentScreen autofill extension actually fire on this tab.
+        if not self.extension_dir or not self.resume:
+            return ExtensionAutofillResult()
 
-        Reading the extension's own ``content.js`` (downloaded into
-        ``~/.jobcli/extension_unpacked/``) shows ``attemptAutoFill`` is gated
-        behind TWO conditions that are not satisfied in a Playwright session:
-
-        1. The side panel must be open in the **current Chrome window**
-           (`checkSidePanelStatus` message). Playwright cannot open the side
-           panel programmatically.
-        2. ``chrome.storage.local.autoRunActive`` must be true. The original
-           injection only set ``autoTriggerEnabled``, which the content
-           script doesn't even read.
-
-        So the previous implementation always wrote the resume into storage,
-        and the extension always ignored it. We fix that here by:
-
-        - Waking the service worker before evaluating any JS.
-        - Setting **every** storage key the extension's pageload listener
-          actually reads (``normalizedData``, ``autoTriggerEnabled``,
-          ``autoRunActive``, ``currentJobIndex``, ``totalJobs``).
-        - Reading back to confirm the write landed.
-        - Sending a direct ``{action: 'fill_form'}`` message to the tab. The
-          content script handles this with ``force=true`` and bypasses both
-          gates — see ``content.js`` line 23-27.
-
-        On failure we log at debug level and fall through; the Python rules
-        pre-pass (see ``_run_rules_prefill``) provides the deterministic
-        baseline, so a missing extension never blocks the user.
-        """
+        questions = None
         try:
-            if not self.resume:
-                return
+            from jobcli.storage.repositories import UserDataRepository
 
-            bg_target = self._get_extension_service_worker(page, logger)
-            if not bg_target:
-                # Already logged at debug; nothing more to do.
-                return
+            questions = UserDataRepository(self.session).get_questions()
+        except Exception:
+            pass
 
-            import json as _json
-            resume_dict = self.resume.model_dump(exclude_none=True)
-            resume_json = _json.dumps(resume_dict)
+        result = run_extension_autofill(
+            page,
+            self.resume,
+            logger=logger,
+            questions=questions,
+        )
 
-            # Atomic set + verify-readback. The promise resolves with the
-            # actual stored value so we can confirm the write was honored.
-            inject_js = f"""
-                async () => {{
-                    await new Promise((resolve) => chrome.storage.local.set({{
-                        normalizedData: {resume_json},
-                        autoTriggerEnabled: true,
-                        autoRunActive: true,
-                        currentJobIndex: 0,
-                        totalJobs: 1
-                    }}, resolve));
-                    const verify = await new Promise((resolve) => chrome.storage.local.get(
-                        ['normalizedData', 'autoRunActive', 'autoTriggerEnabled'],
-                        resolve
-                    ));
-                    return {{
-                        wrote_normalized: !!verify.normalizedData,
-                        autoRunActive: verify.autoRunActive === true,
-                        autoTriggerEnabled: verify.autoTriggerEnabled === true,
-                    }};
-                }}
-            """
+        if result.report and getattr(logger, "job_log_dir", None):
             try:
-                verify = bg_target.evaluate(inject_js)
-            except Exception as e:
-                logger.debug(f"Service-worker evaluate failed during injection: {e}")
-                return
+                import json as _json
 
-            if not (verify and verify.get("wrote_normalized")):
-                logger.debug(
-                    "Resume write to chrome.storage.local did not verify — "
-                    "extension may be sandboxed."
+                report_path = Path(logger.job_log_dir) / "extension_report.json"
+                report_path.write_text(
+                    _json.dumps(result.report, indent=2),
+                    encoding="utf-8",
                 )
-                return
-
-            logger.info("Successfully injected resume into extension storage.")
-
-            # Bonus: poke every tab the extension matches and ask it to
-            # fillForm directly. The content script's onMessage handler runs
-            # ``fillForm(data, true, ...)`` with ``manual=true``, which
-            # bypasses the side-panel-open AND autoRunActive gates. This is
-            # best-effort — if the content script hasn't injected yet (page
-            # still loading), the sendMessage simply errors, which is fine.
-            try:
-                poke_js = f"""
-                    async () => {{
-                        const tabs = await new Promise(r =>
-                            chrome.tabs.query({{}}, r)
-                        );
-                        let poked = 0;
-                        for (const t of tabs) {{
-                            if (!t.id) continue;
-                            try {{
-                                await new Promise((resolve) => {{
-                                    chrome.tabs.sendMessage(
-                                        t.id,
-                                        {{
-                                            action: 'fill_form',
-                                            normalizedData: {resume_json},
-                                            resumeFile: null,
-                                            manualEdits: {{}}
-                                        }},
-                                        () => {{
-                                            // Ignore lastError; tab just may not have the CS loaded.
-                                            const _ = chrome.runtime.lastError;
-                                            resolve();
-                                        }}
-                                    );
-                                }});
-                                poked += 1;
-                            }} catch (e) {{ /* swallow */ }}
-                        }}
-                        return poked;
-                    }}
-                """
-                bg_target.evaluate(poke_js)
             except Exception:
-                # Bonus path — failure is expected on pages that haven't
-                # loaded the content script yet. Not worth logging.
                 pass
 
-        except Exception as e:
-            logger.error(f"Failed to inject resume into extension: {e}")
+        return result
 
     # ── Don't-refill snapshot ────────────────────────────────────────────
     # The TalentScreen extension, the deterministic rule pass, and the LLM
@@ -2182,11 +2053,11 @@ class ApplicationEngine:
                 except Exception:
                     pass
 
-            # ── TalentScreen Extension Autofill ───────────────────────────
-            # The TalentScreen Chrome Web Store extension autofills the form
-            # natively once resume data is loaded into its chrome.storage.
-            # No custom button injection needed — the extension handles UI.
-            # ──────────────────────────────────────────────────────────────
+            # ── TalentScreen v2 Extension Autofill ────────────────────────
+            if self.extension_dir:
+                agent.show_status("Running TalentScreen extension autofill...", phase=ExecutionPhase.RULES)
+                self._run_extension_autofill(page, logger)
+                page.wait_for_timeout(self.EXTENSION_AUTOFILL_SETTLE_MS)
 
             # Extract AFTER extension fill so the LLM sees updated field values
             extractor = AccessibilityTreeExtractor(page)
@@ -3222,10 +3093,11 @@ class ApplicationEngine:
 
                 agent.show_status(f"Running AI on page {page_count}...", phase=ExecutionPhase.LLM)
 
-                # ── TalentScreen Extension Autofill (per page) ────────────
-                # TalentScreen handles each page automatically via its own
-                # content scripts. No click trigger needed from the CLI.
-                # ──────────────────────────────────────────────────────────
+                # ── TalentScreen v2 Extension Autofill (per page) ───────────
+                if self.extension_dir:
+                    self._run_extension_autofill(page, logger)
+                    page.wait_for_timeout(self.EXTENSION_AUTOFILL_SETTLE_MS)
+                    ax_tree = extractor.extract()
 
                 logger.save_structured_dom(ax_tree.model_dump(), f"ax_tree_page_{page_count}", ExecutionPhase.LLM)
 

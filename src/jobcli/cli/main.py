@@ -508,7 +508,11 @@ def setup() -> None:
     browser_error: str = ""
 
     # ── 4a: Resolve & validate extension path ───────────────────────────────
-    from jobcli.extension.helpers import resolve_extension_dir
+    from jobcli.extension.helpers import (
+        chromium_extension_launch_args,
+        read_extension_manifest_version,
+        resolve_extension_dir,
+    )
 
     ext_dir = resolve_extension_dir(config.extension_path)
 
@@ -520,7 +524,9 @@ def setup() -> None:
         console.print("  [red]✗ Extension not found. Run the installer to clone it into bin/.[/red]")
         browser_error = "Extension not found"
     else:
-        console.print(f"  [green]✓ Extension directory ready: {ext_dir}[/green]")
+        ext_ver = read_extension_manifest_version(ext_dir)
+        ver_label = f" (v{ext_ver})" if ext_ver else ""
+        console.print(f"  [green]✓ Extension directory ready{ver_label}: {ext_dir}[/green]")
 
         # ── 4b: Launch browser with extension and verify it loaded ────────
         try:
@@ -529,11 +535,7 @@ def setup() -> None:
             import tempfile
 
             test_url = os.getenv("WBOX_LOGIN_URL", "https://whitebox-learning.com/login")
-            launch_args = list(LAUNCH_ARGS)
-            launch_args.extend([
-                f"--disable-extensions-except={ext_dir}",
-                f"--load-extension={ext_dir}",
-            ])
+            launch_args = list(LAUNCH_ARGS) + chromium_extension_launch_args(ext_dir)
 
             with console.status("[bold green]Launching browser with extension (this may take ~15s)..."):
                 with sync_playwright() as pw:

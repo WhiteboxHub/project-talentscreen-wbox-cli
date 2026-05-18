@@ -132,24 +132,26 @@ def run_doctor(console: "Console", wbox_smoke: bool = False) -> int:
                 console.print(f"Wbox smoke: {bad} ({e})")
                 issues += 1
 
-    # Browser Extension Auto-Discovery
+    # Browser Extension (TalentScreen v2)
     try:
         from jobcli.cli.main import get_config
+        from jobcli.extension.helpers import read_extension_manifest_version, resolve_extension_dir
+
         cfg = get_config()
-        ext_path = cfg.extension_path
-        
-        if not ext_path or not os.path.exists(ext_path):
-            # Mirror the engine's auto-discovery logic
-            discovered = Path(__file__).parent.parent / "extension"
-            if discovered.exists():
-                ext_path = str(discovered.absolute())
-        
-        if ext_path and os.path.exists(ext_path):
-            console.print(f"Browser Extension ({Path(ext_path).name}): {ok}")
+        ext_path = resolve_extension_dir(cfg.extension_path)
+
+        if ext_path:
+            ext_ver = read_extension_manifest_version(ext_path)
+            ver_label = f" v{ext_ver}" if ext_ver else ""
+            console.print(f"TalentScreen extension{ver_label}: {ok}")
+            console.print(f"  [dim]{ext_path}[/dim]")
         else:
-            console.print(f"Browser Extension: {warn} (not found, automation will rely on rules/AI only)")
-    except Exception:
-        pass
+            console.print(
+                f"TalentScreen extension: {warn} (not found — set extension_path, "
+                "JOBCLI_EXTENSION_PATH, or run installer)"
+            )
+    except Exception as e:
+        console.print(f"TalentScreen extension: {warn} ({e})")
 
     console.print()
     if issues:

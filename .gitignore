@@ -221,8 +221,10 @@ __marimo__/
 logs/**/*.zip
 logs/**/*.webm
 
-# Per-run job logs (ephemeral); global aggregate logs/jobcli.jsonl stays trackable if you want
+# Per-run job logs (ephemeral)
 # logs/job_*/application.jsonl
+src/jobcli/api/logs/*.jsonl
+**/api/logs/*.jsonl
 
 # Temp directory (embedded git repo)
 .tmp_openclaw/

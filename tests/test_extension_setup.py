@@ -27,6 +27,26 @@ class TestResolveExtensionDir:
         result = resolve_extension_dir(str(ext_dir))
         assert result == str(ext_dir.resolve())
 
+    def test_jobcli_extension_path_env_takes_priority(self, tmp_path, monkeypatch):
+        """JOBCLI_EXTENSION_PATH wins over config.extension_path."""
+        from jobcli.extension import helpers
+
+        env_ext = tmp_path / "env_extension"
+        env_ext.mkdir()
+        (env_ext / "manifest.json").write_text('{"version": "2.0.0"}')
+
+        config_ext = tmp_path / "config_extension"
+        config_ext.mkdir()
+        (config_ext / "manifest.json").write_text("{}")
+
+        monkeypatch.setenv("JOBCLI_EXTENSION_PATH", str(env_ext))
+        monkeypatch.setattr(helpers, "_LEGACY_UNPACK_DIR", tmp_path / "nope_legacy")
+        monkeypatch.setattr(helpers, "_BUNDLED_DIR", tmp_path / "nope_bundled")
+        monkeypatch.setattr(helpers, "_SIBLING_EXT_DIR", tmp_path / "nope_sibling")
+
+        result = helpers.resolve_extension_dir(str(config_ext))
+        assert result == str(env_ext.resolve())
+
     def test_returns_none_when_no_candidates_valid(self, tmp_path):
         """If no candidate directory has a manifest.json, return None."""
         from jobcli.extension.helpers import resolve_extension_dir
@@ -69,9 +89,11 @@ class TestResolveExtensionDir:
         """Passing None as configured_path should not crash."""
         from jobcli.extension import helpers
 
-        # Override both fallbacks to non-existent dirs
+        monkeypatch.delenv("JOBCLI_EXTENSION_PATH", raising=False)
+        # Override all fallbacks so a dev machine sibling repo is not picked up
         monkeypatch.setattr(helpers, "_LEGACY_UNPACK_DIR", tmp_path / "nope1")
         monkeypatch.setattr(helpers, "_BUNDLED_DIR", tmp_path / "nope2")
+        monkeypatch.setattr(helpers, "_SIBLING_EXT_DIR", tmp_path / "nope3")
 
         result = helpers.resolve_extension_dir(None)
         assert result is None

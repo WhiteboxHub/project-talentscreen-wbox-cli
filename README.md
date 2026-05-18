@@ -9,7 +9,7 @@ Production-grade CLI for automated job applications across multiple ATS platform
 ### Core Automation
 - **No `.env` files** — credentials, LLM keys, resume paths, and the API base URL all live in `~/.jobcli/jobcli.db`, written by `jobcli login`, `jobcli resume-upload`, and `jobcli config`. The CLI never reads a `.env` file.
 - **Guided interactive TUI** — running `wboxcli` walks you through onboarding in a fixed order (WBL login → visible browser + extension smoke test → LLM key → resume → discover), and at every step shows a `▶ Next step` panel telling you exactly which command to type next. Non-technical users never have to guess what to run.
-- **Auto-download Extension** — `jobcli setup` downloads the TalentScreen extension into `~/.jobcli/extension_unpacked/` and `apply` loads it automatically — no manual paths required.
+- **TalentScreen v2 extension** — `jobcli setup` / `apply` load the unpacked extension via Chrome flags; autofill uses `window.AutofillExtension` on ATS pages (see extension repo [`CLI_INTEGRATION_GUIDE.md`](../project-talentscreen-autofill-extension/docs/api/CLI_INTEGRATION_GUIDE.md)). Override path with `JOBCLI_EXTENSION_PATH` or `jobcli config --key extension_path`.
 - **Always-visible browser** — `jobcli apply` forces `headless=False`; Chrome is always on screen so you can watch and intervene.
 - **Don't-refill guard** — the extension autofills first; a three-layer guard (engine snapshot → LLM action filter → executor live-read) prevents the LLM or rules from overwriting any field the extension already populated. Placeholder values like `"Select..."` are correctly treated as empty, so real values still flow through.
 - **Required-first human prompt** — when fields stay empty after extension + LLM + rules, the terminal asks for `[red]*required[/red]` fields first (must answer) and `[dim](optional, Enter to skip)[/dim]` fields second (press Enter to skip). The `required` flag is propagated from the page's Accessibility Tree.
@@ -463,7 +463,7 @@ To start the dashboard:
 JobCLI follows a 5-phase strategy to ensure application success:
 
 1. **Phase 1: Discovery** — URL normalization and ATS platform detection.
-2. **Phase 2: Extension Autofill** — High-speed DOM-native filling of standard fields. The engine then waits 1.5 s for the extension to settle and snapshots every populated field.
+2. **Phase 2: Extension Autofill (v2)** — After the form is visible, JobCLI calls `AutofillExtension.injectProfile` / `configure` / `fill` on the page, waits 1.5 s to settle, then snapshots every populated field for don't-refill.
 3. **Phase 3: AI Reasoning (LLM)** — Accessibility Tree analysis for complex/custom fields and questionnaires. Any LLM action whose target is already in the snapshot is dropped before it reaches the executor (the **don't-refill guard**). A second live-value check at the executor layer guarantees no field is ever filled twice.
 4. **Phase 4: Human-in-the-Loop** — Two-tier prompt: required fields first, optional fields second (press Enter to skip). See [Two-tier human prompt](#two-tier-human-prompt-supervised--manual).
 5. **Phase 5: Submission & Verification** — Final checks and behavioral outcome detection.

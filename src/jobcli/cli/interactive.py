@@ -187,7 +187,11 @@ def _validate_wbox_and_extension(
     -------
     ``(login_ok, extension_ok, resolved_ext_dir, error_message)``
     """
-    from jobcli.extension.helpers import resolve_extension_dir, verify_extension_in_browser
+    from jobcli.extension.helpers import (
+        read_extension_manifest_version,
+        resolve_extension_dir,
+        verify_extension_in_browser,
+    )
 
     resolved = resolve_extension_dir(ext_dir)
     if not resolved:
@@ -246,10 +250,19 @@ def _run_onboarding(force: bool = False):
                         if ext_dir:
                             db_config.extension_path = ext_dir
                         console.print(f"[bold white on #d946ef] ✓ [/] [green]Open browser[/green]")
+                        from jobcli.extension.helpers import read_extension_manifest_version
+
+                        ext_ver = read_extension_manifest_version(ext_dir) if ext_dir else None
+                        ver_note = f" (v{ext_ver})" if ext_ver else ""
                         if extension_ok:
-                            console.print(f"[bold white on #d946ef] ✓ [/] [green]Plugin load (extension loaded)[/green]")
+                            console.print(
+                                f"[bold white on #d946ef] ✓ [/] [green]TalentScreen v2 loaded{ver_note}[/green]"
+                            )
                         else:
-                            console.print(f"[yellow]  ⚠ Plugin load could not be confirmed (extension may load on first apply).[/yellow]")
+                            console.print(
+                                f"[yellow]  ⚠ TalentScreen{ver_note} could not be confirmed "
+                                "(extension may load on first apply).[/yellow]"
+                            )
                         console.print(f"[bold white on #d946ef] ✓ [/] [green]Test successful[/green]")
                         break
                     else:

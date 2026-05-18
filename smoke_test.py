@@ -7,7 +7,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 
 from jobcli.storage.models import Database
 from jobcli.storage.repositories import FieldAnswerRepository, SyncMetadataRepository
-from jobcli.core.schemas import ATSType
+from jobcli.profile.schemas import ATSType
 import uuid
 
 DB_PATH = os.getenv("DATABASE_PATH") or str(Path.home() / ".jobcli" / "jobcli.db")
