@@ -213,6 +213,19 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# ── JobCLI: extension & local runtime (do NOT ignore bundled package assets) ──
+# Committed and required in wheels: src/jobcli/assets/talentscreen_extension/
+# Legacy clone from scripts/install.sh|install.ps1 (not the bundled copy above)
+bin/project-talentscreen-autofill-extension/
+
+# Local wheel/sdist test output (e.g. pip wheel . -w dist_test)
+dist_test/
+
+# Per-user install target from `jobcli setup` — normally under ~/.jobcli/ only;
+# ignore if copied into the repo during debugging
+.jobcli/
+extension_unpacked/
+
 # ── JobCLI: screenshots & related run artifacts (never commit / ship from repo) ──
 # JobLogger writes under <log_directory>/job_<id>/screenshots|dom_snapshots (see jobcli/core/logger.py).
 # **/job_*/ matches no matter where log_directory points (default logs/, CI path, etc.).

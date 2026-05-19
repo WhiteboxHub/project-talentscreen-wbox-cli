@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>TalentScreen - Whitebox Learning Autofill</title>
+  <link rel="stylesheet" href="/src/ui/styles.css">
+  <link rel="stylesheet" href="/src/ui/components/confirmation-dialog.css">
+  <link rel="stylesheet" href="/src/ui/components/feedback-modal.css">
+  <link rel="stylesheet" href="/src/ui/components/resume-selector-modal.css">
+</head>
+
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="logo-title">
+        <img src="/assets/icons/logo_sidepanel.png" alt="TalentScreen" title="TalentScreen Autofill"
+          style="width: 48px; height: 48px; object-fit: contain; border-radius: 12px;">
+        <div>
+          <h2 style="font-size: 1.3rem; margin: 0; font-weight: 700; color: var(--text); letter-spacing: -0.5px;">TalentScreen</h2>
+          <p style="font-size: 0.75rem; margin: 0; color: var(--text-muted); font-weight: 500;">Autofill Assistant</p>
+        </div>
+      </div>
+      <button id="feedbackBtn" class="icon-btn" title="Send Feedback">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Setup View (shown when no data) -->
+    <div id="setupView" class="setup-view">
+      <div class="setup-card">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <div style="width: 64px; height: 64px; background: var(--primary-light); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--primary);">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"></path>
+            </svg>
+          </div>
+          <h3 style="margin: 0 0 8px 0; font-size: 1.2rem; font-weight: 700; color: var(--text);">Get Started</h3>
+          <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0; line-height: 1.5;">
+            Upload your resume to start autofilling job applications
+          </p>
+        </div>
+
+        <!-- JSON Upload -->
+        <div class="upload-section">
+          <label class="upload-label">
+            <span style="color: var(--error);">*</span> 1. Resume JSON (Required)
+          </label>
+          <label for="jsonInput" class="upload-btn-styled" id="jsonUploadBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"></path>
+            </svg>
+            <span id="jsonFileName">Choose JSON File</span>
+          </label>
+          <input type="file" id="jsonInput" accept=".json" class="hidden">
+          <div id="jsonStatus" class="upload-status hidden"></div>
+          <p style="font-size: 0.7rem; color: var(--text-muted); margin-top: 6px;">
+            Need a template?
+            <a href="https://github.com/WhiteboxHub/project-avatar-resume-json-cli/blob/main/src/resumes/test/demo.json"
+               target="_blank"
+               style="color: var(--primary); text-decoration: none;">
+              View sample JSON →
+            </a>
+          </p>
+        </div>
+
+        <!-- PDF Upload -->
+        <div class="upload-section">
+          <label class="upload-label">
+            <span style="color: var(--error);">*</span> 2. Resume PDF (Required)
+          </label>
+          <input type="file" id="pdfInput" accept=".pdf,.doc,.docx" class="hidden">
+          <button id="uploadPdfBtn" class="upload-btn-styled secondary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            <span id="pdfStatusText">Choose PDF/DOC</span>
+          </button>
+          <div id="pdfStatus" class="upload-status hidden"></div>
+          <p style="font-size: 0.7rem; color: var(--text-muted); margin-top: 6px;">
+            Required for job sites that need file attachments
+          </p>
+        </div>
+
+        <!-- Setup Complete Button -->
+        <button id="completeSetupBtn" class="action-btn" style="margin-top: 16px;" disabled>
+          Complete Setup
+        </button>
+      </div>
+    </div>
+
+    <!-- Unsupported Page View -->
+    <div id="unsupportedView" class="unsupported-view hidden">
+      <div class="unsupported-card">
+        <div class="unsupported-icon">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M12 8v4M12 16h.01"></path>
+          </svg>
+        </div>
+        <h3 class="unsupported-title">Autofill Not Supported</h3>
+        <p class="unsupported-message">
+          Save this job in one click.<br>
+          Track this application and prepare autofill information.
+        </p>
+
+        <div class="unsupported-actions">
+          <button id="submitRequestBtn" class="action-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            Submit Request
+          </button>
+          <button id="findJobsBtn" class="secondary-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="M21 21l-4.35-4.35"></path>
+            </svg>
+            Find More Jobs
+          </button>
+        </div>
+
+        <div class="unsupported-info">
+          <p class="info-text">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            This site is not yet supported. Submit a request to add support for this ATS platform.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active View (shown when data exists) -->
+    <div id="activeView" class="hidden">
+
+      <!-- Job/Form Information Card -->
+      <div class="job-info-card" id="jobInfoCard">
+        <div class="job-info-header">
+          <div class="company-logo" id="companyLogo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="9" y1="9" x2="15" y2="9"></line>
+              <line x1="9" y1="15" x2="15" y2="15"></line>
+            </svg>
+          </div>
+          <div class="job-info-details">
+            <div class="company-name" id="companyName">Company Name</div>
+            <div class="job-title" id="jobTitle">Job Application</div>
+            <div class="job-meta" id="jobMeta">Ready to autofill</div>
+          </div>
+          <div class="match-score hidden" id="matchScore">
+            <div class="score-circle">
+              <span class="score-value">--</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Autofill Button - CENTER & KEY FUNCTION -->
+      <button id="fillFormBtn" class="action-btn autofill-btn">
+        Autofill
+      </button>
+
+      <!-- Completion Progress Widget - Below Autofill Button -->
+      <div class="widget-card completion-widget hidden" id="completionWidget">
+        <div class="completion-header">
+          <span class="completion-label">Completion</span>
+          <span class="completion-percentage" id="completionPercentage">0%</span>
+        </div>
+        <div class="completion-bar-container">
+          <div class="completion-bar" id="completionBar" style="width: 0%"></div>
+        </div>
+        <div class="completion-details" id="completionDetails">
+          <span class="completion-text" id="completionText">0 out of 0 required fields filled</span>
+        </div>
+      </div>
+
+      <!-- Secondary Actions - Below Main Button -->
+      <div style="margin-top: 20px;">
+        <button id="viewAutofillInfoBtn" class="gray-action-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+          Your Autofill Information
+        </button>
+      </div>
+
+      <!-- Generate Custom Resume (like Jobright) -->
+      <button class="widget-card generate-resume-btn hidden" id="generateResumeBtn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+          <path d="M2 17l10 5 10-5M2 12l10 5 10-5"></path>
+        </svg>
+        <span>Generate Custom Resume</span>
+      </button>
+
+      <!-- Progress Section (shown during autofill) -->
+      <div id="progressSection" class="progress-section hidden">
+        <div class="progress-info">
+          <span class="progress-label">Form Progress</span>
+          <span id="progressCount" class="progress-count">0/0 fields</span>
+        </div>
+        <div class="progress-bar-container">
+          <div id="progressBar" class="progress-bar" style="width: 0%"></div>
+        </div>
+
+        <!-- Detailed Tracking Stats -->
+        <div id="trackingDetails" class="tracking-details">
+          <div class="tracking-stat">
+            <span class="stat-label">Filled:</span>
+            <span id="statFilled" class="stat-value">0</span>
+          </div>
+          <div class="tracking-stat">
+            <span class="stat-label">Skipped:</span>
+            <span id="statSkipped" class="stat-value">0</span>
+          </div>
+          <div class="tracking-stat">
+            <span class="stat-label">Failed:</span>
+            <span id="statFailed" class="stat-value error">0</span>
+          </div>
+          <div class="tracking-stat">
+            <span class="stat-label">Needs Review:</span>
+            <span id="statNeedsReview" class="stat-value warning">0</span>
+          </div>
+        </div>
+
+        <!-- Session Info -->
+        <div id="sessionInfo" class="session-info hidden">
+          <div class="session-row">
+            <span class="session-label">ATS:</span>
+            <span id="sessionAts" class="session-value">-</span>
+          </div>
+          <div class="session-row">
+            <span class="session-label">Started:</span>
+            <span id="sessionStart" class="session-value">-</span>
+          </div>
+        </div>
+
+        <!-- Failures/Needs Review Alert -->
+        <div id="reviewAlert" class="review-alert hidden">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <strong>Manual Review Required</strong>
+          </div>
+          <button id="viewFieldsBtn" class="view-fields-btn">View Fields</button>
+        </div>
+      </div>
+
+      <!-- Application History -->
+      <div class="history-section">
+        <div class="history-header">
+          <h3 style="margin: 0; font-size: 0.85rem; color: var(--text); font-weight: 600;">Recent Applications</h3>
+          <button id="clearHistoryBtn" class="clear-history-btn">Clear</button>
+        </div>
+        <div id="historyList" class="history-list-compact"></div>
+      </div>
+    </div>
+
+    <!-- Manage Information Dashboard (Modal) -->
+    <div id="manageModal" class="modal hidden">
+      <div class="modal-content dashboard-modal">
+        <div class="modal-header">
+          <h3 style="margin: 0;">Dashboard</h3>
+          <button id="closeModalBtn" class="close-modal-btn">&times;</button>
+        </div>
+
+        <!-- Dashboard Navigation -->
+        <div class="dashboard-nav">
+          <button class="dashboard-tab active" data-section="edit">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+            Edit Information
+          </button>
+          <button class="dashboard-tab" data-section="json">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            Update JSON
+          </button>
+          <button class="dashboard-tab" data-section="tracking">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+            </svg>
+            Tracking
+          </button>
+          <button class="dashboard-tab" data-section="settings">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M12 1v6m0 6v6m8.66-13.66l-4.24 4.24m-5.66 5.66l-4.24 4.24M23 12h-6m-6 0H1m20.66 4.66l-4.24-4.24m-5.66-5.66L7.52 2.52"></path>
+            </svg>
+            Settings
+          </button>
+        </div>
+
+        <!-- Dashboard Sections -->
+        <div class="dashboard-content">
+          <!-- Edit Information Section -->
+          <div id="editSection" class="dashboard-section active">
+            <div class="section-tabs">
+              <button class="section-tab active" data-form="personal">Personal Info</button>
+              <button class="section-tab" data-form="work">Work Experience</button>
+              <button class="section-tab" data-form="education">Education</button>
+              <button class="section-tab" data-form="skills">Skills</button>
+              <button class="section-tab" data-form="custom">Custom Fields</button>
+            </div>
+
+            <!-- Form Container -->
+            <div class="form-container">
+              <!-- Personal Info Form -->
+              <form id="personalForm" class="edit-form active">
+                <!-- Info Banner -->
+                <div class="info-banner">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                  </svg>
+                  <p style="margin: 0; font-size: 0.8125rem; line-height: 1.4;">
+                    Your autofill information updates automatically when you change your uploaded resume or update information in an application form.
+                  </p>
+                </div>
+
+                <!-- Name Fields -->
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>First Name <span class="required">*</span></label>
+                    <input type="text" id="edit-first-name" required>
+                  </div>
+                  <div class="form-group">
+                    <label>Middle Name</label>
+                    <input type="text" id="edit-middle-name">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Last Name <span class="required">*</span></label>
+                  <input type="text" id="edit-last-name" required>
+                </div>
+
+                <!-- Contact Fields -->
+                <div class="form-group">
+                  <label>Email Address <span class="required">*</span></label>
+                  <input type="email" id="edit-email" required>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Phone Type</label>
+                    <select id="edit-phone-type">
+                      <option value="mobile">Mobile</option>
+                      <option value="home">Home</option>
+                      <option value="work">Work</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Phone <span class="required">*</span></label>
+                    <input type="tel" id="edit-phone" required>
+                  </div>
+                </div>
+
+                <!-- Location Fields -->
+                <div class="form-group">
+                  <label>Country <span class="required">*</span></label>
+                  <input type="text" id="edit-country" required placeholder="United States">
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>City <span class="required">*</span></label>
+                    <input type="text" id="edit-city" required>
+                  </div>
+                  <div class="form-group">
+                    <label>State/Region</label>
+                    <input type="text" id="edit-region">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Address Line</label>
+                  <input type="text" id="edit-address" placeholder="123 Main Street, Apt 4B">
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Postal Code</label>
+                    <input type="text" id="edit-postal-code">
+                  </div>
+                  <div class="form-group">
+                    <label>County</label>
+                    <input type="text" id="edit-county">
+                  </div>
+                </div>
+
+                <!-- Professional Links -->
+                <div class="form-group">
+                  <label>LinkedIn URL</label>
+                  <input type="url" id="edit-linkedin" placeholder="https://linkedin.com/in/yourname">
+                </div>
+                <div class="form-group">
+                  <label>Professional Summary</label>
+                  <textarea id="edit-summary" rows="4" placeholder="Brief professional summary..."></textarea>
+                </div>
+
+                <button type="submit" class="action-btn">Save Personal Info</button>
+              </form>
+
+              <!-- Work Experience Form -->
+              <form id="workForm" class="edit-form">
+                <div id="workEntries"></div>
+                <button type="button" id="addWorkBtn" class="secondary-btn">+ Add Work Experience</button>
+                <button type="submit" class="action-btn" style="margin-top: 12px;">Save Work Experience</button>
+              </form>
+
+              <!-- Education Form -->
+              <form id="educationForm" class="edit-form">
+                <div id="educationEntries"></div>
+                <button type="button" id="addEducationBtn" class="secondary-btn">+ Add Education</button>
+                <button type="submit" class="action-btn" style="margin-top: 12px;">Save Education</button>
+              </form>
+
+              <!-- Skills Form -->
+              <form id="skillsForm" class="edit-form">
+                <div class="form-group">
+                  <label>Skills (comma-separated)</label>
+                  <textarea id="edit-skills" rows="6" placeholder="JavaScript, Python, React, Node.js, AWS..."></textarea>
+                  <p class="form-hint">Separate each skill with a comma</p>
+                </div>
+                <button type="submit" class="action-btn">Save Skills</button>
+              </form>
+
+              <!-- Custom Fields Form -->
+              <form id="customForm" class="edit-form">
+                <h4 style="margin: 0 0 12px 0; font-size: 0.9rem;">EEO Information</h4>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Gender</label>
+                    <select id="edit-gender">
+                      <option value="">Select</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="non-binary">Non-binary</option>
+                      <option value="decline">Decline to answer</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Veteran Status</label>
+                    <select id="edit-veteran">
+                      <option value="">Select</option>
+                      <option value="yes">Yes</option>
+                      <option value="no">No</option>
+                      <option value="decline">Decline to answer</option>
+                    </select>
+                  </div>
+                </div>
+                <h4 style="margin: 16px 0 12px 0; font-size: 0.9rem;">Work Authorization</h4>
+                <div class="form-group">
+                  <label>Authorized to work in US?</label>
+                  <input type="checkbox" id="edit-work-auth" style="width: auto; margin-right: 8px;">
+                  <span style="font-size: 0.85rem; color: var(--text-muted);">Yes, I am authorized</span>
+                </div>
+                <div class="form-group">
+                  <label>Require sponsorship now?</label>
+                  <input type="checkbox" id="edit-sponsorship-now" style="width: auto; margin-right: 8px;">
+                  <span style="font-size: 0.85rem; color: var(--text-muted);">Yes, I need sponsorship</span>
+                </div>
+                <div class="form-group">
+                  <label>Require sponsorship in the future?</label>
+                  <input type="checkbox" id="edit-sponsorship-future" style="width: auto; margin-right: 8px;">
+                  <span style="font-size: 0.85rem; color: var(--text-muted);">Yes, I will need sponsorship</span>
+                </div>
+                <button type="submit" class="action-btn">Save Custom Fields</button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Update JSON Section -->
+          <div id="jsonSection" class="dashboard-section">
+            <div class="upload-zone">
+              <p style="margin-bottom: 16px; color: var(--text-muted);">
+                Upload a new JSON file to replace all resume data. Forms will reload automatically.
+              </p>
+              <input type="file" id="updateJsonInput" accept=".json" class="hidden">
+              <label for="updateJsonInput" class="upload-btn-styled">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"></path>
+                </svg>
+                Upload New JSON
+              </label>
+              <div id="jsonUpdateStatus" class="upload-status hidden" style="margin-top: 12px;"></div>
+            </div>
+
+            <div class="divider" style="margin: 24px 0;"></div>
+
+            <div class="upload-zone">
+              <p style="margin-bottom: 16px; color: var(--text-muted);">
+                Update your resume PDF for job sites that require file attachments.
+              </p>
+              <input type="file" id="updatePdfInput" accept=".pdf,.doc,.docx" class="hidden">
+              <label for="updatePdfInput" class="upload-btn-styled secondary">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
+                Update PDF/DOC
+              </label>
+              <div id="pdfUpdateStatus" class="upload-status hidden" style="margin-top: 12px;"></div>
+              <p id="currentPdfName" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;"></p>
+            </div>
+          </div>
+
+          <!-- Tracking Section -->
+          <div id="trackingSection" class="dashboard-section">
+            <h4 style="margin: 0 0 16px 0;">Form Fill Tracking</h4>
+
+            <!-- Current Session -->
+            <div id="currentSessionCard" class="tracking-card hidden">
+              <div class="tracking-card-header">
+                <h5>Current Session</h5>
+                <span id="sessionStatusBadge" class="status-badge">In Progress</span>
+              </div>
+              <div class="session-details">
+                <div class="detail-row">
+                  <span>ATS Platform:</span>
+                  <strong id="trackingAts">-</strong>
+                </div>
+                <div class="detail-row">
+                  <span>Company:</span>
+                  <strong id="trackingCompany">-</strong>
+                </div>
+                <div class="detail-row">
+                  <span>Started:</span>
+                  <strong id="trackingStartTime">-</strong>
+                </div>
+                <div class="detail-row">
+                  <span>Completion:</span>
+                  <strong id="trackingCompletion">0%</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- Field States Table -->
+            <div class="tracking-card" style="margin-top: 16px;">
+              <h5>Field Status</h5>
+              <div id="fieldStatesList" class="field-states-list">
+                <p style="text-align: center; color: var(--text-muted); padding: 16px;">
+                  No active session
+                </p>
+              </div>
+            </div>
+
+            <!-- Failed Fields -->
+            <div id="failedFieldsCard" class="tracking-card hidden" style="margin-top: 16px;">
+              <h5 style="color: var(--error);">Failed Fields</h5>
+              <div id="failedFieldsList" class="failed-fields-list"></div>
+              <button id="retryFailedBtn" class="secondary-btn" style="margin-top: 12px;">
+                Retry Failed Fields
+              </button>
+            </div>
+
+            <!-- Needs Review Fields -->
+            <div id="needsReviewCard" class="tracking-card hidden" style="margin-top: 16px;">
+              <h5 style="color: var(--warning);">Needs Manual Review</h5>
+              <div id="needsReviewList" class="needs-review-list"></div>
+            </div>
+
+            <!-- Session History -->
+            <div class="tracking-card" style="margin-top: 16px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h5>Session History</h5>
+                <button id="clearTrackingHistoryBtn" class="clear-history-btn">Clear</button>
+              </div>
+              <div id="trackingHistoryList" class="tracking-history-list">
+                <p style="text-align: center; color: var(--text-muted); padding: 16px;">
+                  No history yet
+                </p>
+              </div>
+            </div>
+
+            <!-- Debug Mode Toggle -->
+            <div class="tracking-card" style="margin-top: 16px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <h5 style="margin: 0 0 4px 0;">Debug Mode</h5>
+                  <p style="font-size: 0.75rem; color: var(--text-muted); margin: 0;">
+                    Enable detailed logging for troubleshooting
+                  </p>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="debugModeToggle">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Export Tracking Data -->
+            <button id="exportTrackingBtn" class="secondary-btn" style="margin-top: 16px; width: 100%;">
+              Export Tracking Data (JSON)
+            </button>
+          </div>
+
+          <!-- Settings Section -->
+          <div id="settingsSection" class="dashboard-section">
+            <div class="danger-zone">
+              <h4 style="margin: 0 0 8px 0; color: var(--error);">Danger Zone</h4>
+              <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">
+                Deleting your resume will remove all data and return you to the setup screen.
+              </p>
+              <button id="deleteProfileBtn" class="danger-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  <line x1="10" y1="11" x2="10" y2="17"></line>
+                  <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+                Delete Resume Data
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Message -->
+    <div id="status" class="hidden"></div>
+  </div>
+
+  <script src="/src/core/resumeProcessor.js"></script>
+  <script src="/src/core/formTracker.js"></script>
+  <script src="/src/core/resumeManager.js"></script>
+  <script src="/src/core/settingsManager.js"></script>
+  <script src="/src/ui/components/confirmation-dialog.js"></script>
+  <script src="/src/ui/components/feedback-modal.js"></script>
+
+  <script src="/src/ui/sidepanel.js"></script>
+</body>
+
+</html>

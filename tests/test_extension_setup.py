@@ -40,22 +40,34 @@ class TestResolveExtensionDir:
         (config_ext / "manifest.json").write_text("{}")
 
         monkeypatch.setenv("JOBCLI_EXTENSION_PATH", str(env_ext))
-        monkeypatch.setattr(helpers, "_LEGACY_UNPACK_DIR", tmp_path / "nope_legacy")
-        monkeypatch.setattr(helpers, "_BUNDLED_DIR", tmp_path / "nope_bundled")
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr("jobcli.extension.install.jobcli_home", lambda: home)
+        monkeypatch.setattr(helpers, "_BUNDLED_BIN_DIR", tmp_path / "nope_bundled")
         monkeypatch.setattr(helpers, "_SIBLING_EXT_DIR", tmp_path / "nope_sibling")
 
         result = helpers.resolve_extension_dir(str(config_ext))
         assert result == str(env_ext.resolve())
 
-    def test_returns_none_when_no_candidates_valid(self, tmp_path):
+    def test_returns_none_when_no_candidates_valid(self, tmp_path, monkeypatch):
         """If no candidate directory has a manifest.json, return None."""
+        from jobcli.extension import helpers
         from jobcli.extension.helpers import resolve_extension_dir
 
-        # Pass a path that doesn't exist
+        monkeypatch.delenv("JOBCLI_EXTENSION_PATH", raising=False)
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr("jobcli.extension.install.jobcli_home", lambda: home)
+        monkeypatch.setattr(helpers, "_BUNDLED_BIN_DIR", tmp_path / "nope_bundled")
+        monkeypatch.setattr(helpers, "_SIBLING_EXT_DIR", tmp_path / "nope_sibling")
+
+        def fail_install(force=False):
+            raise RuntimeError("bundled missing")
+
+        monkeypatch.setattr(helpers, "install_bundled_extension", fail_install)
+
         result = resolve_extension_dir(str(tmp_path / "nonexistent"))
-        # The legacy and bundled fallbacks also won't exist in a test env,
-        # but they might on a dev machine, so we just check the type.
-        assert result is None or isinstance(result, str)
+        assert result is None
 
     def test_skips_configured_if_no_manifest(self, tmp_path):
         """A directory without manifest.json should be skipped."""
@@ -78,9 +90,16 @@ class TestResolveExtensionDir:
         bundled.mkdir(parents=True)
         (bundled / "manifest.json").write_text("{}")
 
-        # Override both legacy AND bundled so we control the test
-        monkeypatch.setattr(helpers, "_LEGACY_UNPACK_DIR", tmp_path / "nope_legacy")
-        monkeypatch.setattr(helpers, "_BUNDLED_DIR", bundled)
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr("jobcli.extension.install.jobcli_home", lambda: home)
+
+        def fail_install(force=False):
+            raise RuntimeError("bundled missing")
+
+        monkeypatch.setattr(helpers, "install_bundled_extension", fail_install)
+        monkeypatch.setattr(helpers, "_BUNDLED_BIN_DIR", bundled)
+        monkeypatch.setattr(helpers, "_SIBLING_EXT_DIR", tmp_path / "nope_sibling")
 
         result = helpers.resolve_extension_dir("/nonexistent/path")
         assert result == str(bundled.resolve())
@@ -90,9 +109,15 @@ class TestResolveExtensionDir:
         from jobcli.extension import helpers
 
         monkeypatch.delenv("JOBCLI_EXTENSION_PATH", raising=False)
-        # Override all fallbacks so a dev machine sibling repo is not picked up
-        monkeypatch.setattr(helpers, "_LEGACY_UNPACK_DIR", tmp_path / "nope1")
-        monkeypatch.setattr(helpers, "_BUNDLED_DIR", tmp_path / "nope2")
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr("jobcli.extension.install.jobcli_home", lambda: home)
+
+        def fail_install(force=False):
+            raise RuntimeError("bundled missing")
+
+        monkeypatch.setattr(helpers, "install_bundled_extension", fail_install)
+        monkeypatch.setattr(helpers, "_BUNDLED_BIN_DIR", tmp_path / "nope2")
         monkeypatch.setattr(helpers, "_SIBLING_EXT_DIR", tmp_path / "nope3")
 
         result = helpers.resolve_extension_dir(None)

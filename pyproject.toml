@@ -50,6 +50,9 @@ jobcli = "jobcli.cli.main:app"
 where = ["src"]
 include = ["jobcli*"]
 
+[tool.setuptools.package-data]
+"jobcli.assets" = ["talentscreen_extension/**"]
+
 [tool.black]
 line-length = 100
 target-version = ['py310']

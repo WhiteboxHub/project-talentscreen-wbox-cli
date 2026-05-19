@@ -15,6 +15,13 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
+from jobcli.extension.install import (
+    extension_install_dir,
+    install_bundled_extension,
+    is_valid_extension_dir,
+)
+from jobcli.utils.logger import global_logger
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -51,13 +58,8 @@ ATS_HOST_FRAGMENTS: tuple[str, ...] = (
     "rippling-ats.com",
 )
 
-#: Default subdirectory under ``~/.jobcli`` where older installs unpacked
-#: the extension via CRX download.
-_LEGACY_UNPACK_DIR = Path.home() / ".jobcli" / "extension_unpacked"
-
-#: Relative path from this file to the project root's ``bin/`` folder
-#: where ``install.sh`` / ``install.ps1`` clone the extension repo.
-_BUNDLED_DIR = (
+#: ``<project-root>/bin/project-talentscreen-autofill-extension`` (legacy installer clone).
+_BUNDLED_BIN_DIR = (
     Path(__file__).resolve().parent.parent.parent.parent
     / "bin"
     / "project-talentscreen-autofill-extension"
@@ -69,10 +71,9 @@ _SIBLING_EXT_DIR = (
     / "project-talentscreen-autofill-extension"
 )
 
-
-def _has_manifest(directory: Path) -> bool:
-    """Return True if *directory* exists and contains a ``manifest.json``."""
-    return directory.is_dir() and (directory / "manifest.json").is_file()
+# Backward-compatible alias for tests that monkeypatch the install path.
+_LEGACY_UNPACK_DIR = extension_install_dir()
+_BUNDLED_DIR = _BUNDLED_BIN_DIR  # backward-compatible test alias
 
 
 def is_likely_ats_frame_url(url: str) -> bool:
@@ -105,6 +106,37 @@ def read_extension_manifest_version(ext_dir: str) -> Optional[str]:
         return None
 
 
+def extension_manifest_has_page_bridge(ext_dir: str) -> bool:
+    """Return True if manifest declares MAIN-world ``pageWorldBridge.js``."""
+    try:
+        manifest_path = Path(ext_dir) / "manifest.json"
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        scripts = data.get("content_scripts") or []
+        bridge_js = "src/core/pageWorldBridge.js"
+        for entry in scripts:
+            if entry.get("world") != "MAIN":
+                continue
+            if bridge_js in (entry.get("js") or []):
+                return True
+        return False
+    except Exception:
+        return False
+
+
+def _resolved_if_valid(path: Path) -> Optional[str]:
+    if is_valid_extension_dir(path):
+        return str(path.resolve())
+    return None
+
+
+def _try_source(label: str, path: Path) -> Optional[str]:
+    """Return resolved path when *path* is a valid extension directory."""
+    resolved = _resolved_if_valid(path)
+    if resolved:
+        global_logger.info(f"Found extension from {label}: {resolved}")
+    return resolved
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -113,31 +145,51 @@ def read_extension_manifest_version(ext_dir: str) -> Optional[str]:
 def resolve_extension_dir(configured_path: Optional[str] = None) -> Optional[str]:
     """Return the first valid extension directory, or ``None``.
 
-    Candidate order:
-    1. ``JOBCLI_EXTENSION_PATH`` environment variable.
-    2. *configured_path* (``config.extension_path`` from SQLite).
-    3. ``~/.jobcli/extension_unpacked`` — legacy fallback.
-    4. ``<project-root>/bin/project-talentscreen-autofill-extension`` — installer clone.
-    5. Sibling ``project-talentscreen-autofill-extension`` (local dev monorepo).
-
-    A directory is valid only if it contains ``manifest.json``.
+    Resolution order:
+    1. ``JOBCLI_EXTENSION_PATH`` environment variable
+    2. *configured_path* (``config.extension_path``)
+    3. ``~/.jobcli/extension_unpacked`` (from ``jobcli setup``)
+    4. Auto-install bundled extension → ``~/.jobcli/extension_unpacked``
+    5. ``bin/project-talentscreen-autofill-extension`` (legacy installer clone)
+    6. Sibling ``project-talentscreen-autofill-extension`` (monorepo dev)
     """
-    candidates: list[tuple[str, Path]] = []
-
     env_path = (os.getenv("JOBCLI_EXTENSION_PATH") or "").strip()
     if env_path:
-        candidates.append(("JOBCLI_EXTENSION_PATH", Path(env_path).expanduser()))
+        resolved = _try_source("JOBCLI_EXTENSION_PATH", Path(env_path).expanduser())
+        if resolved:
+            return resolved
+        global_logger.warning(
+            f"JOBCLI_EXTENSION_PATH is set but invalid (no manifest.json): {env_path}"
+        )
 
     if configured_path and configured_path.strip():
-        candidates.append(("config.extension_path", Path(configured_path).expanduser()))
+        cfg = Path(configured_path).expanduser()
+        resolved = _try_source("config.extension_path", cfg)
+        if resolved:
+            return resolved
+        global_logger.warning(
+            f"config.extension_path is set but invalid (no manifest.json): {configured_path}"
+        )
 
-    candidates.append(("~/.jobcli/extension_unpacked", _LEGACY_UNPACK_DIR))
-    candidates.append(("bundled bin directory", _BUNDLED_DIR))
-    candidates.append(("sibling extension repo", _SIBLING_EXT_DIR))
+    resolved = _try_source("installed extension", extension_install_dir())
+    if resolved:
+        return resolved
 
-    for _source, path in candidates:
-        if _has_manifest(path):
-            return str(path.resolve())
+    try:
+        installed = install_bundled_extension(force=False)
+        resolved = _resolved_if_valid(installed)
+        if resolved:
+            return resolved
+    except RuntimeError as exc:
+        global_logger.warning(f"Bundled extension install failed: {exc}")
+
+    for label, path in (
+        ("bundled bin directory", _BUNDLED_BIN_DIR),
+        ("sibling extension repo", _SIBLING_EXT_DIR),
+    ):
+        resolved = _try_source(label, path)
+        if resolved:
+            return resolved
 
     return None
 
@@ -181,7 +233,6 @@ def verify_extension_in_browser(
             try:
                 page = ctx.new_page()
 
-                # Navigate to the login page
                 try:
                     page.goto(
                         "https://whitebox-learning.com/login",
@@ -191,7 +242,6 @@ def verify_extension_in_browser(
                 except Exception as exc:
                     return False, False, f"Could not reach login page: {exc}"
 
-                # Fill in credentials
                 try:
                     page.fill('input[name="email"]', email)
                     page.fill('input[name="password"]', password)
@@ -199,15 +249,12 @@ def verify_extension_in_browser(
                 except Exception as exc:
                     return False, False, f"Could not interact with login form: {exc}"
 
-                # Check login success
                 try:
                     page.wait_for_url("**/user_dashboard**", timeout=10000)
                     login_ok = True
                 except Exception:
                     login_ok = False
 
-                # Check extension loaded (service workers for MV3, background
-                # pages for MV2)
                 try:
                     extension_ok = bool(
                         list(ctx.service_workers) or list(ctx.background_pages)

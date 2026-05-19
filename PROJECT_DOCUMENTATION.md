@@ -434,7 +434,7 @@ Written by `jobcli login`, `resume-upload`, `setup`, `config`:
 
 ### TalentScreen Extension
 
-- Cloned by installer into `bin/project-talentscreen-autofill-extension/` or set via `extension_path` / `JOBCLI_EXTENSION_PATH`
+- Bundled in package (`src/jobcli/assets/talentscreen_extension/`); `jobcli setup` installs to `~/.jobcli/extension_unpacked/`. Override via `extension_path` / `JOBCLI_EXTENSION_PATH` or legacy `bin/` clone
 - Loaded during `jobcli apply` via `--load-extension` (see `extension/helpers.py`)
 - Phase 2 autofill: `extension/autofill_bridge.py` calls `window.AutofillExtension` (page-world bridge in extension v2.0.0+)
 
@@ -533,13 +533,15 @@ Run: `jobcli sync`
 
 ## 14. Chrome Extension (TalentScreen v2)
 
-- **Not bundled in this repo** — cloned by `scripts/install.*` into `bin/` or set via config/env
+- **Bundled in package** — `src/jobcli/assets/talentscreen_extension/` (refresh: `python scripts/bundle_talentscreen_extension.py`)
+- **`jobcli setup`** copies to `~/.jobcli/extension_unpacked/` and saves `extension_path`
 - **Resolution order** (`extension/helpers.py`):
-  1. `JOBCLI_EXTENSION_PATH` environment variable (absolute path to unpacked extension)
+  1. `JOBCLI_EXTENSION_PATH` environment variable
   2. `config.extension_path` (SQLite)
-  3. `~/.jobcli/extension_unpacked/` (legacy unpack)
-  4. `<project-root>/bin/project-talentscreen-autofill-extension/` (installer clone)
-  5. Sibling `../project-talentscreen-autofill-extension/` (local `wbox/` monorepo layout)
+  3. `~/.jobcli/extension_unpacked/` (installed copy)
+  4. Auto-install bundled extension to `~/.jobcli/extension_unpacked/`
+  5. `<project-root>/bin/project-talentscreen-autofill-extension/` (legacy installer clone)
+  6. Sibling `../project-talentscreen-autofill-extension/` (local `wbox/` monorepo layout)
 - **Chrome launch:** `chromium_extension_launch_args(ext_dir)` — shared by `engine.start_session()`, `jobcli setup`, and `verify_extension_in_browser()`
 - **Page-world bridge:** extension `pageWorldBridge.js` exposes `window.AutofillExtension` with `__bridge: true` for Playwright; isolated `autofillAPI.js` handles RPC.
 - **Autofill bridge** (`extension/autofill_bridge.py`): `injectProfile` → `configure` → `fill` → optional `exportReport()`. Profile from `profile/resume_export.py`.

@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TalentScreen - Settings & Information</title>
+  <link rel="stylesheet" href="/src/ui/settings.css">
+</head>
+
+<body>
+  <div class="settings-container">
+    <!-- Header -->
+    <header class="settings-header">
+      <div class="header-content">
+        <div class="logo-section">
+          <img src="/assets/icons/logo_sidepanel.png" alt="TalentScreen" class="logo">
+          <div class="title-section">
+            <h1>TalentScreen</h1>
+            <p>Settings & Information</p>
+          </div>
+        </div>
+        <button id="closeBtn" class="close-btn">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="settings-nav">
+      <button class="nav-tab active" data-section="personal">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+        Personal Info
+      </button>
+      <button class="nav-tab" data-section="work">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+          <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+        </svg>
+        Work Experience
+      </button>
+      <button class="nav-tab" data-section="education">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+          <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+        </svg>
+        Education
+      </button>
+      <button class="nav-tab" data-section="skills">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="16 18 22 12 16 6"></polyline>
+          <polyline points="8 6 2 12 8 18"></polyline>
+        </svg>
+        Skills
+      </button>
+      <button class="nav-tab" data-section="custom">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+        </svg>
+        Custom Fields
+      </button>
+      <button class="nav-tab" data-section="files">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+        </svg>
+        Resume Files
+      </button>
+      <button class="nav-tab" data-section="tracking">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+        </svg>
+        Tracking
+      </button>
+      <button class="nav-tab" data-section="preferences">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M12 1v6m0 6v6m8.66-13.66l-4.24 4.24m-5.66 5.66l-4.24 4.24M23 12h-6m-6 0H1m20.66 4.66l-4.24-4.24m-5.66-5.66L7.52 2.52"></path>
+        </svg>
+        Preferences
+      </button>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="settings-main">
+
+      <!-- Personal Info Section -->
+      <section id="personalSection" class="settings-section active">
+        <div class="section-header">
+          <h2>Personal Information</h2>
+          <p>Your basic contact and profile details</p>
+        </div>
+
+        <form id="personalForm" class="settings-form">
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label>Full Name <span class="required">*</span></label>
+              <input type="text" id="fullName" required placeholder="John Doe">
+            </div>
+
+            <div class="form-group">
+              <label>Email Address <span class="required">*</span></label>
+              <input type="email" id="email" required placeholder="john.doe@example.com">
+            </div>
+
+            <div class="form-group">
+              <label>Phone Number</label>
+              <input type="tel" id="phone" placeholder="(555) 123-4567">
+            </div>
+
+            <div class="form-group">
+              <label>City</label>
+              <input type="text" id="city" placeholder="San Francisco">
+            </div>
+
+            <div class="form-group">
+              <label>State/Region</label>
+              <input type="text" id="region" placeholder="California">
+            </div>
+
+            <div class="form-group">
+              <label>Country</label>
+              <input type="text" id="country" placeholder="United States">
+            </div>
+
+            <div class="form-group">
+              <label>Postal Code</label>
+              <input type="text" id="postalCode" placeholder="94102">
+            </div>
+
+            <div class="form-group full-width">
+              <label>LinkedIn URL</label>
+              <input type="url" id="linkedin" placeholder="https://linkedin.com/in/johndoe">
+            </div>
+
+            <div class="form-group full-width">
+              <label>GitHub URL</label>
+              <input type="url" id="github" placeholder="https://github.com/johndoe">
+            </div>
+
+            <div class="form-group full-width">
+              <label>Professional Summary</label>
+              <textarea id="summary" rows="6" placeholder="Write a brief summary about your professional background and career goals..."></textarea>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Save Personal Info</button>
+            <button type="button" class="btn-secondary" id="resetPersonalBtn">Reset Changes</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Work Experience Section -->
+      <section id="workSection" class="settings-section">
+        <div class="section-header">
+          <h2>Work Experience</h2>
+          <p>Add and manage your professional experience</p>
+        </div>
+
+        <form id="workForm" class="settings-form">
+          <div id="workEntries" class="entries-container"></div>
+
+          <button type="button" id="addWorkBtn" class="btn-add">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="16"></line>
+              <line x1="8" y1="12" x2="16" y2="12"></line>
+            </svg>
+            Add Work Experience
+          </button>
+
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Save Work Experience</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Education Section -->
+      <section id="educationSection" class="settings-section">
+        <div class="section-header">
+          <h2>Education</h2>
+          <p>Add and manage your educational background</p>
+        </div>
+
+        <form id="educationForm" class="settings-form">
+          <div id="educationEntries" class="entries-container"></div>
+
+          <button type="button" id="addEducationBtn" class="btn-add">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="16"></line>
+              <line x1="8" y1="12" x2="16" y2="12"></line>
+            </svg>
+            Add Education
+          </button>
+
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Save Education</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Skills Section -->
+      <section id="skillsSection" class="settings-section">
+        <div class="section-header">
+          <h2>Skills</h2>
+          <p>List your technical and professional skills</p>
+        </div>
+
+        <form id="skillsForm" class="settings-form">
+          <div class="form-group full-width">
+            <label>Skills (comma-separated)</label>
+            <textarea id="skillsText" rows="8" placeholder="JavaScript, Python, React, Node.js, AWS, Docker, SQL, Git, Agile, Leadership..."></textarea>
+            <p class="form-hint">Separate each skill with a comma. These will be used to match job requirements.</p>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Save Skills</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Custom Fields Section -->
+      <section id="customSection" class="settings-section">
+        <div class="section-header">
+          <h2>Custom Fields</h2>
+          <p>Additional information for job applications</p>
+        </div>
+
+        <form id="customForm" class="settings-form">
+          <div class="subsection">
+            <h3>EEO Information</h3>
+            <p class="subsection-desc">Equal Employment Opportunity information (optional)</p>
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Gender</label>
+                <select id="gender">
+                  <option value="">Select</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="non-binary">Non-binary</option>
+                  <option value="decline">Decline to answer</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Ethnicity</label>
+                <select id="ethnicity">
+                  <option value="">Select</option>
+                  <option value="asian">Asian</option>
+                  <option value="black">Black or African American</option>
+                  <option value="hispanic">Hispanic or Latino</option>
+                  <option value="native">Native American or Alaska Native</option>
+                  <option value="pacific">Native Hawaiian or Pacific Islander</option>
+                  <option value="white">White</option>
+                  <option value="two-or-more">Two or more races</option>
+                  <option value="decline">Decline to answer</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Veteran Status</label>
+                <select id="veteranStatus">
+                  <option value="">Select</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                  <option value="decline">Decline to answer</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Disability Status</label>
+                <select id="disabilityStatus">
+                  <option value="">Select</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                  <option value="decline">Decline to answer</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="subsection">
+            <h3>Work Authorization</h3>
+            <p class="subsection-desc">Your work authorization status</p>
+
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="workAuthUs" checked>
+                <span>I am authorized to work in the United States</span>
+              </label>
+            </div>
+
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="sponsorshipNow">
+                <span>I currently require sponsorship</span>
+              </label>
+            </div>
+
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="sponsorshipFuture">
+                <span>I will require sponsorship in the future</span>
+              </label>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Notice Period (days)</label>
+                <input type="number" id="noticePeriod" value="14" placeholder="14">
+              </div>
+
+              <div class="form-group">
+                <label>Visa Status</label>
+                <select id="visaStatus">
+                  <option value="citizen" selected>U.S. Citizen</option>
+                  <option value="green_card">Green Card</option>
+                  <option value="h1b">H1-B</option>
+                  <option value="opt">OPT</option>
+                  <option value="cpt">CPT</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Security Clearance</label>
+                <select id="securityClearance">
+                  <option value="no" selected>No</option>
+                  <option value="confidential">Confidential</option>
+                  <option value="secret">Secret</option>
+                  <option value="top_secret">Top Secret</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="subsection">
+            <h3>Technical Screening</h3>
+            <p class="subsection-desc">Years of experience with key technologies</p>
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Years of LLM Experience</label>
+                <input type="number" id="yearsLlm" value="3" placeholder="3">
+              </div>
+
+              <div class="form-group">
+                <label>Years of ML Deployment</label>
+                <input type="number" id="yearsMlDeploy" value="5" placeholder="5">
+              </div>
+
+              <div class="form-group">
+                <label>Years of Python</label>
+                <input type="number" id="yearsPython" value="15" placeholder="15">
+              </div>
+
+              <div class="form-group">
+                <label>Years of Kubernetes</label>
+                <input type="number" id="yearsK8s" value="5" placeholder="5">
+              </div>
+
+              <div class="form-group">
+                <label>Highest Education</label>
+                <select id="highestEducation">
+                  <option value="bachelors">Bachelor's</option>
+                  <option value="masters" selected>Master's</option>
+                  <option value="phd">PhD</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="experienceRag" checked>
+                <span>Experience with RAG (Retrieval-Augmented Generation)</span>
+              </label>
+            </div>
+
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="experienceAgenticAi" checked>
+                <span>Experience with Agentic AI systems</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="subsection">
+            <h3>Application Logistics</h3>
+            <p class="subsection-desc">Preferences and screening answers</p>
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Willing to Relocate?</label>
+                <select id="willingRelocate">
+                  <option value="yes" selected>Yes</option>
+                  <option value="no">No</option>
+                  <option value="depends">Depends on location</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Willing to Travel?</label>
+                <select id="willingTravel">
+                  <option value="yes" selected>Yes</option>
+                  <option value="no">No</option>
+                  <option value="occasionally">Occasionally</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group full-width">
+              <label>Why are you interested? (Cover Letter)</label>
+              <textarea id="whyInterested" rows="4" placeholder="Driven by the challenge of architecting production-grade agentic workflows...">Driven by the challenge of architecting production-grade agentic workflows and scaling LLM infrastructure within enterprise environments.</textarea>
+            </div>
+
+            <div class="form-group full-width">
+              <label>Why are you a good fit?</label>
+              <textarea id="whyGoodFit" rows="4" placeholder="Proven experience leading AI architecture...">Proven experience leading AI architecture at Lucid Motors and Yahoo, focusing on end-to-end MLOps and highly available distributed systems.</textarea>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Save Custom Fields</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Resume Files Section -->
+      <section id="filesSection" class="settings-section">
+        <div class="section-header">
+          <h2>Resume Files</h2>
+          <p>Manage your resume JSON and PDF files</p>
+        </div>
+
+        <div class="settings-form">
+          <!-- JSON Upload -->
+          <div class="upload-card">
+            <div class="upload-card-header">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+              </svg>
+              <div class="upload-card-title">
+                <h3>Resume JSON</h3>
+                <p>Your resume data in JSON format</p>
+              </div>
+            </div>
+
+            <div class="current-file" id="jsonFileInfo">
+              <span class="file-status">No file uploaded</span>
+            </div>
+
+            <input type="file" id="jsonInput" accept=".json" class="file-input">
+            <label for="jsonInput" class="btn-secondary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"></path>
+              </svg>
+              Upload JSON File
+            </label>
+
+            <div id="jsonStatus" class="upload-status"></div>
+
+            <p class="upload-hint">
+              Need a template?
+              <a href="https://github.com/WhiteboxHub/project-avatar-resume-json-cli/blob/main/src/resumes/test/demo.json" target="_blank">
+                View sample JSON →
+              </a>
+            </p>
+          </div>
+
+          <!-- PDF Upload -->
+          <div class="upload-card">
+            <div class="upload-card-header">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+              <div class="upload-card-title">
+                <h3>Resume PDF</h3>
+                <p>Your resume file for attachments</p>
+              </div>
+            </div>
+
+            <div class="current-file" id="pdfFileInfo">
+              <span class="file-status">No file uploaded</span>
+            </div>
+
+            <input type="file" id="pdfInput" accept=".pdf,.doc,.docx" class="file-input">
+            <label for="pdfInput" class="btn-secondary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"></path>
+              </svg>
+              Upload Resume File
+            </label>
+
+            <div id="pdfStatus" class="upload-status"></div>
+
+            <p class="upload-hint">Accepted formats: PDF, DOC, DOCX (max 10MB)</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tracking Section -->
+      <section id="trackingSection" class="settings-section">
+        <div class="section-header">
+          <h2>Form Tracking</h2>
+          <p>View autofill history and field tracking data</p>
+        </div>
+
+        <div class="settings-form">
+          <!-- Current Session -->
+          <div id="currentSessionCard" class="tracking-card hidden">
+            <h3>Current Session</h3>
+            <div class="tracking-details-grid">
+              <div class="detail-item">
+                <span class="detail-label">ATS Platform:</span>
+                <span id="trackingAts" class="detail-value">-</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">Company:</span>
+                <span id="trackingCompany" class="detail-value">-</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">Started:</span>
+                <span id="trackingStartTime" class="detail-value">-</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">Completion:</span>
+                <span id="trackingCompletion" class="detail-value">0%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tracking History -->
+          <div class="tracking-card">
+            <div class="card-header">
+              <h3>Session History</h3>
+              <button id="clearTrackingHistoryBtn" class="btn-clear">Clear</button>
+            </div>
+            <div id="trackingHistoryList" class="tracking-history">
+              <p class="empty-state">No tracking history yet</p>
+            </div>
+          </div>
+
+          <!-- Debug Mode -->
+          <div class="tracking-card">
+            <div class="setting-row">
+              <div class="setting-info">
+                <h3>Debug Mode</h3>
+                <p>Enable detailed logging for troubleshooting</p>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="debugModeToggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Export -->
+          <button id="exportTrackingBtn" class="btn-secondary full-width">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Export Tracking Data (JSON)
+          </button>
+        </div>
+      </section>
+
+      <!-- Preferences Section -->
+      <section id="preferencesSection" class="settings-section">
+        <div class="section-header">
+          <h2>Preferences</h2>
+          <p>Manage extension settings and preferences</p>
+        </div>
+
+        <div class="settings-form">
+          <!-- Autofill Behavior Settings -->
+          <div class="subsection">
+            <h3>Autofill Behavior</h3>
+            <p class="subsection-desc">Control how the extension autofills forms</p>
+
+            <div class="form-group">
+              <label for="autofillAfterPageTurn">Autofill After Page Turn</label>
+              <select id="autofillAfterPageTurn">
+                <option value="manually">Manually</option>
+                <option value="automatically">Automatically</option>
+              </select>
+              <p class="form-hint">
+                <strong>Manually:</strong> Click Autofill button on each page/step.<br>
+                <strong>Automatically:</strong> Continue autofill when moving to next page/step.
+              </p>
+            </div>
+
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="preserveUserInput">
+                <span>Preserve user-entered values</span>
+              </label>
+              <p class="form-hint">Ask before overwriting fields you've manually filled.</p>
+            </div>
+
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="fillEEO">
+                <span>Fill EEO fields (Equal Employment Opportunity)</span>
+              </label>
+              <p class="form-hint">Gender, ethnicity, veteran status, disability status.</p>
+            </div>
+
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="fillLegal">
+                <span>Fill legal/work authorization fields</span>
+              </label>
+              <p class="form-hint">Work authorization, visa status, sponsorship requirements.</p>
+            </div>
+          </div>
+
+          <!-- UI Settings -->
+          <div class="subsection">
+            <h3>User Interface</h3>
+            <p class="subsection-desc">Customize how the extension appears</p>
+
+            <div class="form-group">
+              <label for="defaultPluginView">Default Plugin View</label>
+              <select id="defaultPluginView">
+                <option value="expanded">Expanded</option>
+                <option value="minimized">Minimized</option>
+              </select>
+              <p class="form-hint">
+                <strong>Expanded:</strong> Side panel opens by default.<br>
+                <strong>Minimized:</strong> Only floating icon is shown.
+              </p>
+            </div>
+
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="highlightFilledFields">
+                <span>Highlight filled fields</span>
+              </label>
+              <p class="form-hint">Visual indicator on fields filled by the extension.</p>
+            </div>
+          </div>
+
+          <!-- Performance Settings -->
+          <div class="subsection">
+            <h3>Performance</h3>
+            <p class="subsection-desc">Adjust autofill speed and retry behavior</p>
+
+            <div class="form-group">
+              <label for="autofillDelay">Delay Between Fields (ms)</label>
+              <input type="number" id="autofillDelay" min="0" max="5000" step="50" value="100">
+              <p class="form-hint">Higher values may help with slow-loading forms. Default: 100ms</p>
+            </div>
+
+            <div class="form-group">
+              <label for="retryAttempts">Retry Attempts</label>
+              <input type="number" id="retryAttempts" min="0" max="10" value="3">
+              <p class="form-hint">How many times to retry failed fields. Default: 3</p>
+            </div>
+          </div>
+
+          <!-- Save Preferences -->
+          <div class="form-actions">
+            <button type="button" class="btn-primary" id="savePreferencesBtn">Save Preferences</button>
+            <button type="button" class="btn-secondary" id="resetPreferencesBtn">Reset to Defaults</button>
+          </div>
+
+          <!-- Divider -->
+          <div class="divider" style="margin: 32px 0;"></div>
+
+          <!-- Danger Zone -->
+          <div class="danger-zone">
+            <h3>Danger Zone</h3>
+            <p>These actions cannot be undone. Please be careful.</p>
+
+            <div class="danger-actions">
+              <button id="clearHistoryBtn" class="btn-danger-outline">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="1 4 1 10 7 10"></polyline>
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                </svg>
+                Clear Application History
+              </button>
+
+              <button id="deleteProfileBtn" class="btn-danger">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+                Delete All Resume Data
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Status Toast -->
+  <div id="statusToast" class="status-toast hidden"></div>
+
+  <script src="/src/core/resumeProcessor.js"></script>
+  <script src="/src/core/settingsManager.js"></script>
+  <script src="/src/ui/settings.js"></script>
+</body>
+
+</html>

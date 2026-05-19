@@ -147,8 +147,8 @@ def run_doctor(console: "Console", wbox_smoke: bool = False) -> int:
             console.print(f"  [dim]{ext_path}[/dim]")
         else:
             console.print(
-                f"TalentScreen extension: {warn} (not found — set extension_path, "
-                "JOBCLI_EXTENSION_PATH, or run installer)"
+                f"TalentScreen extension: {warn} (not found — run [cyan]jobcli setup[/cyan], "
+                "set extension_path, or JOBCLI_EXTENSION_PATH)"
             )
     except Exception as e:
         console.print(f"TalentScreen extension: {warn} ({e})")

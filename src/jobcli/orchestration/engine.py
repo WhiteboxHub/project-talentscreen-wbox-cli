@@ -888,7 +888,9 @@ class ApplicationEngine:
         elif resolved:
             global_logger.info(f"Extension found at {resolved}")
         else:
-            global_logger.warning("No valid extension found. Form autofill will rely on Python rules + LLM only.")
+            global_logger.warning(
+                "TalentScreen extension not available; continuing with rules/LLM fallback."
+            )
 
         return resolved
 
@@ -952,7 +954,10 @@ class ApplicationEngine:
                 **CONTEXT_OPTIONS,
             )
         else:
-            global_logger.info("Launching standard browser (no extension path provided or not found).")
+            global_logger.info(
+                "TalentScreen extension not available; continuing with rules/LLM fallback."
+            )
+            global_logger.info("Launching standard browser (no extension loaded).")
             # Browser is always visible while applying — required for human-in-the-loop checkpoints
             # and to let the user watch automation in real time.
             self.browser = self.playwright.chromium.launch(

@@ -30,11 +30,10 @@ When a user runs `jobcli run`, the system follows this end-to-end sequence:
 
 1. **CLI receives `jobcli run`** → instantiates `ApplicationEngine` with the user's config.
 2. **Engine launches Chromium** in Stealth mode using Playwright persistent context with anti-detection flags.
-3. **Extension is mounted** → `extension/helpers.py` resolves `bin/project-talentscreen-autofill-extension` and passes it via `--load-extension` to Chrome.
+3. **Extension is mounted** → `extension/helpers.py` resolves `~/.jobcli/extension_unpacked` (or overrides) and passes it via `--load-extension` to Chrome.
 4. **Job Discovery** → `wbox_discoverer.py` logs into Whitebox Learning, scrapes job listings from the dashboard.
 5. **Per-Job Loop** → For each job URL, the engine navigates, waits for the ATS form to stabilize, then:
-   - Injects resume JSON into `localStorage`
-   - Triggers the extension's autofill script via a `chrome.runtime.sendMessage` call
+   - Calls `window.AutofillExtension.injectProfile` / `configure` / `fill` via Playwright (`autofill_bridge.py`)
    - The extension's content scripts parse each ATS (Workday, Greenhouse, Lever, etc.) using its registered strategy
 6. **LLM Fallback** → If any field is left unfilled (custom essay questions, unusual dropdowns), the engine sends the field label + resume context to the configured LLM provider for a tailored answer.
 7. **Submit** → A human-simulated click submits the form; the engine records the outcome in SQLite.
@@ -84,21 +83,20 @@ wbox-cli/
 The Chrome Extension is the critical autofill engine. Here's how it integrates:
 
 ```
-install.sh / install.ps1
-    │
-    ├── git clone TalentScreen Extension
-    │       └── → bin/project-talentscreen-autofill-extension/
-    │
-    └── git clone wbox-cli
-            └── → ~/.jobcli/wbox-cli/
+jobcli package
+    └── src/jobcli/assets/talentscreen_extension/  (bundled at build time)
 
 jobcli setup
-    │
+    └── extension/install.py: install_bundled_extension(force=True)
+            └── → ~/.jobcli/extension_unpacked/
+
+jobcli apply / resolve
     └── extension/helpers.py: resolve_extension_dir()
             ├── JOBCLI_EXTENSION_PATH
             ├── config.extension_path
-            ├── ~/.jobcli/extension_unpacked  (legacy)
-            ├── bin/project-talentscreen-autofill-extension
+            ├── ~/.jobcli/extension_unpacked
+            ├── auto-install bundled → ~/.jobcli/extension_unpacked
+            ├── bin/project-talentscreen-autofill-extension  (legacy)
             └── sibling project-talentscreen-autofill-extension
 
 ApplicationEngine.start_session()
@@ -116,7 +114,7 @@ ApplicationEngine.start_session()
 
 | Decision | Rationale |
 |---|---|
-| **Git-cloned extension over CRX download** | Eliminates network brittleness at runtime; extension source is always locally inspectable |
+| **Bundled extension in package** | No separate TalentScreen git clone required; `jobcli setup` installs to `~/.jobcli/extension_unpacked` |
 | **Persistent browser context** | Retains cookies/session between job applications — no repeated logins |
 | **Stealth Playwright flags** | Bypasses Cloudflare, DataDome, and ATS bot-detection fingerprinting |
 | **LLM as fallback only** | Keeps cost low; extension handles 90%+ of standard fields natively |

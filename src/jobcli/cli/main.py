@@ -507,26 +507,48 @@ def setup() -> None:
     extension_loaded = False
     browser_error: str = ""
 
-    # ── 4a: Resolve & validate extension path ───────────────────────────────
+    # ── 4a: Install bundled extension & resolve path ────────────────────────
     from jobcli.extension.helpers import (
         chromium_extension_launch_args,
+        extension_manifest_has_page_bridge,
         read_extension_manifest_version,
         resolve_extension_dir,
     )
+    from jobcli.extension.install import refresh_installed_extension
 
-    ext_dir = resolve_extension_dir(config.extension_path)
-
-    if ext_dir and ext_dir != (config.extension_path or "").strip():
+    ext_dir: Optional[str] = None
+    try:
+        installed = refresh_installed_extension()
+        ext_dir = str(installed)
         config.extension_path = ext_dir
         save_config(config)
+        console.print("[bold]TalentScreen extension installed to:[/bold]")
+        console.print(f"  {installed}")
+    except RuntimeError as exc:
+        console.print(f"  [red]✗ Failed to install bundled extension: {exc}[/red]")
+        console.print("    Reinstall JobCLI or run [cyan]jobcli setup[/cyan] again.")
+        ext_dir = resolve_extension_dir(config.extension_path)
+        if ext_dir:
+            config.extension_path = ext_dir
+            save_config(config)
 
     if not ext_dir:
-        console.print("  [red]✗ Extension not found. Run the installer to clone it into bin/.[/red]")
+        console.print(
+            "  [red]✗ Extension not found. Run [cyan]jobcli setup[/cyan] again or reinstall JobCLI.[/red]"
+        )
         browser_error = "Extension not found"
     else:
         ext_ver = read_extension_manifest_version(ext_dir)
         ver_label = f" (v{ext_ver})" if ext_ver else ""
         console.print(f"  [green]✓ Extension directory ready{ver_label}: {ext_dir}[/green]")
+        if extension_manifest_has_page_bridge(ext_dir):
+            console.print(
+                "  [green]✓ Manifest declares Playwright page-world bridge (pageWorldBridge.js)[/green]"
+            )
+        else:
+            console.print(
+                "  [yellow]⚠ Manifest missing MAIN-world pageWorldBridge.js — CLI autofill may not work.[/yellow]"
+            )
 
         # ── 4b: Launch browser with extension and verify it loaded ────────
         try:

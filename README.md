@@ -9,7 +9,7 @@ Production-grade CLI for automated job applications across multiple ATS platform
 ### Core Automation
 - **No `.env` files** — credentials, LLM keys, resume paths, and the API base URL all live in `~/.jobcli/jobcli.db`, written by `jobcli login`, `jobcli resume-upload`, and `jobcli config-cmd`. The CLI never reads a `.env` file.
 - **Guided interactive TUI** — running `wboxcli` walks you through onboarding in a fixed order (WBL login → visible browser + extension smoke test → LLM key → resume → discover), and at every step shows a `▶ Next step` panel telling you exactly which command to type next. Non-technical users never have to guess what to run.
-- **TalentScreen v2 extension** — `jobcli setup` / `apply` load the unpacked extension via Chrome flags (not from Chrome Web Store at apply time). Autofill calls `window.AutofillExtension` on ATS pages via the extension’s page-world bridge (`pageWorldBridge.js`; see [`CLI_API.md`](../project-talentscreen-autofill-extension/docs/api/CLI_API.md)). Override path with `JOBCLI_EXTENSION_PATH` or `jobcli config-cmd --key extension_path --set <path>`. After `git pull` in the extension repo, run a **new** apply session so Chromium reloads the folder.
+- **TalentScreen v2 extension** — bundled inside JobCLI and installed to `~/.jobcli/extension_unpacked` by `jobcli setup`. `apply` loads it via Chrome flags (not from Chrome Web Store). Autofill calls `window.AutofillExtension` on ATS pages via `pageWorldBridge.js` (see [`CLI_API.md`](../project-talentscreen-autofill-extension/docs/api/CLI_API.md)). Override with `JOBCLI_EXTENSION_PATH` or `jobcli config-cmd --key extension_path --set <path>` for a custom checkout.
 - **Always-visible browser** — `jobcli apply` forces `headless=False`; Chrome is always on screen so you can watch and intervene.
 - **Don't-refill guard** — the extension autofills first; a three-layer guard (engine snapshot → LLM action filter → executor live-read) prevents the LLM or rules from overwriting any field the extension already populated. Placeholder values like `"Select..."` are correctly treated as empty, so real values still flow through.
 - **Required-first human prompt** — when fields stay empty after extension + LLM + rules, the terminal asks for `[red]*required[/red]` fields first (must answer) and `[dim](optional, Enter to skip)[/dim]` fields second (press Enter to skip). The `required` flag is propagated from the page's Accessibility Tree.
@@ -222,7 +222,7 @@ Both files are parsed and the absolute paths are saved into `~/.jobcli/jobcli.db
 jobcli setup
 ```
 
-Validates your saved config, resolves the **TalentScreen v2** unpacked extension, and runs a visible-browser smoke test. The installer clones a copy into `~/.jobcli/src/bin/project-talentscreen-autofill-extension/`; for day-to-day dev, point at your git checkout (see [TalentScreen extension](#talentscreen-extension-jobcli-integration) below).
+Validates your saved config, installs the bundled **TalentScreen v2** extension to `~/.jobcli/extension_unpacked`, saves `extension_path`, and runs a visible-browser smoke test. No separate extension git clone is required. For extension development, point `extension_path` at your checkout (see [TalentScreen extension](#talentscreen-extension-jobcli-integration) below).
 
 ```powershell
 jobcli config-cmd --key extension_path --set "C:\path\to\project-talentscreen-autofill-extension"
@@ -246,9 +246,63 @@ jobcli apply --url "https://boards.greenhouse.io/company/jobs/123"
 
 ---
 
+## TalentScreen extension setup
+
+You **do not** need to clone [`project-talentscreen-autofill-extension`](https://github.com/WhiteboxHub/project-talentscreen-autofill-extension) for normal use. TalentScreen ships inside the JobCLI Python package.
+
+### Default workflow
+
+1. Run **`jobcli setup`** — copies the bundled extension to `~/.jobcli/extension_unpacked` and saves `extension_path` in your local config.
+2. Run **`jobcli apply`** — JobCLI resolves that folder automatically and launches Chromium with:
+
+   ```
+   --disable-extensions-except=<extension_dir>
+   --load-extension=<extension_dir>
+   ```
+
+3. On supported ATS job pages, the extension exposes `window.AutofillExtension` (via `pageWorldBridge.js`). JobCLI calls `injectProfile` → `configure` → `fill` through Playwright.
+
+If the extension cannot be loaded or the page-world bridge is missing, JobCLI logs a warning and **continues with rules/LLM fallback** (no hard failure).
+
+### Advanced overrides
+
+| Method | Use when |
+|---|---|
+| `JOBCLI_EXTENSION_PATH` | Point at any unpacked extension folder (highest priority) |
+| `jobcli config-cmd --key extension_path --set "<path>"` | Persist a custom path (e.g. your own extension git checkout) |
+
+```bash
+# macOS / Linux
+export JOBCLI_EXTENSION_PATH="$HOME/dev/project-talentscreen-autofill-extension"
+
+# Windows (PowerShell)
+$env:JOBCLI_EXTENSION_PATH = "C:\dev\project-talentscreen-autofill-extension"
+
+jobcli config-cmd --key extension_path --set "C:\dev\project-talentscreen-autofill-extension"
+jobcli doctor
+```
+
+Legacy fallbacks (if bundled install fails): `bin/project-talentscreen-autofill-extension/` from the one-line installer, or a sibling repo in a monorepo layout.
+
+### Troubleshooting
+
+| Check | What to do |
+|---|---|
+| `~/.jobcli/extension_unpacked/manifest.json` exists | If missing, run `jobcli setup` again |
+| Extension version | `jobcli doctor` shows path and manifest version |
+| Bridge on ATS page | Open DevTools on the **job application** tab (not the login page) and run: `window.AutofillExtension?.__bridge === true` |
+| After extension code changes | Run `jobcli setup` to refresh the installed copy, then start a **new** `jobcli apply` session |
+| Maintainer: update bundled copy | From JobCLI repo: `python scripts/bundle_talentscreen_extension.py` then reinstall |
+
+### Maintainer note
+
+When the extension repo releases a new version, run `python scripts/bundle_talentscreen_extension.py` (defaults to sibling `../project-talentscreen-autofill-extension`) and commit `src/jobcli/assets/talentscreen_extension/`.
+
+---
+
 ## TalentScreen extension (JobCLI integration)
 
-JobCLI does **not** install the extension from the Chrome Web Store at apply time. It loads an **unpacked folder** from disk using Chromium flags (`--load-extension`, `--disable-extensions-except`).
+JobCLI does **not** install the extension from the Chrome Web Store at apply time. It loads an **unpacked folder** from disk using Chromium flags (`--load-extension`, `--disable-extensions-except`). See [TalentScreen extension setup](#talentscreen-extension-setup) for the default install flow.
 
 ### How autofill is invoked
 
@@ -269,11 +323,14 @@ The extension exposes this API in the **page main world** through `src/core/page
 |---|---|
 | 1 | `JOBCLI_EXTENSION_PATH` environment variable |
 | 2 | `extension_path` in SQLite (`jobcli config-cmd --key extension_path --set <dir>`) |
-| 3 | `~/.jobcli/extension_unpacked/` (legacy; may be v1.6 — avoid if you want v2) |
-| 4 | `~/.jobcli/src/bin/project-talentscreen-autofill-extension/` (installer clone) |
-| 5 | Sibling repo `../project-talentscreen-autofill-extension` (monorepo dev layout) |
+| 3 | `~/.jobcli/extension_unpacked/` (installed by `jobcli setup` from bundled package) |
+| 4 | Auto-install bundled extension → `~/.jobcli/extension_unpacked/` |
+| 5 | `bin/project-talentscreen-autofill-extension/` (installer clone, legacy) |
+| 6 | Sibling repo `../project-talentscreen-autofill-extension` (monorepo dev layout) |
 
-**Recommended (local dev):**
+**Default:** run `jobcli setup` once — no separate extension repo required.
+
+**Optional (extension development):**
 
 ```powershell
 # Windows — adjust path to your clone
@@ -637,9 +694,10 @@ All config lives in `~/.jobcli/` and is written by the interactive commands. **N
 | Path | Purpose | Owned by |
 |---|---|---|
 | `~/.jobcli/jobcli.db` | SQLite — credentials, LLM keys, resume paths, API base URL, jobs, learned memory | `jobcli login`, `jobcli resume-upload`, `jobcli config-cmd`, `jobcli discover` |
-| Extension folder (see [resolution order](#extension-path-resolution)) | TalentScreen v2 unpacked extension loaded during `apply` | `jobcli setup`, `jobcli config-cmd --key extension_path`, installer, or `JOBCLI_EXTENSION_PATH` |
-| `~/.jobcli/extension_unpacked/` | Legacy unpacked copy (optional fallback) | Older installs only |
-| `~/.jobcli/src/bin/project-talentscreen-autofill-extension/` | Extension clone from one-line installer | `scripts/install.sh` / `install.ps1` |
+| Extension folder (see [resolution order](#extension-path-resolution)) | TalentScreen v2 unpacked extension loaded during `apply` | Bundled in package; `jobcli setup` installs to `~/.jobcli/extension_unpacked/` |
+| `~/.jobcli/extension_unpacked/` | Installed TalentScreen copy (default) | `jobcli setup` |
+| `src/jobcli/assets/talentscreen_extension/` | Bundled extension inside Python package | Ship with wheel; refresh via `scripts/bundle_talentscreen_extension.py` |
+| `bin/project-talentscreen-autofill-extension/` | Legacy installer clone (optional fallback) | `scripts/install.sh` / `install.ps1` |
 | `~/.jobcli/logs/` | Per-job JSON logs, screenshots, DOM snapshots | `jobcli apply` |
 | `~/.jobcli/venv/` | Managed Python venv (only present from the one-line installer) | `scripts/install.sh` / `scripts/install.ps1` |
 | `~/.jobcli/src/` | Cloned repo (one-line installer only) | `scripts/install.sh` / `scripts/install.ps1` |
