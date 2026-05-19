@@ -280,3 +280,28 @@ class TestInteractiveExtensionValidation:
             assert ext_ok is False
             assert ext_dir is None
             assert "not found" in err.lower()
+
+
+class TestSiblingExtensionManifest:
+    """E2E prerequisite: dev monorepo extension includes Playwright page-world bridge."""
+
+    def test_sibling_manifest_has_main_world_bridge(self):
+        from jobcli.extension import helpers
+
+        ext_dir = helpers._SIBLING_EXT_DIR
+        manifest_path = ext_dir / "manifest.json"
+        if not manifest_path.is_file():
+            pytest.skip("Sibling extension repo not present")
+
+        import json
+
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        scripts = manifest.get("content_scripts") or []
+        main_entries = [s for s in scripts if s.get("world") == "MAIN"]
+        assert main_entries, "manifest must include a MAIN-world content_scripts entry"
+        bridge_js = "src/core/pageWorldBridge.js"
+        assert any(
+            bridge_js in (entry.get("js") or [])
+            for entry in main_entries
+        ), f"MAIN entry must load {bridge_js}"
+        assert manifest.get("version") == "2.0.0"

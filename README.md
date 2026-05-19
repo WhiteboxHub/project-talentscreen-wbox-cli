@@ -7,9 +7,9 @@ Production-grade CLI for automated job applications across multiple ATS platform
 ## Features
 
 ### Core Automation
-- **No `.env` files** — credentials, LLM keys, resume paths, and the API base URL all live in `~/.jobcli/jobcli.db`, written by `jobcli login`, `jobcli resume-upload`, and `jobcli config`. The CLI never reads a `.env` file.
+- **No `.env` files** — credentials, LLM keys, resume paths, and the API base URL all live in `~/.jobcli/jobcli.db`, written by `jobcli login`, `jobcli resume-upload`, and `jobcli config-cmd`. The CLI never reads a `.env` file.
 - **Guided interactive TUI** — running `wboxcli` walks you through onboarding in a fixed order (WBL login → visible browser + extension smoke test → LLM key → resume → discover), and at every step shows a `▶ Next step` panel telling you exactly which command to type next. Non-technical users never have to guess what to run.
-- **TalentScreen v2 extension** — `jobcli setup` / `apply` load the unpacked extension via Chrome flags; autofill uses `window.AutofillExtension` on ATS pages (see extension repo [`CLI_INTEGRATION_GUIDE.md`](../project-talentscreen-autofill-extension/docs/api/CLI_INTEGRATION_GUIDE.md)). Override path with `JOBCLI_EXTENSION_PATH` or `jobcli config --key extension_path`.
+- **TalentScreen v2 extension** — `jobcli setup` / `apply` load the unpacked extension via Chrome flags (not from Chrome Web Store at apply time). Autofill calls `window.AutofillExtension` on ATS pages via the extension’s page-world bridge (`pageWorldBridge.js`; see [`CLI_API.md`](../project-talentscreen-autofill-extension/docs/api/CLI_API.md)). Override path with `JOBCLI_EXTENSION_PATH` or `jobcli config-cmd --key extension_path --set <path>`. After `git pull` in the extension repo, run a **new** apply session so Chromium reloads the folder.
 - **Always-visible browser** — `jobcli apply` forces `headless=False`; Chrome is always on screen so you can watch and intervene.
 - **Don't-refill guard** — the extension autofills first; a three-layer guard (engine snapshot → LLM action filter → executor live-read) prevents the LLM or rules from overwriting any field the extension already populated. Placeholder values like `"Select..."` are correctly treated as empty, so real values still flow through.
 - **Required-first human prompt** — when fields stay empty after extension + LLM + rules, the terminal asks for `[red]*required[/red]` fields first (must answer) and `[dim](optional, Enter to skip)[/dim]` fields second (press Enter to skip). The `required` flag is propagated from the page's Accessibility Tree.
@@ -200,7 +200,7 @@ You'll be prompted for:
 - LLM API keys (at least one of OpenAI, Anthropic, Gemini)
 - Default LLM provider (`openai` / `anthropic` / `gemini`)
 
-You are **never asked for the WBL API base URL**. The CLI silently probes the hardcoded production endpoint — `https://api.whitebox-learning.com/api` — with the credentials you just entered, and saves it if authentication succeeds. If it's unreachable at login time, the next `jobcli discover` re-probes automatically. Developers running a local backend can override the saved URL with `jobcli config --key sync_server_url --set <url>`.
+You are **never asked for the WBL API base URL**. The CLI silently probes the hardcoded production endpoint — `https://api.whitebox-learning.com/api` — with the credentials you just entered, and saves it if authentication succeeds. If it's unreachable at login time, the next `jobcli discover` re-probes automatically. Developers running a local backend can override the saved URL with `jobcli config-cmd --key sync_server_url --set <url>`.
 
 Re-running `jobcli login` updates the saved values. `jobcli login --auto` skips prompts entirely if credentials are already saved.
 
@@ -216,14 +216,18 @@ jobcli resume-upload --pdf "/Users/you/resume.pdf" --json "/Users/you/resume.jso
 
 Both files are parsed and the absolute paths are saved into `~/.jobcli/jobcli.db`. The PDF is uploaded to the application engine at apply time; the JSON drives every form field.
 
-### Step 3 — One-shot validation (downloads extension, runs browser test)
+### Step 3 — Extension + browser smoke test
 
 ```bash
 jobcli setup
 ```
 
-This validates your saved config, downloads the **TalentScreen** Chrome extension into
-`~/.jobcli/extension_unpacked/`, and runs a 15-second visible-browser smoke test.
+Validates your saved config, resolves the **TalentScreen v2** unpacked extension, and runs a visible-browser smoke test. The installer clones a copy into `~/.jobcli/src/bin/project-talentscreen-autofill-extension/`; for day-to-day dev, point at your git checkout (see [TalentScreen extension](#talentscreen-extension-jobcli-integration) below).
+
+```powershell
+jobcli config-cmd --key extension_path --set "C:\path\to\project-talentscreen-autofill-extension"
+jobcli doctor   # should show manifest v2.0.0 and the path above
+```
 
 ### Step 4 — Discover, then apply
 
@@ -239,6 +243,71 @@ jobcli apply --url "https://boards.greenhouse.io/company/jobs/123"
 ```
 
 `jobcli apply` with no arguments applies to **all pending jobs** in your local DB. Chrome always opens visibly — `apply` is a human-in-the-loop flow by design.
+
+---
+
+## TalentScreen extension (JobCLI integration)
+
+JobCLI does **not** install the extension from the Chrome Web Store at apply time. It loads an **unpacked folder** from disk using Chromium flags (`--load-extension`, `--disable-extensions-except`).
+
+### How autofill is invoked
+
+After the application form is visible, JobCLI calls the in-page API via Playwright:
+
+1. `window.AutofillExtension.injectProfile(profile)` — JSON Resume from your uploaded resume
+2. `window.AutofillExtension.configure({ ... })` — confidence, EEO/legal toggles
+3. `window.AutofillExtension.fill(profile)` — fill fields on the ATS page
+4. `window.AutofillExtension.exportReport()` — optional log under `~/.jobcli/logs/`
+
+The extension exposes this API in the **page main world** through `src/core/pageWorldBridge.js` (`__bridge: true`), which forwards calls to the real implementation in `autofillAPI.js`. Full reference: [TalentScreen CLI_API.md](../project-talentscreen-autofill-extension/docs/api/CLI_API.md).
+
+### Extension path resolution
+
+`jobcli doctor` shows which folder and manifest version are active. Resolution order:
+
+| Priority | Source |
+|---|---|
+| 1 | `JOBCLI_EXTENSION_PATH` environment variable |
+| 2 | `extension_path` in SQLite (`jobcli config-cmd --key extension_path --set <dir>`) |
+| 3 | `~/.jobcli/extension_unpacked/` (legacy; may be v1.6 — avoid if you want v2) |
+| 4 | `~/.jobcli/src/bin/project-talentscreen-autofill-extension/` (installer clone) |
+| 5 | Sibling repo `../project-talentscreen-autofill-extension` (monorepo dev layout) |
+
+**Recommended (local dev):**
+
+```powershell
+# Windows — adjust path to your clone
+jobcli config-cmd --key extension_path --set "C:\Users\you\Desktop\wbox\project-talentscreen-autofill-extension"
+jobcli doctor
+```
+
+```bash
+# macOS / Linux
+export JOBCLI_EXTENSION_PATH="$HOME/Desktop/wbox/project-talentscreen-autofill-extension"
+jobcli doctor
+```
+
+### Updating the extension from git
+
+```bash
+cd project-talentscreen-autofill-extension
+git pull
+```
+
+Then start a **new** `jobcli apply` session (new browser process). Reloading the job tab alone does not reload the extension.
+
+### Success / failure signals in logs
+
+| Log line | Meaning |
+|---|---|
+| `Launching persistent browser context with TalentScreen v2.0.0 from: ...` | Extension folder loaded |
+| `TalentScreen API found on frame: https://jobs.lever.co/...` | Page-world bridge reachable |
+| `Extension profile injected` | Resume accepted by extension validation |
+| `Extension autofill complete: N filled` | `fill()` ran |
+| `TalentScreen API unavailable` | Wrong extension path, old v1.6 copy, or missing `pageWorldBridge.js` — falls back to rules/LLM |
+| `Extension injectProfile failed: Profile validation failed` | Fix resume JSON (`basics.email`, ISO dates); see `resume_export` / CLI_API.md |
+
+On the job form tab in DevTools: `window.AutofillExtension?.__bridge === true`.
 
 ---
 
@@ -395,9 +464,9 @@ LinkedIn does not allow bot automation. When the batch encounters a LinkedIn job
 
 | Command | Description |
 |---|---|
-| `jobcli config` | Show the full saved config table |
-| `jobcli config --key <name>` | Show a single saved value |
-| `jobcli config --key <name> --set <value>` | Update a single value (e.g. `sync_server_url`) |
+| `jobcli config-cmd` | Show the full saved config table |
+| `jobcli config-cmd --key <name>` | Show a single saved value |
+| `jobcli config-cmd --key <name> --set <value>` | Update a single value (e.g. `extension_path`, `sync_server_url`) |
 
 ### Cleanup commands (see [Cleanup, DB Reset, and Uninstall](#cleanup-db-reset-and-uninstall) for details)
 
@@ -438,8 +507,11 @@ jobcli/
 │   ├── extractor.py  # Exports high-confidence non-PII data for sync
 │   ├── client.py     # HTTP bridge to /api/sync_cli endpoints
 │   └── sqlite_merger.py  # Merges server knowledge back into local SQLite
-├── bridge/           # Phase 3 Chrome Extension Integration
-│   └── server.py     # FastAPI bridge server exposing /api/v1/context
+├── extension/        # TalentScreen v2 Playwright bridge
+│   ├── helpers.py    # resolve_extension_dir, Chromium --load-extension flags
+│   └── autofill_bridge.py  # window.AutofillExtension inject/configure/fill
+├── bridge/           # FastAPI server (optional dashboard integration)
+│   └── server.py     # exposes /api/v1/context
 └── tests/            # pytest suite
 ```
 
@@ -463,7 +535,7 @@ To start the dashboard:
 JobCLI follows a 5-phase strategy to ensure application success:
 
 1. **Phase 1: Discovery** — URL normalization and ATS platform detection.
-2. **Phase 2: Extension Autofill (v2)** — After the form is visible, JobCLI calls `AutofillExtension.injectProfile` / `configure` / `fill` on the page, waits 1.5 s to settle, then snapshots every populated field for don't-refill.
+2. **Phase 2: Extension Autofill (v2)** — After the form is visible, JobCLI calls `window.AutofillExtension` (page-world bridge) `injectProfile` → `configure` → `fill`, waits 1.5 s to settle, then snapshots every populated field for don't-refill. See [TalentScreen extension](#talentscreen-extension-jobcli-integration).
 3. **Phase 3: AI Reasoning (LLM)** — Accessibility Tree analysis for complex/custom fields and questionnaires. Any LLM action whose target is already in the snapshot is dropped before it reaches the executor (the **don't-refill guard**). A second live-value check at the executor layer guarantees no field is ever filled twice.
 4. **Phase 4: Human-in-the-Loop** — Two-tier prompt: required fields first, optional fields second (press Enter to skip). See [Two-tier human prompt](#two-tier-human-prompt-supervised--manual).
 5. **Phase 5: Submission & Verification** — Final checks and behavioral outcome detection.
@@ -564,8 +636,10 @@ All config lives in `~/.jobcli/` and is written by the interactive commands. **N
 
 | Path | Purpose | Owned by |
 |---|---|---|
-| `~/.jobcli/jobcli.db` | SQLite — credentials, LLM keys, resume paths, API base URL, jobs, learned memory | `jobcli login`, `jobcli resume-upload`, `jobcli config`, `jobcli discover` |
-| `~/.jobcli/extension_unpacked/` | TalentScreen Chrome extension (auto-loaded during `apply`) | `jobcli setup` |
+| `~/.jobcli/jobcli.db` | SQLite — credentials, LLM keys, resume paths, API base URL, jobs, learned memory | `jobcli login`, `jobcli resume-upload`, `jobcli config-cmd`, `jobcli discover` |
+| Extension folder (see [resolution order](#extension-path-resolution)) | TalentScreen v2 unpacked extension loaded during `apply` | `jobcli setup`, `jobcli config-cmd --key extension_path`, installer, or `JOBCLI_EXTENSION_PATH` |
+| `~/.jobcli/extension_unpacked/` | Legacy unpacked copy (optional fallback) | Older installs only |
+| `~/.jobcli/src/bin/project-talentscreen-autofill-extension/` | Extension clone from one-line installer | `scripts/install.sh` / `install.ps1` |
 | `~/.jobcli/logs/` | Per-job JSON logs, screenshots, DOM snapshots | `jobcli apply` |
 | `~/.jobcli/venv/` | Managed Python venv (only present from the one-line installer) | `scripts/install.sh` / `scripts/install.ps1` |
 | `~/.jobcli/src/` | Cloned repo (one-line installer only) | `scripts/install.sh` / `scripts/install.ps1` |
@@ -579,13 +653,15 @@ Use the matching interactive command:
 |---|---|
 | Whitebox username/password, API base URL, LLM keys, default LLM provider | `jobcli login` |
 | Resume PDF + JSON | `jobcli resume-upload --pdf <pdf> --json <json>` |
-| Anything else | `jobcli config --key <name> --set <value>` |
+| Extension path (v2 git folder) | `jobcli config-cmd --key extension_path --set <absolute-path>` |
+| Anything else | `jobcli config-cmd --key <name> --set <value>` |
 
 To inspect what is currently saved:
 
 ```bash
-jobcli config                       # full table
-jobcli config --key sync_server_url # single value
+jobcli config-cmd                       # full table
+jobcli config-cmd --key extension_path  # TalentScreen folder
+jobcli config-cmd --key sync_server_url # WBL API base URL
 ```
 
 ### Optional advanced overrides (shell environment only — no `.env`)
@@ -598,6 +674,7 @@ These knobs are read directly from the process environment if you want to tweak 
 | `JOBCLI_DISCOVER_DAYS` | Override discover time window (default `0` = all listings) |
 | `JOBCLI_DISCOVER_PAGE_SIZE` | Override discover page size (default `10000`, max `10000`) |
 | `JOBCLI_DISCOVER_STATUS` | Override discover status filter (default `open`; use `all` for everything) |
+| `JOBCLI_EXTENSION_PATH` | Absolute path to unpacked TalentScreen v2 extension (highest priority at launch) |
 | `WBOX_DISCOVER_MODE=browser` | Force the legacy Playwright dashboard scrape instead of the API |
 | `JOBCLI_SSL_CA_BUNDLE` | Path to a corporate root CA `.pem` if HTTPS verification fails (applies to **every** outbound call: WBL API, OpenAI, Anthropic, Gemini) |
 | `JOBCLI_INSECURE_TLS=1` | Last-resort: disable HTTPS verification everywhere (insecure; prefer the trust-store fix below) |

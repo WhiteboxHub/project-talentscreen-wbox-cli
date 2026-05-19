@@ -1895,6 +1895,7 @@ class ApplicationEngine:
             self.resume,
             logger=logger,
             questions=questions,
+            extension_dir=self.extension_dir,
         )
 
         if result.report and getattr(logger, "job_log_dir", None):
