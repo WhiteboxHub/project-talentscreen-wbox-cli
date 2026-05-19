@@ -278,3 +278,6 @@ failure_reports/
 
 # Overlay debug files
 overlay_*.html
+
+# Executable wrappers
+bin/
