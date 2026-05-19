@@ -84,15 +84,14 @@ project-avatar-wbox-cli/
 │   └── utils/               # TLS, logging, URL normalize, secure config
 ├── ui/                      # React + Vite dashboard (port 3000)
 ├── tests/                   # pytest suite (~20 test modules)
-├── tests/                   # Python pytest suite
 ├── scripts/                 # install.sh/ps1, uninstall, stealth_check
 ├── pyproject.toml           # Package metadata + dependencies
 └── README.md                # User-facing guide (716 lines)
 ```
 
-**Not in repo (downloaded at runtime):**
-- TalentScreen extension → `~/.jobcli/extension_unpacked/`
-- Cloned source (installer) → `~/.jobcli/src/`
+**Not in repo (local / installer):**
+- TalentScreen extension — resolved at runtime (see §14); often `bin/project-talentscreen-autofill-extension/` or sibling repo
+- Cloned JobCLI source (installer) → `~/.jobcli/src/`
 - Python venv (installer) → `~/.jobcli/venv/`
 
 ---
@@ -149,8 +148,8 @@ project-avatar-wbox-cli/
 
 | Command | Purpose |
 |---|---|
-| `jobcli config` | Show full config table |
-| `jobcli config --key <name> --set <value>` | Update single value |
+| `jobcli config-cmd` | Show full config table |
+| `jobcli config-cmd --key <name> --set <value>` | Update single value (e.g. `extension_path`) |
 | `jobcli db clear-jobs [--force]` | Clear jobs + application logs only |
 | `jobcli db reset [--force]` | Wipe entire SQLite DB |
 | `jobcli reset` | Alias for `db reset` |
@@ -333,8 +332,8 @@ project-avatar-wbox-cli/
 
 | File | Role |
 |---|---|
-| `helpers.py` | Resolve extension path, `chromium_extension_launch_args()`, verify in browser |
-| `autofill_bridge.py` | Playwright bridge to `window.AutofillExtension` (v2 API) |
+| `helpers.py` | Resolve extension path, ATS URL detection, `chromium_extension_launch_args()`, verify in browser |
+| `autofill_bridge.py` | Playwright bridge to `window.AutofillExtension` (v2 page-world bridge) |
 
 ### `jobcli/automation/`
 
@@ -390,7 +389,8 @@ project-avatar-wbox-cli/
 | Path | Purpose |
 |---|---|
 | `jobcli.db` | SQLite — credentials, jobs, memory, config |
-| `extension_unpacked/` | TalentScreen Chrome extension |
+| `extension_path` (in DB) / resolved folder | TalentScreen v2 unpacked extension |
+| `extension_unpacked/` | Legacy extension copy (fallback only) |
 | `logs/` | Per-job JSON logs, screenshots, DOM snapshots |
 | `venv/` | Managed Python venv (installer only) |
 | `src/` | Cloned repo (installer only) |
@@ -422,7 +422,7 @@ Written by `jobcli login`, `resume-upload`, `setup`, `config`:
 | `POST /api/job_activity_logs/bulk` | Push application status to dashboard |
 
 **Default API base:** `https://api.whitebox-learning.com/api`  
-**Override:** `jobcli config --key sync_server_url --set <url>`
+**Override:** `jobcli config-cmd --key sync_server_url --set <url>`
 
 ### LLM Providers
 
@@ -434,9 +434,9 @@ Written by `jobcli login`, `resume-upload`, `setup`, `config`:
 
 ### TalentScreen Extension
 
-- Downloaded by `jobcli setup` into `~/.jobcli/extension_unpacked/`
-- Loaded automatically during `jobcli apply` via Playwright Chromium args
-- Provides Phase 2 DOM-native autofill before LLM runs
+- Cloned by installer into `bin/project-talentscreen-autofill-extension/` or set via `extension_path` / `JOBCLI_EXTENSION_PATH`
+- Loaded during `jobcli apply` via `--load-extension` (see `extension/helpers.py`)
+- Phase 2 autofill: `extension/autofill_bridge.py` calls `window.AutofillExtension` (page-world bridge in extension v2.0.0+)
 
 ---
 
@@ -541,10 +541,11 @@ Run: `jobcli sync`
   4. `<project-root>/bin/project-talentscreen-autofill-extension/` (installer clone)
   5. Sibling `../project-talentscreen-autofill-extension/` (local `wbox/` monorepo layout)
 - **Chrome launch:** `chromium_extension_launch_args(ext_dir)` — shared by `engine.start_session()`, `jobcli setup`, and `verify_extension_in_browser()`
-- **Autofill bridge** (`extension/autofill_bridge.py`): after navigating to a supported ATS URL, Playwright calls `window.AutofillExtension` via `page.evaluate()` — `injectProfile` → `configure` → `fill` → optional `exportReport()`. Profile data comes from `profile/resume_export.py` (`resume_to_json_resume()`).
-- **Engine timing:** extension autofill runs **after** the apply form is visible, then `EXTENSION_AUTOFILL_SETTLE_MS` (1500 ms), then `_snapshot_filled()` for don't-refill. Legacy service-worker storage (`autoRunActive`, pre-navigation inject) is **removed**.
-- **Dev shortcut:** `jobcli config --key extension_path --set <path-to-v2-extension>`
-- **API reference:** extension repo `docs/api/CLI_INTEGRATION_GUIDE.md`
+- **Page-world bridge:** extension `pageWorldBridge.js` exposes `window.AutofillExtension` with `__bridge: true` for Playwright; isolated `autofillAPI.js` handles RPC.
+- **Autofill bridge** (`extension/autofill_bridge.py`): `injectProfile` → `configure` → `fill` → optional `exportReport()`. Profile from `profile/resume_export.py`.
+- **Engine timing:** runs after the form is visible, then `EXTENSION_AUTOFILL_SETTLE_MS` (1500 ms), then `_snapshot_filled()` for don't-refill.
+- **Dev shortcut:** `jobcli config-cmd --key extension_path --set <path-to-v2-extension>`
+- **API reference:** extension repo `docs/api/CLI_API.md`
 - **Bridge tests:** Python tests in `tests/test_extension_bridge.py`, `tests/test_resume_export.py`. Extension Jest tests live in `project-talentscreen-autofill-extension`.
 
 ---

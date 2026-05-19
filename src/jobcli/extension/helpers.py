@@ -13,10 +13,43 @@ import os
 import tempfile
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
+
+#: Host fragments for ATS job pages (aligned with TalentScreen manifest).
+ATS_HOST_FRAGMENTS: tuple[str, ...] = (
+    "myworkdayjobs.com",
+    "greenhouse.io",
+    "lever.co",
+    "smartrecruiters.com",
+    "applytojob.com",
+    "bamboohr.com",
+    "icims.com",
+    "indeed.com",
+    "linkedin.com",
+    "workable.com",
+    "taleo.net",
+    "successfactors.com",
+    "successfactors.eu",
+    "personio.com",
+    "personio.de",
+    "recruitee.com",
+    "teamtailor.com",
+    "ultipro.com",
+    "myultipro.com",
+    "ukg.com",
+    "paycomonline.net",
+    "paychex.com",
+    "oraclecloud.com",
+    "brassring.com",
+    "ashbyhq.com",
+    "workforcenow.adp.com",
+    "jobvite.com",
+    "rippling-ats.com",
+)
 
 #: Default subdirectory under ``~/.jobcli`` where older installs unpacked
 #: the extension via CRX download.
@@ -40,6 +73,17 @@ _SIBLING_EXT_DIR = (
 def _has_manifest(directory: Path) -> bool:
     """Return True if *directory* exists and contains a ``manifest.json``."""
     return directory.is_dir() and (directory / "manifest.json").is_file()
+
+
+def is_likely_ats_frame_url(url: str) -> bool:
+    """Return True if *url* looks like a job-application page (not captcha CDN, etc.)."""
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except Exception:
+        return False
+    if not host:
+        return False
+    return any(fragment in host for fragment in ATS_HOST_FRAGMENTS)
 
 
 def chromium_extension_launch_args(ext_dir: str) -> list[str]:

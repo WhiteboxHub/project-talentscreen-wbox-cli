@@ -95,17 +95,19 @@ install.sh / install.ps1
 jobcli setup
     │
     └── extension/helpers.py: resolve_extension_dir()
-            ├── Check config.extension_path
-            ├── Check ~/.jobcli/extension_unpacked  (legacy)
-            └── Check bin/project-talentscreen-autofill-extension  ← primary
+            ├── JOBCLI_EXTENSION_PATH
+            ├── config.extension_path
+            ├── ~/.jobcli/extension_unpacked  (legacy)
+            ├── bin/project-talentscreen-autofill-extension
+            └── sibling project-talentscreen-autofill-extension
 
 ApplicationEngine.start_session()
     │
     └── Playwright launch_persistent_context(
               args=["--load-extension=<resolved_path>"]
         )
-            └── Chrome registers extension service worker
-                    └── Extension autofills ATS forms natively
+            └── pageWorldBridge.js → window.AutofillExtension (__bridge)
+                    └── autofill_bridge.run_extension_autofill()
 ```
 
 ---

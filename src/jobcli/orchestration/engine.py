@@ -872,12 +872,8 @@ class ApplicationEngine:
         """Pick a valid TalentScreen extension directory or return ``None``.
 
         Delegates to :func:`jobcli.extension.helpers.resolve_extension_dir`
-        which checks:
-        1. ``config.extension_path``
-        2. ``~/.jobcli/extension_unpacked`` (legacy)
-        3. ``<project-root>/bin/project-talentscreen-autofill-extension``
-
-        The resolved path is persisted back so subsequent runs skip the search.
+        (``JOBCLI_EXTENSION_PATH``, config, legacy unpack, installer bin, sibling repo).
+        The resolved path is persisted when it differs from config.
         """
         from jobcli.extension.helpers import resolve_extension_dir
 
@@ -929,20 +925,6 @@ class ApplicationEngine:
         
         self.playwright = sync_playwright().start()
 
-        # Resolve the TalentScreen extension directory with three fallback
-        # tiers, so the engine remains usable even when ``config.extension_path``
-        # is stale (e.g. the DB was copied from another machine where the
-        # path was ``C:\Users\OTHER\.jobcli\extension_unpacked\`` and that
-        # path does not exist locally). Without this auto-recovery the
-        # browser silently launched without the extension and form
-        # autofill was 100% dependent on the LLM — which was the failure
-        # the user reported.
-        #
-        # Order (each tier validated by ``manifest.json`` presence, since
-        # an empty / partial directory is worse than no extension at all):
-        #   1. ``config.extension_path`` (what ``jobcli setup`` wrote)
-        #   2. ``~/.jobcli/extension_unpacked`` — the canonical default
-        #   3. Auto-download via :class:`ExtensionManager` on the fly
         extension_dir = self._resolve_extension_dir()
         self.extension_dir = extension_dir
         launch_args = list(LAUNCH_ARGS)
@@ -2174,17 +2156,9 @@ class ApplicationEngine:
             # resume upload) AND for the common "click option" patterns
             # (Yes/No radios, custom dropdowns).
             #
-            # We deliberately do NOT delegate this to the bundled TalentScreen
-            # Chrome extension. The extension's content.js (see
-            # `~/.jobcli/extension_unpacked/content.js`) gates ``fillForm``
-            # behind two conditions that are not satisfied in a Playwright
-            # session: the side-panel must be open in this window AND
-            # ``autoRunActive`` must be true. Neither is true here, so the
-            # extension's pageload listener returns immediately without
-            # touching the form. Running this Python pass guarantees the
-            # cheap-and-deterministic fields are filled BEFORE the LLM is
-            # consulted — which keeps token cost low and is robust to
-            # extension version drift.
+            # Python ATS handlers complement TalentScreen v2 (``_run_extension_autofill``
+            # above): side-panel ``fillForm`` is not used in Playwright sessions.
+            # This pass fills deterministic fields before deeper LLM iterations.
             rules_handler = None
             self._last_rules_filled_count = 0
             try:
