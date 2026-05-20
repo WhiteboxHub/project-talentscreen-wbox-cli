@@ -670,6 +670,20 @@ message.
 
 ---
 
+## Repository layout
+
+The project root keeps a minimal set of files. **Only one Markdown file belongs at the top level** (`README.md`). Dependency manifests at the root:
+
+| File | Purpose |
+|------|---------|
+| `README.md` | Setup, usage, and architecture (this file) |
+| `requirements.txt` | Python dependencies |
+| `package.json` | Node dev tooling (Jest for extension/UI tests) |
+
+Other documentation (architecture guides, summaries, etc.) lives under `docs/` — not in the repo root.
+
+---
+
 ## Development
 
 ```bash
