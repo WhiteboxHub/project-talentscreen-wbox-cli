@@ -678,6 +678,30 @@ def _dispatch(raw: str):
         _run_onboarding(force=True)
         return
 
+    # Reset mapping (wipes DB and immediately launches onboarding setup)
+    if cmd == "reset":
+        from jobcli.cli.main import _run_db_reset, get_config
+        try:
+            _run_db_reset(force=False)
+            cfg = get_config()
+            if not cfg.job_board_username:
+                _run_onboarding(force=True)
+        except Exception as e:
+            console.print(f"[red]Error during reset: {e}[/red]")
+        return
+
+    # Uninstall mapping (deletes all CLI data and shims, then exits cleanly)
+    if cmd == "uninstall":
+        from jobcli.cli.main import uninstall
+        try:
+            uninstall(force=False)
+            sys.exit(0)
+        except SystemExit:
+            sys.exit(0)
+        except Exception as e:
+            console.print(f"[red]Error during uninstall: {e}[/red]")
+        return
+
     # Standard
     if cmd in COMMANDS and COMMANDS[cmd] is not None:
         _exec(COMMANDS[cmd] + args)
