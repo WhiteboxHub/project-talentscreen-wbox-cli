@@ -51,6 +51,7 @@ COMMANDS = {
     "dashboard": ["open-dashboard"],
     "reset":     ["reset"],
     "uninstall": ["uninstall"],
+    "update":    ["update"],
     "clear":     None,
     "help":      None,
     "exit":      None,
@@ -555,6 +556,7 @@ def _cmd_help():
             ("server",    "Start web UI dashboard"),
             ("dashboard", "Open Whitebox dashboard in browser"),
             ("reset",     "Wipe database and re-onboard"),
+            ("update",    "Update WboxCLI code and dependencies"),
             ("uninstall", "Full uninstallation"),
             ("clear",     "Clear the screen"),
             ("exit",      "Exit"),
@@ -700,6 +702,25 @@ def _dispatch(raw: str):
             sys.exit(0)
         except Exception as e:
             console.print(f"[red]Error during uninstall: {e}[/red]")
+        return
+
+    # Update mapping (runs update script and exits cleanly so new code is loaded)
+    if cmd == "update":
+        import subprocess
+        console.print(f"\n  [{D}]Running WboxCLI Update...[/]")
+        try:
+            script_path = _project_root() / "scripts" / "wboxcli.sh"
+            powershell_path = _project_root() / "scripts" / "install.ps1"
+            if os.name != "nt":
+                subprocess.run(["bash", str(script_path), "update"], check=True)
+            else:
+                subprocess.run(["powershell.exe", "-File", str(powershell_path)], check=True)
+            console.print(f"\n  [green]Update complete! Please restart WboxCLI to run the newly updated version.[/green]\n")
+            sys.exit(0)
+        except SystemExit:
+            sys.exit(0)
+        except Exception as e:
+            console.print(f"[red]Error during update: {e}[/red]")
         return
 
     # Standard
