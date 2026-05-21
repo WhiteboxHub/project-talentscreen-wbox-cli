@@ -91,8 +91,8 @@ ok "Cloned extension to temporary location"
 if [ -d "$SRC_DIR/.git" ]; then
     info "Existing installation found — pulling latest..."
     git -C "$SRC_DIR" remote set-branches origin '*' --quiet 2>/dev/null || true
-    git -C "$SRC_DIR" fetch origin --depth 1 "$BRANCH" --quiet
-    git -C "$SRC_DIR" checkout -B "$BRANCH" "origin/$BRANCH" --quiet
+    git -C "$SRC_DIR" fetch origin "$BRANCH" --depth 1 --quiet
+    git -C "$SRC_DIR" checkout -B "$BRANCH" FETCH_HEAD --quiet
     ok "Updated to latest $BRANCH"
 else
     git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$SRC_DIR" --quiet

@@ -106,8 +106,8 @@ cmd_install() {
 
     if [ -d "$SRC_DIR/.git" ]; then
         info "Existing installation found — pulling latest..."
-        git -C "$SRC_DIR" fetch origin --depth 1 "$BRANCH" --quiet
-        git -C "$SRC_DIR" checkout -B "$BRANCH" "origin/$BRANCH" --quiet
+        git -C "$SRC_DIR" fetch origin "$BRANCH" --depth 1 --quiet
+        git -C "$SRC_DIR" checkout -B "$BRANCH" FETCH_HEAD --quiet
         ok "Updated to latest $BRANCH"
     else
         git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$SRC_DIR" --quiet
@@ -221,8 +221,8 @@ cmd_update() {
 
     info "Pulling latest code from $BRANCH..."
     if [ -d "$SRC_DIR/.git" ]; then
-        git -C "$SRC_DIR" fetch origin --depth 1 "$BRANCH" --quiet
-        git -C "$SRC_DIR" checkout -B "$BRANCH" "origin/$BRANCH" --quiet
+        git -C "$SRC_DIR" fetch origin "$BRANCH" --depth 1 --quiet
+        git -C "$SRC_DIR" checkout -B "$BRANCH" FETCH_HEAD --quiet
         ok "Source updated to latest $BRANCH"
     else
         fail "Source directory not found at $SRC_DIR. Run: $0 install"
