@@ -219,6 +219,12 @@ cmd_update() {
     header "Update                 ║"
     _ensure_installed
 
+    if [ -d "$SRC_DIR/.git" ]; then
+        if [ -z "${JOBCLI_BRANCH:-}" ]; then
+            BRANCH=$(git -C "$SRC_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+        fi
+    fi
+
     info "Pulling latest code from $BRANCH..."
     if [ -d "$SRC_DIR/.git" ]; then
         git -C "$SRC_DIR" fetch origin "$BRANCH" --depth 1 --quiet
