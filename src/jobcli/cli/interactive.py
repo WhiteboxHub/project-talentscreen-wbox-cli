@@ -3,9 +3,11 @@
 Just a clean prompt. No heavy panels. Information when you need it.
 """
 
+import locale
 import os
 import sys
 import time
+from pathlib import Path
 try:
     import readline
 except ImportError:
@@ -187,11 +189,33 @@ def _validate_wbox_and_extension(
     -------
     ``(login_ok, extension_ok, resolved_ext_dir, error_message)``
     """
-    from jobcli.extension.helpers import resolve_extension_dir, verify_extension_in_browser
+    from jobcli.utils.extension_helpers import (
+        get_local_extension_zip,
+        maybe_install_local_extension_zip,
+        resolve_extension_dir,
+        verify_extension_in_browser,
+    )
+
+    if get_local_extension_zip():
+        maybe_install_local_extension_zip()
 
     resolved = resolve_extension_dir(ext_dir)
     if not resolved:
-        return (False, False, None, "TalentScreen extension not found in bin folder or config")
+        zip_hint = get_local_extension_zip()
+        if zip_hint is None:
+            err = (
+                "TalentScreen extension not found. Build the extension ZIP, then copy it to "
+                "project-talentscreen-wbox-cli/extension/talentscreen-autofill.zip "
+                "(see docs/SETUP_WINDOWS_MAC.md). On Windows: .\\build.ps1 in the "
+                "autofill-extension repo, then Copy-Item dist\\*.zip to that path."
+            )
+        else:
+            err = (
+                "TalentScreen extension not unpacked. ZIP exists but "
+                "~/.jobcli/extension_unpacked/ is missing — run: "
+                "python -m jobcli.cli.main doctor  (with PYTHONPATH=src set)"
+            )
+        return (False, False, None, err)
 
     login_ok, extension_ok, err = verify_extension_in_browser(resolved, email, password)
     return (login_ok, extension_ok, resolved, err)
@@ -404,6 +428,25 @@ def _print_welcome():
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
+def _project_root() -> Path:
+    return Path(__file__).resolve().parent.parent.parent.parent
+
+
+def _running_from_dev_tree() -> bool:
+    """True when launched from build.bat / repo (PYTHONPATH=src or project .venv)."""
+    py_path = os.environ.get("PYTHONPATH", "").replace("\\", "/")
+    if "src" in py_path.split(os.pathsep) or py_path.rstrip("/").endswith("/src"):
+        return True
+    if os.name == "nt":
+        venv_py = _project_root() / ".venv" / "Scripts" / "python.exe"
+        if venv_py.is_file():
+            try:
+                return Path(sys.executable).resolve() == venv_py.resolve()
+            except OSError:
+                pass
+    return False
+
+
 def _find_jobcli_bin() -> str:
     venv_dir = os.path.join(os.path.expanduser("~"), ".jobcli", "venv")
     candidate = os.path.join(venv_dir, "Scripts" if os.name == "nt" else "bin", "jobcli.exe" if os.name == "nt" else "jobcli")
@@ -412,35 +455,74 @@ def _find_jobcli_bin() -> str:
     return shutil.which("jobcli") or "jobcli"
 
 
+def _subprocess_encoding() -> str:
+    """Encoding for child CLI stdout (Windows consoles often use cp1252, not UTF-8)."""
+    return (
+        getattr(sys.stdout, "encoding", None)
+        or locale.getpreferredencoding(False)
+        or "utf-8"
+    )
+
+
+def _jobcli_command(args: list[str]) -> list[str]:
+    """Build argv for a jobcli subcommand (same Python as the TUI when in dev tree)."""
+    # build.bat sets PYTHONPATH=src — use that interpreter so Playwright/browsers match.
+    if _running_from_dev_tree():
+        return [sys.executable, "-m", "jobcli.cli.main"] + args
+    jobcli = _find_jobcli_bin()
+    if jobcli != "jobcli" and os.path.isfile(jobcli):
+        return [jobcli] + args
+    return [sys.executable, "-m", "jobcli.cli.main"] + args
+
+
 def _exec(args: list[str]):
     """Run a jobcli subcommand, streaming output."""
-    jobcli = _find_jobcli_bin()
+    cmd = _jobcli_command(args)
 
     console.print(f"\n  [{D}]$ jobcli {' '.join(args)}[/]")
     console.print()
 
+    env = os.environ.copy()
+    if _running_from_dev_tree():
+        src = str(_project_root() / "src")
+        existing = env.get("PYTHONPATH", "")
+        if src not in existing.replace("\\", "/").split(os.pathsep):
+            env["PYTHONPATH"] = src if not existing else f"{src}{os.pathsep}{existing}"
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    if os.name == "nt":
+        env.setdefault("PYTHONUTF8", "1")
+
+    proc = None
     try:
         proc = subprocess.Popen(
-            [jobcli] + args,
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             cwd=os.getcwd(),
             text=True,
-            encoding="utf-8",
+            encoding=_subprocess_encoding(),
+            errors="replace",
+            env=env,
             bufsize=1,
         )
+        assert proc.stdout is not None
         for line in iter(proc.stdout.readline, ""):
             sys.stdout.write(line)
             sys.stdout.flush()
         proc.wait()
         console.print()
     except KeyboardInterrupt:
-        proc.terminate()
-        proc.wait()
+        if proc is not None:
+            proc.terminate()
+            proc.wait()
         console.print(f"\n  [{D}]cancelled[/]\n")
     except FileNotFoundError:
         try:
-            subprocess.run([sys.executable, "-m", "jobcli"] + args, cwd=os.getcwd())
+            subprocess.run(
+                _jobcli_command(args),
+                cwd=os.getcwd(),
+                env=env,
+            )
         except KeyboardInterrupt:
             console.print(f"\n  [{D}]cancelled[/]\n")
 
@@ -548,6 +630,13 @@ def _dispatch(raw: str):
     parts = raw.strip().split()
     if not parts:
         return
+
+    # Accept pasted README-style commands: `jobcli apply`, `wboxcli discover`, …
+    if parts[0].lower() in ("jobcli", "wboxcli"):
+        parts = parts[1:]
+        if not parts:
+            console.print(f"\n  [{D}]type a subcommand after[/] [{K}]jobcli[/] [{D}](e.g. apply, discover)[/]\n")
+            return
 
     cmd = parts[0].lower()
     args = parts[1:]

@@ -508,7 +508,14 @@ def setup() -> None:
     browser_error: str = ""
 
     # ── 4a: Resolve & validate extension path ───────────────────────────────
-    from jobcli.extension.helpers import resolve_extension_dir
+    from jobcli.utils.extension_helpers import (
+        get_local_extension_zip,
+        maybe_install_local_extension_zip,
+        resolve_extension_dir,
+    )
+
+    if get_local_extension_zip():
+        maybe_install_local_extension_zip()
 
     ext_dir = resolve_extension_dir(config.extension_path)
 

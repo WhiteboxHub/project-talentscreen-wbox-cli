@@ -1,12 +1,28 @@
 """Tests for extension setup, resolution, and browser verification.
 
-Tests the centralised helpers in ``jobcli.extension.helpers`` as well as
+Tests the centralised helpers in ``jobcli.utils.extension_helpers`` as well as
 the consumers in ``cli/interactive.py`` and ``orchestration/engine.py``.
 """
+
+import io
+import zipfile
 
 import pytest
 from unittest.mock import MagicMock, patch
 from pathlib import Path
+
+
+def _make_extension_zip(path: Path, nested: bool = False) -> None:
+    """Write a minimal Chrome-extension ZIP to *path*."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        if nested:
+            zf.writestr("nested-ext/manifest.json", '{"manifest_version": 3}')
+            zf.writestr("nested-ext/content.js", "// test")
+        else:
+            zf.writestr("manifest.json", '{"manifest_version": 3}')
+            zf.writestr("content.js", "// test")
+    path.write_bytes(buf.getvalue())
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -22,14 +38,14 @@ class TestResolveExtensionDir:
         ext_dir.mkdir()
         (ext_dir / "manifest.json").write_text("{}")
 
-        from jobcli.extension.helpers import resolve_extension_dir
+        from jobcli.utils.extension_helpers import resolve_extension_dir
 
         result = resolve_extension_dir(str(ext_dir))
         assert result == str(ext_dir.resolve())
 
     def test_returns_none_when_no_candidates_valid(self, tmp_path):
         """If no candidate directory has a manifest.json, return None."""
-        from jobcli.extension.helpers import resolve_extension_dir
+        from jobcli.utils.extension_helpers import resolve_extension_dir
 
         # Pass a path that doesn't exist
         result = resolve_extension_dir(str(tmp_path / "nonexistent"))
@@ -43,7 +59,7 @@ class TestResolveExtensionDir:
         ext_dir.mkdir()
         # No manifest.json created
 
-        from jobcli.extension.helpers import resolve_extension_dir
+        from jobcli.utils.extension_helpers import resolve_extension_dir
 
         result = resolve_extension_dir(str(ext_dir))
         # Should fall through to other candidates (which also likely don't
@@ -52,7 +68,7 @@ class TestResolveExtensionDir:
 
     def test_falls_through_to_bundled_dir(self, tmp_path, monkeypatch):
         """If configured path is invalid, the bundled bin/ dir should be tried."""
-        from jobcli.extension import helpers
+        from jobcli.utils import extension_helpers as helpers
 
         bundled = tmp_path / "bin" / "project-talentscreen-autofill-extension"
         bundled.mkdir(parents=True)
@@ -67,7 +83,7 @@ class TestResolveExtensionDir:
 
     def test_none_when_configured_is_none(self, tmp_path, monkeypatch):
         """Passing None as configured_path should not crash."""
-        from jobcli.extension import helpers
+        from jobcli.utils import extension_helpers as helpers
 
         # Override both fallbacks to non-existent dirs
         monkeypatch.setattr(helpers, "_LEGACY_UNPACK_DIR", tmp_path / "nope1")
@@ -75,6 +91,76 @@ class TestResolveExtensionDir:
 
         result = helpers.resolve_extension_dir(None)
         assert result is None
+
+
+# ───────────────────────────────────────────────────────────────────────
+# install_extension_from_zip
+# ───────────────────────────────────────────────────────────────────────
+
+class TestInstallExtensionFromZip:
+    """Tests for unpacking a local extension ZIP."""
+
+    def test_unpacks_manifest_at_dest_root(self, tmp_path):
+        zip_path = tmp_path / "ext.zip"
+        dest = tmp_path / "unpacked"
+        _make_extension_zip(zip_path)
+
+        from jobcli.utils.extension_helpers import install_extension_from_zip
+
+        result = install_extension_from_zip(zip_path, dest_dir=dest)
+        assert result == str(dest.resolve())
+        assert (dest / "manifest.json").is_file()
+        assert (dest / "content.js").is_file()
+
+    def test_handles_nested_manifest_in_zip(self, tmp_path):
+        zip_path = tmp_path / "ext.zip"
+        dest = tmp_path / "unpacked"
+        _make_extension_zip(zip_path, nested=True)
+
+        from jobcli.utils.extension_helpers import install_extension_from_zip
+
+        install_extension_from_zip(zip_path, dest_dir=dest)
+        assert (dest / "manifest.json").is_file()
+
+    def test_skips_when_manifest_exists(self, tmp_path):
+        zip_path = tmp_path / "ext.zip"
+        dest = tmp_path / "unpacked"
+        dest.mkdir()
+        (dest / "manifest.json").write_text('{"version": "1"}')
+        _make_extension_zip(zip_path)
+
+        from jobcli.utils.extension_helpers import install_extension_from_zip
+
+        result = install_extension_from_zip(zip_path, dest_dir=dest)
+        assert result == str(dest.resolve())
+
+    def test_force_reinstalls(self, tmp_path):
+        zip_path = tmp_path / "ext.zip"
+        dest = tmp_path / "unpacked"
+        dest.mkdir()
+        (dest / "manifest.json").write_text('{"version": "old"}')
+        _make_extension_zip(zip_path)
+
+        from jobcli.utils.extension_helpers import install_extension_from_zip
+
+        install_extension_from_zip(zip_path, dest_dir=dest, force=True)
+        assert (dest / "content.js").is_file()
+
+    def test_resolve_installs_from_local_zip(self, tmp_path, monkeypatch):
+        from jobcli.utils import extension_helpers as helpers
+
+        zip_path = tmp_path / "extension" / "talentscreen-autofill.zip"
+        zip_path.parent.mkdir(parents=True)
+        _make_extension_zip(zip_path)
+
+        unpack_dest = tmp_path / "extension_unpacked"
+        monkeypatch.setattr(helpers, "_LOCAL_EXTENSION_ZIP", zip_path)
+        monkeypatch.setattr(helpers, "_LEGACY_UNPACK_DIR", unpack_dest)
+        monkeypatch.setattr(helpers, "_BUNDLED_DIR", tmp_path / "no_bundled")
+
+        result = helpers.resolve_extension_dir(None)
+        assert result == str(unpack_dest.resolve())
+        assert (unpack_dest / "manifest.json").is_file()
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -117,7 +203,7 @@ class TestVerifyExtensionInBrowser:
         # Simulate successful login redirect
         mock_page.wait_for_url = MagicMock()  # no exception = success
 
-        from jobcli.extension.helpers import verify_extension_in_browser
+        from jobcli.utils.extension_helpers import verify_extension_in_browser
 
         login_ok, ext_ok, err = verify_extension_in_browser(
             str(ext_dir), "user@test.com", "pass123"
@@ -140,7 +226,7 @@ class TestVerifyExtensionInBrowser:
 
         mock_page.wait_for_url = MagicMock()
 
-        from jobcli.extension.helpers import verify_extension_in_browser
+        from jobcli.utils.extension_helpers import verify_extension_in_browser
 
         login_ok, ext_ok, err = verify_extension_in_browser(
             str(ext_dir), "user@test.com", "pass123"
@@ -164,7 +250,7 @@ class TestVerifyExtensionInBrowser:
         # Simulate login failure (wait_for_url raises TimeoutError)
         mock_page.wait_for_url = MagicMock(side_effect=TimeoutError("timeout"))
 
-        from jobcli.extension.helpers import verify_extension_in_browser
+        from jobcli.utils.extension_helpers import verify_extension_in_browser
 
         login_ok, ext_ok, err = verify_extension_in_browser(
             str(ext_dir), "bad@creds.com", "wrong"
@@ -183,7 +269,7 @@ class TestVerifyExtensionInBrowser:
         with patch("playwright.sync_api.sync_playwright") as mock_pw:
             mock_pw.return_value.__enter__.side_effect = RuntimeError("no browser")
 
-            from jobcli.extension.helpers import verify_extension_in_browser
+            from jobcli.utils.extension_helpers import verify_extension_in_browser
 
             login_ok, ext_ok, err = verify_extension_in_browser(
                 str(ext_dir), "a@b.com", "pass"
@@ -203,7 +289,7 @@ class TestEngineExtensionResolution:
 
     def test_engine_uses_helpers_module(self, tmp_path):
         """The engine should call resolve_extension_dir from helpers."""
-        with patch("jobcli.extension.helpers.resolve_extension_dir") as mock_resolve:
+        with patch("jobcli.utils.extension_helpers.resolve_extension_dir") as mock_resolve:
             mock_resolve.return_value = str(tmp_path / "ext")
 
             from jobcli.orchestration.engine import ApplicationEngine
@@ -229,8 +315,10 @@ class TestInteractiveExtensionValidation:
         """_validate_wbox_and_extension should call resolve + verify from helpers."""
         resolved_path = str(tmp_path / "ext")
 
-        with patch("jobcli.extension.helpers.resolve_extension_dir", return_value=resolved_path) as mock_resolve, \
-             patch("jobcli.extension.helpers.verify_extension_in_browser", return_value=(True, True, "")) as mock_verify:
+        with patch("jobcli.utils.extension_helpers.get_local_extension_zip", return_value=None), \
+             patch("jobcli.utils.extension_helpers.maybe_install_local_extension_zip"), \
+             patch("jobcli.utils.extension_helpers.resolve_extension_dir", return_value=resolved_path) as mock_resolve, \
+             patch("jobcli.utils.extension_helpers.verify_extension_in_browser", return_value=(True, True, "")) as mock_verify:
 
             from jobcli.cli.interactive import _validate_wbox_and_extension
 
@@ -247,7 +335,9 @@ class TestInteractiveExtensionValidation:
 
     def test_validate_returns_error_when_no_extension(self):
         """If resolve returns None, should return an error tuple immediately."""
-        with patch("jobcli.extension.helpers.resolve_extension_dir", return_value=None):
+        with patch("jobcli.utils.extension_helpers.get_local_extension_zip", return_value=None), \
+             patch("jobcli.utils.extension_helpers.maybe_install_local_extension_zip"), \
+             patch("jobcli.utils.extension_helpers.resolve_extension_dir", return_value=None):
             from jobcli.cli.interactive import _validate_wbox_and_extension
 
             login_ok, ext_ok, ext_dir, err = _validate_wbox_and_extension(

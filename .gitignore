@@ -281,3 +281,11 @@ overlay_*.html
 
 # Executable wrappers
 bin/
+
+# Local extension package (ZIP from autofill-extension build)
+extension/*
+!extension/.gitkeep
+
+# JobCLI runtime (local dev + accidental copies)
+.jobcli/
+extension_unpacked/

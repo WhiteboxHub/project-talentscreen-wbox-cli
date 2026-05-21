@@ -3,7 +3,7 @@ import json
 from playwright.sync_api import sync_playwright
 from jobcli.profile.schemas import PersonalInfo, ResumeData
 from jobcli.extension.autofill_bridge import inject_resume_to_extension_storage
-from jobcli.extension.helpers import chromium_extension_launch_args, resolve_extension_dir
+from jobcli.utils.extension_helpers import resolve_extension_dir
 
 def main():
     # 1. Create a dummy resume

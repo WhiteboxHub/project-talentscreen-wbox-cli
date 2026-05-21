@@ -2,6 +2,10 @@
 
 Complete documentation for JobCLI - automated job application system.
 
+## Setup & commands (start here)
+
+- **[SETUP_WINDOWS_MAC.md](SETUP_WINDOWS_MAC.md)** — Extension ZIP, unzip to `~/.jobcli/extension_unpacked/`, first-time onboarding vs returning user, CMD / PowerShell / bash commands, `apply`, troubleshooting
+
 ## Core Documentation
 
 ### System Architecture

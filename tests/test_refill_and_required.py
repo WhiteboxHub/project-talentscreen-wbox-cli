@@ -861,4 +861,4 @@ class TestConstantsSync:
         assert core.issubset(executor_placeholders)
 
     def test_extension_settle_constant_value(self):
-        assert ApplicationEngine.EXTENSION_AUTOFILL_SETTLE_MS == 1500
+        assert ApplicationEngine.EXTENSION_AUTOFILL_SETTLE_MS == 2500

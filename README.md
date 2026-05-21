@@ -2,6 +2,9 @@
 
 Production-grade CLI for automated job applications across multiple ATS platforms, powered by a self-learning local intelligence engine.
 
+> **Windows & macOS command guide (extension ZIP, unzip, onboarding, `apply`):**  
+> See **[docs/SETUP_WINDOWS_MAC.md](docs/SETUP_WINDOWS_MAC.md)** — full copy-paste commands for CMD, PowerShell, and bash.
+
 ---
 
 ## Features
@@ -11,7 +14,7 @@ Production-grade CLI for automated job applications across multiple ATS platform
 - **Guided interactive TUI** — running `wboxcli` walks you through onboarding in a fixed order (WBL login → visible browser + extension smoke test → LLM key → resume → discover), and at every step shows a `▶ Next step` panel telling you exactly which command to type next. Non-technical users never have to guess what to run.
 - **Auto-download Extension** — `jobcli setup` downloads the TalentScreen extension into `~/.jobcli/extension_unpacked/` and `apply` loads it automatically — no manual paths required.
 - **Always-visible browser** — `jobcli apply` forces `headless=False`; Chrome is always on screen so you can watch and intervene.
-- **Don't-refill guard** — the extension autofills first; a three-layer guard (engine snapshot → LLM action filter → executor live-read) prevents the LLM or rules from overwriting any field the extension already populated. Placeholder values like `"Select..."` are correctly treated as empty, so real values still flow through.
+- **Fill order** — Chrome **extension autofill** first, then **rules-based** ATS handlers, then **LLM** for remaining fields. Don't-refill guards prevent later passes from overwriting populated fields.
 - **Required-first human prompt** — when fields stay empty after extension + LLM + rules, the terminal asks for `[red]*required[/red]` fields first (must answer) and `[dim](optional, Enter to skip)[/dim]` fields second (press Enter to skip). The `required` flag is propagated from the page's Accessibility Tree.
 - **Source-filtered discover** — `jobcli discover` only ingests links whose WBL `Source` value is one of `trueup.io`, `hiring.cafe`, `jobright`, `linkedin`. Other listings (Indeed, Workday, …) are dropped at ingest time and never touch the local DB, so `apply` simply iterates whatever is in the queue. To change the allow-list, edit `DEFAULT_SOURCES` in [`jobcli/core/source_filter.py`](jobcli/core/source_filter.py).
 - **WBL job listings API** — `jobcli discover` calls `GET /api/positions/cli_window` (Bearer auth), pages with `offset` until every listing row is fetched (same filters as the dashboard Jobs grid by default: all time, `open` only). Tune with `JOBCLI_DISCOVER_DAYS`, `JOBCLI_DISCOVER_PAGE_SIZE`, `JOBCLI_DISCOVER_STATUS`. Legacy Playwright dashboard scrape: `WBOX_DISCOVER_MODE=browser` or `jobcli discover --legacy-ui`.
@@ -128,23 +131,32 @@ irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall
 
 ### Manual Install (For Development)
 
-```bash
-python -m venv venv
-.\venv\Scripts\Activate.ps1   # Windows
-# source venv/bin/activate    # macOS / Linux
+**Full step-by-step (extension build → ZIP → unzip → commands):** [docs/SETUP_WINDOWS_MAC.md](docs/SETUP_WINDOWS_MAC.md)
 
-pip install --upgrade pip setuptools
-pip install -e .
-playwright install chromium
-```
+| OS | First-time dev setup | Daily run |
+|----|----------------------|-----------|
+| **macOS / Linux** | `./build.sh` then `source .venv/bin/activate` | `export PYTHONPATH=src` → `python -m jobcli.cli.main apply --limit 1` or `wboxcli` |
+| **Windows (CMD)** | `build.bat` | `set PYTHONPATH=src` → `.\.venv\Scripts\python.exe -m jobcli.cli.main apply --limit 1` |
+| **Windows (PowerShell)** | `.\build.bat` | `$env:PYTHONPATH="src"` → `.\.venv\Scripts\python.exe -m jobcli.cli.main apply --limit 1` |
 
-> **Windows Note:** If a `pip install -e .` step fails with `[WinError 5] Access is denied` on `jobcli.exe`, close any open terminal that still has `jobcli` running and retry. The installer-managed venv at `~/.jobcli/venv` avoids this entirely.
+`build.sh` / `build.bat` create a repo-local `.venv`, install Playwright Chromium, and unpack `extension/talentscreen-autofill.zip` into `~/.jobcli/extension_unpacked/` (Chrome loads the **folder**, not the ZIP). Re-run is safe; force refresh with `FORCE_REINSTALL_EXTENSION=1`.
+
+> **Windows:** Use `set PYTHONPATH=src` in **CMD**, not `$env:PYTHONPATH` (PowerShell only).  
+> **Windows extension build:** use `build.ps1` in the extension repo if Git Bash lacks `zip`.
 
 ---
 
 ## Quick Start — Interactive TUI (recommended for first-time users)
 
-Just run:
+**First-time users** need an empty or reset DB — credentials and resume are saved to `~/.jobcli/jobcli.db` and are **not** asked again on later `apply` runs. See [Starting fresh](#starting-fresh-re-trigger-onboarding) below.
+
+| OS | Launch TUI |
+|----|------------|
+| Global install | `wboxcli` |
+| Windows dev | `build.bat` |
+| macOS / Linux dev | `./build.sh` then `wboxcli` or `python src/jobcli/cli/entry.py` with `PYTHONPATH=src` |
+
+Just run (global install):
 
 ```powershell
 wboxcli
@@ -677,10 +689,44 @@ The project root keeps a minimal set of files. **Only one Markdown file belongs 
 | File | Purpose |
 |------|---------|
 | `README.md` | Setup, usage, and architecture (this file) |
+| `docs/SETUP_WINDOWS_MAC.md` | **Windows & macOS commands** — extension ZIP, unzip, onboarding, `apply`, troubleshooting |
 | `requirements.txt` | Python dependencies |
 | `package.json` | Node dev tooling (Jest for extension/UI tests) |
 
 Other documentation (architecture guides, summaries, etc.) lives under `docs/` — not in the repo root.
+
+### Local extension dev loop
+
+Playwright loads **`~/.jobcli/extension_unpacked/`** (unpacked from `extension/talentscreen-autofill.zip`). Details: [docs/SETUP_WINDOWS_MAC.md](docs/SETUP_WINDOWS_MAC.md).
+
+**macOS / Linux**
+
+```bash
+cd ../project-talentscreen-autofill-extension && ./build.sh
+./scripts/copy-to-cli.sh   # → ../project-talentscreen-wbox-cli/extension/talentscreen-autofill.zip
+cd ../project-talentscreen-wbox-cli && ./build.sh
+export PYTHONPATH=src
+python -m jobcli.cli.main doctor
+python -m jobcli.cli.main apply --limit 1
+```
+
+**Windows**
+
+```powershell
+cd ..\project-talentscreen-autofill-extension
+.\build.ps1
+Copy-Item dist\talentscreen-autofill-v*.zip ..\project-talentscreen-wbox-cli\extension\talentscreen-autofill.zip -Force
+cd ..\project-talentscreen-wbox-cli
+build.bat
+```
+
+```cmd
+set PYTHONPATH=src
+.\.venv\Scripts\python.exe -m jobcli.cli.main doctor
+.\.venv\Scripts\python.exe -m jobcli.cli.main apply --limit 1
+```
+
+Refresh after rebuilding extension: new ZIP + `FORCE_REINSTALL_EXTENSION=1 ./build.sh` or `set FORCE_REINSTALL_EXTENSION=1` then `doctor` / `setup` on Windows.
 
 ---
 
