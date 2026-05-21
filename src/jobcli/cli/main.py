@@ -31,7 +31,7 @@ from jobcli.storage.repositories import (
 from jobcli.utils.constants import DASHBOARD_SUMMARY_DAYS, REFERENCE_LINKS_COUNT, SUPPORTED_DOMAINS
 
 app = typer.Typer(
-    name="jobcli",
+    name="wboxcli",
     help="Production-grade CLI for automated job applications",
 )
 
@@ -56,7 +56,7 @@ def _print_next_step(command: str, hint: str = "") -> None:
     output and the user can't miss it as the terminal scrolls.
     """
     from rich.panel import Panel
-    body_lines = [f"  [bold cyan]jobcli {command}[/bold cyan]"]
+    body_lines = [f"  [bold cyan]wboxcli {command}[/bold cyan]"]
     if hint:
         body_lines.append(f"  [dim]{hint}[/dim]")
     console.print()
@@ -85,7 +85,7 @@ def _suggest_after_login_or_resume() -> tuple[str, str]:
         return "setup", "download the TalentScreen extension and verify your setup"
     return "discover", "pull job listings from WBL"
 
-# ``jobcli config --key`` accepts these env-style names as aliases for the stored field.
+# ``wboxcli config --key`` accepts these env-style names as aliases for the stored field.
 CONFIG_CMD_KEY_ALIASES: dict[str, str] = {
     "JOBCLI_SYNC_SERVER_URL": "sync_server_url",
     "NEXT_PUBLIC_API_URL": "sync_server_url",
@@ -127,7 +127,7 @@ def get_config() -> Config:
     resume paths, API base URL, extension path) are written by interactive
     commands (``login``, ``resume-upload``, ``setup``) and persisted in
     ``~/.jobcli/jobcli.db``. To change a value later, use
-    ``jobcli config --key <name> --set <value>`` or re-run ``jobcli login``.
+    ``wboxcli config --key <name> --set <value>`` or re-run ``wboxcli login``.
     """
     db = get_database()
     session = db.get_session()
@@ -218,7 +218,7 @@ def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uni
     """Remove all JobCLI configuration, databases, and global shims.
 
     Works on Windows and macOS/Linux. On Windows we cannot delete the active
-    venv while ``jobcli.exe`` is still running, so the venv is left for the
+    venv while ``wboxcli.exe`` is still running, so the venv is left for the
     bundled ``scripts/uninstall.ps1`` to clean up (or a manual rm after the
     process exits).
     """
@@ -227,7 +227,7 @@ def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uni
     console.print("[bold red]JobCLI Uninstall[/bold red]\n")
     if not force:
         confirm = Confirm.ask(
-            "Delete all JobCLI data in ~/.jobcli (config, jobs, logs, resume, memory) and the wboxcli/jobcli shims?",
+            "Delete all JobCLI data in ~/.jobcli (config, jobs, logs, resume, memory) and the wboxcli shims?",
             default=False,
         )
         if not confirm:
@@ -283,7 +283,7 @@ def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uni
 
     # Remove the global shims dropped by install.ps1 / install.sh
     bin_dir = Path.home() / ".local" / "bin"
-    shim_names = ("wboxcli.cmd", "jobcli.cmd") if is_windows else ("wboxcli", "jobcli")
+    shim_names = ("wboxcli.cmd",) if is_windows else ("wboxcli",)
     for name in shim_names:
         shim = bin_dir / name
         if shim.exists() or shim.is_symlink():
@@ -296,14 +296,14 @@ def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uni
 
     if leftover_paths:
         console.print()
-        console.print("[yellow]Some files could not be removed while jobcli was still running.[/yellow]")
+        console.print("[yellow]Some files could not be removed while wboxcli was still running.[/yellow]")
         console.print("[yellow]Close this terminal and finish cleanup with:[/yellow]")
         if is_windows:
             console.print('  [cyan]Remove-Item -Recurse -Force "$env:USERPROFILE\\.jobcli"[/cyan]')
-            console.print('  [cyan]Remove-Item -Force "$env:USERPROFILE\\.local\\bin\\wboxcli.cmd","$env:USERPROFILE\\.local\\bin\\jobcli.cmd"[/cyan]')
+            console.print('  [cyan]Remove-Item -Force "$env:USERPROFILE\\.local\\bin\\wboxcli.cmd"[/cyan]')
             console.print('  [dim](or)[/dim] [cyan]irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.ps1 | iex[/cyan]')
         else:
-            console.print('  [cyan]rm -rf ~/.jobcli ~/.local/bin/wboxcli ~/.local/bin/jobcli[/cyan]')
+            console.print('  [cyan]rm -rf ~/.jobcli ~/.local/bin/wboxcli[/cyan]')
             console.print('  [dim](or)[/dim] [cyan]curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.sh | bash[/cyan]')
     else:
         console.print("\n[green]JobCLI has been fully uninstalled.[/green]")
@@ -645,7 +645,7 @@ def login(
     # succeeds. The legacy ``127.0.0.1:8000`` localhost probe was removed
     # because it added noise to error messages on machines with no local
     # backend running. Developers who need a local backend can still set it
-    # explicitly via ``jobcli config --key sync_server_url --set <url>``.
+    # explicitly via ``wboxcli config --key sync_server_url --set <url>``.
     # If the probe uncovers actionable issues (bad creds, TLS) we surface a
     # concise warning.
     from jobcli.sync.client import (
@@ -668,13 +668,13 @@ def login(
             # credentials and discover retries on demand.
             if LOGIN_ERR_BAD_CREDENTIALS in kinds:
                 probe_warning_lines.append(
-                    "WBL did not accept these credentials. Re-run 'jobcli login' "
+                    "WBL did not accept these credentials. Re-run 'wboxcli login' "
                     "with the correct email/password — discover will fail otherwise."
                 )
             if LOGIN_ERR_ACCOUNT_LOCKED in kinds:
                 probe_warning_lines.append(
                     "Your WBL account appears inactive/locked. Contact Recruiting "
-                    "before running 'jobcli discover'."
+                    "before running 'wboxcli discover'."
                 )
             if LOGIN_ERR_SSL in kinds:
                 probe_warning_lines.append(
@@ -685,7 +685,7 @@ def login(
             if LOGIN_ERR_RATE_LIMIT in kinds:
                 probe_warning_lines.append(
                     "WBL rate-limited the login probe. Wait a minute, then run "
-                    "'jobcli discover' — credentials were saved successfully."
+                    "'wboxcli discover' — credentials were saved successfully."
                 )
     else:
         # No creds yet — save the production URL so SyncClient has a starting point.
@@ -747,7 +747,7 @@ def config_cmd(
 
     Use ``sync_server_url`` for the WBL API base (aliases: JOBCLI_SYNC_SERVER_URL, NEXT_PUBLIC_API_URL), e.g.:
 
-        jobcli config --key sync_server_url --set https://api.whitebox-learning.com/api
+        wboxcli config --key sync_server_url --set https://api.whitebox-learning.com/api
     """
     config = get_config()
 
@@ -975,7 +975,7 @@ def _run_apply(
     sort: str,
     mode: str,
 ) -> None:
-    """Shared implementation for ``jobcli apply`` (single URL or batch).
+    """Shared implementation for ``wboxcli apply`` (single URL or batch).
 
     Exit semantics
     --------------
@@ -1192,7 +1192,7 @@ def apply(
     batch: bool = typer.Option(
         False,
         "--batch",
-        help="[Deprecated] No effect — `jobcli apply` already applies to all pending jobs when no --url is given.",
+        help="[Deprecated] No effect — `wboxcli apply` already applies to all pending jobs when no --url is given.",
     ),
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of jobs when applying to many"),
     sort: str = typer.Option("oldest", "--sort", "-s", help="Sort when applying to many: oldest | newest"),
@@ -1465,9 +1465,9 @@ def agent(
 
 @app.command("reset")
 def cli_reset(
-    force: bool = typer.Option(False, "--force", "-f", help="Same as jobcli db reset --force"),
+    force: bool = typer.Option(False, "--force", "-f", help="Same as wboxcli db reset --force"),
 ) -> None:
-    """Alias for ``jobcli db reset`` — full local SQLite database wipe (keeps ~/.jobcli logs)."""
+    """Alias for ``wboxcli db reset`` — full local SQLite database wipe (keeps ~/.jobcli logs)."""
     _run_db_reset(force)
 
 

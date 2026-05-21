@@ -8,7 +8,7 @@
 #    1. Clones (or updates) the repo into %USERPROFILE%\.jobcli\src
 #    2. Creates a Python venv at %USERPROFILE%\.jobcli\venv
 #    3. Installs the package + Playwright Chromium
-#    4. Drops wboxcli.cmd + jobcli.cmd at %USERPROFILE%\.local\bin\
+#    4. Drops wboxcli.cmd at %USERPROFILE%\.local\bin\
 #    5. Adds %USERPROFILE%\.local\bin to the user PATH (if not already there)
 #    6. Launches the interactive TUI
 # ----------------------------------------------------------------------
@@ -21,7 +21,6 @@ $SrcDir        = Join-Path $InstallDir "src"
 $VenvDir       = Join-Path $InstallDir "venv"
 $BinDir        = Join-Path $env:USERPROFILE ".local\bin"
 $Wrapper       = Join-Path $BinDir "wboxcli.cmd"
-$WrapperJobcli = Join-Path $BinDir "jobcli.cmd"
 $RepoUrl       = "https://github.com/WhiteboxHub/wbox-cli.git"
 $Branch        = if ($env:JOBCLI_BRANCH) { $env:JOBCLI_BRANCH } else { "main" }
 
@@ -66,6 +65,12 @@ try {
 
 # -- Step 2: Clone or update repo -------------------------------------
 Write-Step "Setting up source at $SrcDir..."
+
+if (Test-Path $InstallDir) {
+    Write-Step "Cleaning up existing database and settings..."
+    Remove-Item -Path (Join-Path $InstallDir "jobcli.db*") -Force -ErrorAction SilentlyContinue
+    Write-Ok "Removed existing settings"
+}
 
 if (-not (Test-Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
@@ -155,15 +160,7 @@ if not exist "%JOBCLI_VENV%\Scripts\python.exe" (
 "@
 Set-Content -Path $Wrapper -Value $WboxcliContent -Encoding ASCII
 
-# Alias: jobcli
-$JobcliContent = @"
-@echo off
-set "JOBCLI_VENV=%USERPROFILE%\.jobcli\venv"
-"%JOBCLI_VENV%\Scripts\jobcli.exe" %*
-"@
-Set-Content -Path $WrapperJobcli -Value $JobcliContent -Encoding ASCII
-
-Write-Ok "Commands created: wboxcli + jobcli"
+Write-Ok "Command created: wboxcli"
 
 # -- Step 6: Ensure ~/.local/bin is on user PATH -----------------------
 Write-Step "Checking PATH..."
@@ -181,7 +178,7 @@ if ($CurrentUserPath -notlike "*$BinDir*") {
     $NeedsRestart = $false
 }
 
-# -- Step 7: (no .env — config is saved interactively via `jobcli login`) ---
+# -- Step 7: (no .env — config is saved interactively via `wboxcli login`) ---
 
 # -- Done! -------------------------------------------------------------
 Write-Host ""

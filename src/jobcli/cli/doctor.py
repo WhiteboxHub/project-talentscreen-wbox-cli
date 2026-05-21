@@ -20,7 +20,7 @@ def run_doctor(console: "Console", wbox_smoke: bool = False) -> int:
     bad = "[red]FAIL[/red]"
     warn = "[yellow]WARN[/yellow]"
 
-    console.print("[bold cyan]jobcli doctor[/bold cyan]\n")
+    console.print("[bold cyan]wboxcli doctor[/bold cyan]\n")
 
     # Python
     py = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
@@ -74,7 +74,7 @@ def run_doctor(console: "Console", wbox_smoke: bool = False) -> int:
         if has_board:
             console.print("Job board (Whitebox) credentials: [green]set[/green]")
         else:
-            console.print(f"Job board credentials: {warn} (discover/login flows need `jobcli login`)")
+            console.print(f"Job board credentials: {warn} (discover/login flows need `wboxcli login`)")
     except Exception as e:
         console.print(f"Config load: {bad} ({e})")
         issues += 1

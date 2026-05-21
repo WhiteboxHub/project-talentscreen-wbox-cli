@@ -91,7 +91,7 @@ def _next_step_panel(command: str, hint: str = "") -> None:
 
     Mirrors ``main.py:_print_next_step`` but uses the bare TUI command name
     (``apply``, ``discover`` …) since the user is already inside the
-    interactive shell and never needs to prefix with ``jobcli``.
+    interactive shell and never needs to prefix with ``wboxcli``.
     """
     from rich.panel import Panel
     body_lines = [f"  [bold #f0abfc]> {command}[/]"]
@@ -249,7 +249,7 @@ def _run_onboarding(force: bool = False):
             # ── Step 1 — Whitebox Learning Login + Browser/Extension Test ──
             # A single headless Chrome window doubles as the credential check and the
             # extension smoke test, so we never launch two browsers in a row.
-            console.print(f"[{D}]Step 1/4[/] — [bold]Whitebox Learning Credentials[/bold]")
+            console.print(f"[{D}]Step 1/3[/] — [bold]Whitebox Learning Credentials[/bold]")
             if force or not db_config.job_board_username or not db_config.job_board_password:
                 while True:
                     email = input(f"{PURP}Whitebox Email: {RST}").strip()
@@ -291,7 +291,7 @@ def _run_onboarding(force: bool = False):
 
             # ── Step 2 — LLM Provider + API Key ──
             console.print()
-            console.print(f"[{D}]Step 2/4[/] — [bold]Select LLM Provider for Automation[/bold]")
+            console.print(f"[{D}]Step 2/3[/] — [bold]Select LLM Provider for Automation[/bold]")
             console.print()
             console.print(f"[{K}]> 1. OpenAI (Recommended)[/]")
             console.print(f"  [{D}]Requires OPENAI_API_KEY[/]")
@@ -332,7 +332,7 @@ def _run_onboarding(force: bool = False):
 
             # ── Step 3 — Resume Upload ──
             console.print()
-            console.print(f"[{D}]Step 3/4[/] — [bold]Resume Upload[/bold]")
+            console.print(f"[{D}]Step 3/3[/] — [bold]Resume Upload[/bold]")
             if force or not has_resume:
                 pdf_path = input(f"{PURP}Path to Resume PDF: {RST}").strip()
                 json_path = input(f"{PURP}Path to Resume JSON: {RST}").strip()
@@ -343,14 +343,10 @@ def _run_onboarding(force: bool = False):
 
                 console.print(f"\n[{D}]Uploading resume...[/]")
                 _exec(["resume-upload", "--pdf", pdf_path, "--json", json_path])
-
-                # ── Step 4 — Discover jobs from Whitebox dashboard ──
-                console.print(f"\n[{D}]Step 4/4[/] — [bold]Discovering jobs from Whitebox Learning...[/]")
-                _exec(["discover"])
             else:
                 session.close()
 
-            console.print(f"\n[{K}]✓ Setup complete! You are ready to apply to jobs.[/]")
+            console.print(f"\n[{K}]✓ Setup complete! You are ready to discover and apply to jobs.[/]")
     except Exception as e:
         import traceback
         console.print(f"[red]Error during setup: {e}[/red]")
@@ -447,12 +443,12 @@ def _running_from_dev_tree() -> bool:
     return False
 
 
-def _find_jobcli_bin() -> str:
+def _find_wboxcli_bin() -> str:
     venv_dir = os.path.join(os.path.expanduser("~"), ".jobcli", "venv")
-    candidate = os.path.join(venv_dir, "Scripts" if os.name == "nt" else "bin", "jobcli.exe" if os.name == "nt" else "jobcli")
+    candidate = os.path.join(venv_dir, "Scripts" if os.name == "nt" else "bin", "wboxcli.exe" if os.name == "nt" else "wboxcli")
     if os.path.exists(candidate):
         return candidate
-    return shutil.which("jobcli") or "jobcli"
+    return shutil.which("wboxcli") or "wboxcli"
 
 
 def _subprocess_encoding() -> str:
@@ -464,22 +460,22 @@ def _subprocess_encoding() -> str:
     )
 
 
-def _jobcli_command(args: list[str]) -> list[str]:
-    """Build argv for a jobcli subcommand (same Python as the TUI when in dev tree)."""
+def _wboxcli_command(args: list[str]) -> list[str]:
+    """Build argv for a wboxcli subcommand (same Python as the TUI when in dev tree)."""
     # build.bat sets PYTHONPATH=src — use that interpreter so Playwright/browsers match.
     if _running_from_dev_tree():
         return [sys.executable, "-m", "jobcli.cli.main"] + args
-    jobcli = _find_jobcli_bin()
-    if jobcli != "jobcli" and os.path.isfile(jobcli):
-        return [jobcli] + args
+    wboxcli = _find_wboxcli_bin()
+    if wboxcli != "wboxcli" and os.path.isfile(wboxcli):
+        return [wboxcli] + args
     return [sys.executable, "-m", "jobcli.cli.main"] + args
 
 
 def _exec(args: list[str]):
-    """Run a jobcli subcommand, streaming output."""
-    cmd = _jobcli_command(args)
+    """Run a wboxcli subcommand, streaming output."""
+    cmd = _wboxcli_command(args)
 
-    console.print(f"\n  [{D}]$ jobcli {' '.join(args)}[/]")
+    console.print(f"\n  [{D}]$ wboxcli {' '.join(args)}[/]")
     console.print()
 
     env = os.environ.copy()
@@ -519,7 +515,7 @@ def _exec(args: list[str]):
     except FileNotFoundError:
         try:
             subprocess.run(
-                _jobcli_command(args),
+                _wboxcli_command(args),
                 cwd=os.getcwd(),
                 env=env,
             )
@@ -631,11 +627,11 @@ def _dispatch(raw: str):
     if not parts:
         return
 
-    # Accept pasted README-style commands: `jobcli apply`, `wboxcli discover`, …
+    # Accept pasted README-style commands: `wboxcli apply`, `wboxcli discover`, …
     if parts[0].lower() in ("jobcli", "wboxcli"):
         parts = parts[1:]
         if not parts:
-            console.print(f"\n  [{D}]type a subcommand after[/] [{K}]jobcli[/] [{D}](e.g. apply, discover)[/]\n")
+            console.print(f"\n  [{D}]type a subcommand after[/] [{K}]wboxcli[/] [{D}](e.g. apply, discover)[/]\n")
             return
 
     cmd = parts[0].lower()

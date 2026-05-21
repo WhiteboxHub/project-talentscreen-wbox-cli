@@ -15,8 +15,8 @@ def main():
         interactive_session()
     else:
         # Forward to the standard Typer app so all existing commands work:
-        #   wboxcli setup   →  jobcli setup
-        #   wboxcli apply   →  jobcli apply
+        #   wboxcli setup
+        #   wboxcli apply
         from jobcli.cli.main import app
         app()
 
