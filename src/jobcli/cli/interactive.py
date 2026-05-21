@@ -49,6 +49,8 @@ COMMANDS = {
     "sync":      ["sync"],
     "server":    ["server"],
     "dashboard": ["open-dashboard"],
+    "reset":     ["reset"],
+    "uninstall": ["uninstall"],
     "clear":     None,
     "help":      None,
     "exit":      None,
@@ -552,6 +554,8 @@ def _cmd_help():
         ("Other", [
             ("server",    "Start web UI dashboard"),
             ("dashboard", "Open Whitebox dashboard in browser"),
+            ("reset",     "Wipe database and re-onboard"),
+            ("uninstall", "Full uninstallation"),
             ("clear",     "Clear the screen"),
             ("exit",      "Exit"),
         ]),
