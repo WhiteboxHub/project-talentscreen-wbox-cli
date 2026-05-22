@@ -152,7 +152,7 @@ def run_doctor(console: "Console", wbox_smoke: bool = False) -> int:
             console.print(f"Browser Extension unpacked ({Path(ext_path).name}): {ok}")
         else:
             console.print(
-                f"Browser Extension: {warn} (not found — copy ZIP to extension/talentscreen-autofill.zip and run setup)"
+                f"Browser Extension: {warn} (not found — copy a built ZIP to extension/ and run setup)"
             )
     except Exception:
         pass

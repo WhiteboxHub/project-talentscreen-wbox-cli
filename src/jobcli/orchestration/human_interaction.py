@@ -3,8 +3,11 @@
 from playwright.sync_api import Page, Locator, Frame
 from typing import Union
 
-def humanized_fill(page: Union[Page, Frame], locator: Locator, value: str) -> None:
-    """Type into a field with human-like cadence to evade bot detection."""
+from jobcli.utils.fill_guard import read_locator_value, should_skip_refill
+
+
+def humanized_fill(page: Union[Page, Frame], locator: Locator, value: str) -> bool:
+    """Type into a field with human-like cadence. Returns False if skipped (already filled)."""
     import random as _r
     import sys as _sys
 
@@ -12,7 +15,10 @@ def humanized_fill(page: Union[Page, Frame], locator: Locator, value: str) -> No
         page = page.page
 
     if not value:
-        return
+        return False
+
+    if should_skip_refill(locator, value):
+        return False
 
     try:
         locator.hover(timeout=1500)
@@ -49,3 +55,4 @@ def humanized_fill(page: Union[Page, Frame], locator: Locator, value: str) -> No
         page.keyboard.press("Tab")
     except Exception:
         pass
+    return True

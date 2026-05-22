@@ -10,7 +10,7 @@
 #    setup       Re-run the initial onboarding wizard (change credentials/LLM/resume)
 #    update      Pull the latest code and reinstall dependencies
 #    uninstall   Remove WboxCLI completely (config, venv, shims)
-#    reset       Wipe the local database and re-run setup from scratch
+#    reset       Clear login, API keys, resume (jobs kept) and re-run setup
 #    clear-jobs  Delete discovered jobs only (keeps credentials/resume)
 #    doctor      Run environment health checks
 #    status      Show current configuration status
@@ -299,50 +299,23 @@ cmd_uninstall() {
 }
 
 # ══════════════════════════════════════════════════════════════════════
-#  RESET (wipe the local database)
+#  RESET (clear login / API keys / resume — jobs kept)
 # ══════════════════════════════════════════════════════════════════════
 cmd_reset() {
     header "Reset & Re-Setup       ║"
     _ensure_installed
 
-    local force=false
-    if [ "${1:-}" = "--force" ] || [ "${1:-}" = "-f" ]; then
-        force=true
-    fi
+    info "Clearing login, LLM keys, and resume (jobs are kept)..."
+    "$(_venv_python)" -m jobcli.cli.main reset "$@" || return
 
-    if [ "$force" != true ]; then
-        echo -e "  ${YELLOW}This will wipe your saved credentials, LLM keys, resume,${NC}"
-        echo -e "  ${YELLOW}jobs, and memory — then re-launch the initial setup wizard.${NC}"
-        echo ""
-        read -r -p "  Continue? [y/N] " confirm
-        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-            echo -e "${YELLOW}Cancelled.${NC}"
-            return
-        fi
-    fi
-
-    # Delete DB and sidecars
-    info "Wiping local database..."
-    for ext in "" "-wal" "-shm" "-journal"; do
-        local target="$DB_FILE$ext"
-        if [ -f "$target" ]; then
-            rm -f "$target"
-            ok "Removed $(basename "$target")"
-        fi
-    done
-
-    ok "Database wiped — starting fresh setup"
-    echo ""
-
-    # Re-launch wboxcli which triggers the onboarding wizard
-    info "Launching WboxCLI setup wizard..."
+    ok "Configuration cleared — starting setup wizard"
     echo ""
     if [ -f "$WRAPPER" ]; then
         exec "$WRAPPER"
     elif [ -f "$VENV_DIR/bin/wboxcli" ]; then
         exec "$VENV_DIR/bin/wboxcli"
     else
-        "$(_venv_python)" -m jobcli.cli.entry
+        exec "$(_venv_python)" -m jobcli.cli.entry
     fi
 }
 
@@ -472,7 +445,7 @@ cmd_help() {
     echo -e "    ${CYAN}setup${NC}         Re-run the initial setup wizard (credentials, LLM, resume)"
     echo -e "    ${CYAN}update${NC}        Pull latest code and reinstall dependencies"
     echo -e "    ${CYAN}uninstall${NC}     Remove everything (config, venv, shim)"
-    echo -e "    ${CYAN}reset${NC}         Wipe the database completely and re-run setup from scratch"
+    echo -e "    ${CYAN}reset${NC}         Clear login, API keys, resume (jobs kept) and re-run setup"
     echo -e "    ${CYAN}clear-jobs${NC}    Delete discovered jobs only (keeps credentials/resume)"
     echo -e "    ${CYAN}doctor${NC}        Run environment health checks"
     echo -e "    ${CYAN}status${NC}        Show current installation status"
@@ -485,7 +458,7 @@ cmd_help() {
     echo -e "    $0 install              # Fresh install"
     echo -e "    $0 setup                # Re-run initial setup wizard"
     echo -e "    $0 update               # Pull latest + reinstall deps"
-    echo -e "    $0 reset                # Wipe DB + re-run setup from scratch"
+    echo -e "    $0 reset                # Clear login/keys/resume + re-run setup"
     echo -e "    $0 reset --force        # Same, skip confirmation"
     echo -e "    $0 clear-jobs           # Clear jobs, keep credentials"
     echo -e "    $0 uninstall            # Full removal"

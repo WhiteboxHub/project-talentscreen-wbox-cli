@@ -184,6 +184,8 @@ def _validate_wbox_and_extension(
     email: str,
     password: str,
     ext_dir: str | None = None,
+    *,
+    on_progress=None,
 ) -> tuple[bool, bool, str | None, str]:
     """Validate Whitebox credentials AND load the TalentScreen extension in
     a single visible Chrome launch.
@@ -193,6 +195,7 @@ def _validate_wbox_and_extension(
     ``(login_ok, extension_ok, resolved_ext_dir, error_message)``
     """
     from jobcli.utils.extension_helpers import (
+        _report as _ext_report,
         get_local_extension_zip,
         maybe_install_local_extension_zip,
         resolve_extension_dir,
@@ -200,17 +203,19 @@ def _validate_wbox_and_extension(
     )
 
     if get_local_extension_zip():
+        _ext_report(on_progress, "Preparing extension from ZIP…")
         maybe_install_local_extension_zip()
 
+    _ext_report(on_progress, "Locating extension files…")
     resolved = resolve_extension_dir(ext_dir)
     if not resolved:
         zip_hint = get_local_extension_zip()
         if zip_hint is None:
             err = (
                 "TalentScreen extension not found. Build the extension ZIP, then copy it to "
-                "project-talentscreen-wbox-cli/extension/talentscreen-autofill.zip "
-                "(see docs/SETUP_WINDOWS_MAC.md). On Windows: .\\build.ps1 in the "
-                "autofill-extension repo, then Copy-Item dist\\*.zip to that path."
+                "project-talentscreen-wbox-cli/extension/ (any .zip name; see "
+                "docs/SETUP_WINDOWS_MAC.md). On Windows: .\\build.ps1 in the "
+                "autofill-extension repo, then Copy-Item dist\\*.zip to extension\\."
             )
         else:
             err = (
@@ -220,7 +225,9 @@ def _validate_wbox_and_extension(
             )
         return (False, False, None, err)
 
-    login_ok, extension_ok, err = verify_extension_in_browser(resolved, email, password)
+    login_ok, extension_ok, err = verify_extension_in_browser(
+        resolved, email, password, progress=on_progress
+    )
     return (login_ok, extension_ok, resolved, err)
 
 
@@ -250,7 +257,7 @@ def _run_onboarding(force: bool = False):
             db_config = repo.get_all()
 
             # ── Step 1 — Whitebox Learning Login + Browser/Extension Test ──
-            # A single headless Chrome window doubles as the credential check and the
+            # A single visible Chrome window doubles as the credential check and the
             # extension smoke test, so we never launch two browsers in a row.
             console.print(f"[{D}]Step 1/3[/] — [bold]Whitebox Learning Credentials[/bold]")
             if force or not db_config.job_board_username or not db_config.job_board_password:
@@ -258,14 +265,27 @@ def _run_onboarding(force: bool = False):
                     email = input(f"{PURP}Whitebox Email: {RST}").strip()
                     password = getpass.getpass(f"{PURP}Whitebox Password: {RST}").strip()
 
-                    with console.status(
-                        f"[{D}]Opening browser, loading TalentScreen extension, validating login...[/]",
-                        spinner="dots",
-                        spinner_style="#e879f9",
-                    ):
-                        login_ok, extension_ok, ext_dir, err = _validate_wbox_and_extension(
-                            email, password, db_config.extension_path
-                        )
+                    def _browser_progress(msg: str) -> None:
+                        console.print(f"  [{D}]… {msg}[/]")
+                        sys.stdout.flush()
+
+                    console.print()
+                    console.print(
+                        f"[bold #e879f9]Please wait[/] [{D}]— browser test in progress "
+                        f"(usually 15–30 seconds).[/]"
+                    )
+                    console.print(
+                        f"[{D}]  Chrome may open briefly. Do not close it until the checks below finish.[/]"
+                    )
+                    console.print()
+
+                    login_ok, extension_ok, ext_dir, err = _validate_wbox_and_extension(
+                        email,
+                        password,
+                        db_config.extension_path,
+                        on_progress=_browser_progress,
+                    )
+                    console.print()
 
                     if login_ok:
                         db_config.job_board_username = email
@@ -313,8 +333,11 @@ def _run_onboarding(force: bool = False):
 
                 api_key = input(f"{PURP}Enter {prompt_name} API Key: {RST}").strip()
 
-                with console.status(f"[{D}]Validating API key...[/]", spinner="dots", spinner_style="#e879f9"):
-                    is_valid = _validate_llm(provider, api_key)
+                console.print()
+                console.print(f"[bold #e879f9]Please wait[/] [{D}]— validating {prompt_name} API key…[/]")
+                sys.stdout.flush()
+                is_valid = _validate_llm(provider, api_key)
+                console.print()
 
                 if is_valid:
                     db_config.default_llm_provider = provider
@@ -333,19 +356,56 @@ def _run_onboarding(force: bool = False):
             session.commit()
             _next_hint("upload your resume (PDF + JSON) so the agent can answer for you")
 
-            # ── Step 3 — Resume Upload ──
+            # ── Step 3 — Resume Upload + profile confirmation ──
             console.print()
             console.print(f"[{D}]Step 3/3[/] — [bold]Resume Upload[/bold]")
             if force or not has_resume:
-                pdf_path = input(f"{PURP}Path to Resume PDF: {RST}").strip()
-                json_path = input(f"{PURP}Path to Resume JSON: {RST}").strip()
-                session.close()  # Close session before running subprocess
+                from jobcli.utils.resume_helpers import (
+                    confirm_profile_prompt,
+                    load_resume_from_paths,
+                    persist_resume,
+                    print_profile_summary,
+                )
 
-                pdf_path = os.path.abspath(os.path.expanduser(pdf_path))
-                json_path = os.path.abspath(os.path.expanduser(json_path))
+                session.close()
 
-                console.print(f"\n[{D}]Uploading resume...[/]")
-                _exec(["resume-upload", "--pdf", pdf_path, "--json", json_path])
+                while True:
+                    pdf_path = input(f"{PURP}Path to Resume PDF: {RST}").strip()
+                    json_path = input(f"{PURP}Path to Resume JSON: {RST}").strip()
+
+                    try:
+                        resume, pdf_resolved, json_resolved = load_resume_from_paths(
+                            pdf_path, json_path
+                        )
+                    except ValueError as exc:
+                        console.print(f"[bold white on #c026d3] ✗ [/] [red]{exc}[/red]")
+                        continue
+                    except Exception as exc:
+                        console.print(
+                            f"[bold white on #c026d3] ✗ [/] [red]Invalid resume JSON: {exc}[/red]"
+                        )
+                        continue
+
+                    console.print()
+                    print_profile_summary(console, resume, pdf_resolved)
+
+                    if not confirm_profile_prompt():
+                        console.print(f"[{D}]Re-enter your resume paths to try again.[/]\n")
+                        continue
+
+                    persist_resume(resume, pdf_resolved, json_resolved)
+                    console.print("[bold green]✓ Resume uploaded successfully[/bold green]\n")
+
+                    _next_step_panel(
+                        "discover",
+                        "pull fresh job listings from Whitebox",
+                    )
+                    _exec(["discover"])
+                    _next_step_panel(
+                        "apply",
+                        "start applying when you are ready (run manually)",
+                    )
+                    break
             else:
                 session.close()
 
@@ -555,7 +615,8 @@ def _cmd_help():
         ("Other", [
             ("server",    "Start web UI dashboard"),
             ("dashboard", "Open Whitebox dashboard in browser"),
-            ("reset",     "Wipe database and re-onboard"),
+            ("reset",     "Clear login, API keys, resume (keep jobs)"),
+            ("db reset",  "Wipe entire database (via wboxcli db reset)"),
             ("update",    "Update WboxCLI code and dependencies"),
             ("uninstall", "Full uninstallation"),
             ("clear",     "Clear the screen"),
@@ -680,14 +741,12 @@ def _dispatch(raw: str):
         _run_onboarding(force=True)
         return
 
-    # Reset mapping (wipes DB and immediately launches onboarding setup)
     if cmd == "reset":
-        from jobcli.cli.main import _run_db_reset, get_config
+        from jobcli.cli.main import _run_reset
+
         try:
-            _run_db_reset(force=False)
-            cfg = get_config()
-            if not cfg.job_board_username:
-                _run_onboarding(force=True)
+            _run_reset(force=False)
+            _run_onboarding(force=True)
         except Exception as e:
             console.print(f"[red]Error during reset: {e}[/red]")
         return

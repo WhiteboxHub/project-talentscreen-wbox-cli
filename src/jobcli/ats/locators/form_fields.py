@@ -1,4 +1,5 @@
 from jobcli.orchestration.human_interaction import humanized_fill
+from jobcli.utils.fill_guard import should_skip_refill
 """Rule-based locators for form fields with confidence scoring.
 
 Ported intelligence from genericStrategy.js (Chrome extension):
@@ -576,7 +577,16 @@ class FormFieldLocator:
             selector = self.find_field_by_label(labels, "textarea")
         if selector:
             try:
-                humanized_fill(self.page, self.page.locator(selector).first, value)
+                loc = self.page.locator(selector).first
+                if should_skip_refill(loc, value):
+                    if self.logger:
+                        self.logger.info(
+                            f"Skipping '{labels[0]}' — already has value",
+                            phase=ExecutionPhase.RULES,
+                            selector=selector,
+                        )
+                    return True
+                humanized_fill(self.page, loc, value)
                 if self.logger:
                     self.logger.info(
                         f"Filled field: {labels[0]}",
@@ -700,14 +710,7 @@ class FormFiller:
                 
                 try:
                     loc = self.page.locator(selector).first
-                    # Skip if the field already has a value (don't overwrite)
-                    existing = ""
-                    try:
-                        existing = loc.input_value(timeout=500)
-                    except Exception:
-                        pass
-                    
-                    if existing and existing.strip():
+                    if should_skip_refill(loc, value):
                         if self.logger:
                             self.logger.info(
                                 f"Skipping '{field_key}' — already has value",

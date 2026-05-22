@@ -11,9 +11,13 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+import time
 import zipfile
+from fnmatch import fnmatch
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
+
+ProgressCallback = Optional[Callable[[str], None]]
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -25,11 +29,11 @@ _LEGACY_UNPACK_DIR = Path.home() / ".jobcli" / "extension_unpacked"
 #: Project root (repo root containing pyproject.toml / build.sh).
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
-#: Local dev ZIP dropped here after building the autofill-extension repo.
-_LOCAL_EXTENSION_ZIP = _PROJECT_ROOT / "extension" / "talentscreen-autofill.zip"
+#: Directory where a built extension ZIP is copied (any ``*.zip`` name).
+_EXTENSION_DIR = _PROJECT_ROOT / "extension"
 
-#: Fixed name for the local extension ZIP (documented in README).
-LOCAL_EXTENSION_ZIP_NAME = "talentscreen-autofill.zip"
+#: Preferred glob for extension ZIPs (build output is versioned).
+LOCAL_EXTENSION_ZIP_GLOB = "talentscreen-autofill*.zip"
 
 #: Relative path from project root's ``bin/`` folder where install scripts
 #: may clone the extension repo (legacy fallback).
@@ -55,11 +59,29 @@ def _find_manifest_root(search_root: Path) -> Optional[Path]:
     return None
 
 
+def _extension_zip_candidates() -> list[Path]:
+    """Return ZIP files under ``extension/``, newest modification time first."""
+    if not _EXTENSION_DIR.is_dir():
+        return []
+    zips = [p for p in _EXTENSION_DIR.glob("*.zip") if p.is_file()]
+    zips.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return zips
+
+
 def get_local_extension_zip() -> Optional[Path]:
-    """Return the path to ``extension/talentscreen-autofill.zip`` if it exists."""
-    if _LOCAL_EXTENSION_ZIP.is_file():
-        return _LOCAL_EXTENSION_ZIP
-    return None
+    """Return the newest extension ZIP under ``extension/``.
+
+    Prefers files matching ``talentscreen-autofill*.zip`` (build output). Falls
+    back to any other ``*.zip`` in that folder when no preferred match exists.
+    """
+    zips = _extension_zip_candidates()
+    if not zips:
+        return None
+
+    preferred = [
+        p for p in zips if fnmatch(p.name, LOCAL_EXTENSION_ZIP_GLOB)
+    ]
+    return preferred[0] if preferred else zips[0]
 
 
 def install_extension_from_zip(
@@ -132,7 +154,7 @@ def install_extension_from_zip(
 
 
 def maybe_install_local_extension_zip(force: Optional[bool] = None) -> Optional[str]:
-    """Install from ``extension/talentscreen-autofill.zip`` when appropriate.
+    """Install from the newest ``extension/*.zip`` when appropriate.
 
     Installs when:
     - ZIP exists and unpacked manifest is missing, or
@@ -173,7 +195,7 @@ def resolve_extension_dir(configured_path: Optional[str] = None) -> Optional[str
     Candidate order:
     1. *configured_path* (saved in ``config.extension_path``).
     2. ``~/.jobcli/extension_unpacked`` if already valid.
-    3. ``extension/talentscreen-autofill.zip`` — unpack to ``~/.jobcli/``.
+    3. Newest ``extension/*.zip`` — unpack to ``~/.jobcli/``.
     4. ``<project-root>/bin/project-talentscreen-autofill-extension`` (legacy).
 
     A directory is valid only if it contains ``manifest.json``.
@@ -196,18 +218,49 @@ def resolve_extension_dir(configured_path: Optional[str] = None) -> Optional[str
     return None
 
 
+def _wait_for_extension_worker(
+    context: Any,
+    page: Any,
+    timeout_ms: int = 5000,
+) -> bool:
+    """Poll until Playwright reports an extension service worker or background page.
+
+    MV3 workers start lazily; a single immediate check often false-negatives even
+    when ``--load-extension`` succeeded. Mirrors the polling used during apply.
+    """
+    deadline = time.monotonic() + (timeout_ms / 1000.0)
+    while time.monotonic() < deadline:
+        try:
+            if list(context.service_workers) or list(context.background_pages):
+                return True
+        except Exception:
+            pass
+        try:
+            page.wait_for_timeout(150)
+        except Exception:
+            time.sleep(0.15)
+    return False
+
+
+def _report(progress: ProgressCallback, message: str) -> None:
+    if progress:
+        progress(message)
+
+
 def verify_extension_in_browser(
     ext_dir: str,
     email: str,
     password: str,
+    *,
+    progress: ProgressCallback = None,
 ) -> tuple[bool, bool, str]:
-    """Launch a headless browser, load the extension, and attempt login.
+    """Launch a visible browser, load the extension, and attempt login.
 
     Returns ``(login_ok, extension_ok, error_message)``.
 
     * ``login_ok``      — credentials were accepted (redirected to dashboard).
     * ``extension_ok``  — Playwright detected a service-worker or background
-                          page from the extension (proves it registered).
+                          page from the extension (polls up to 5s for MV3).
     * ``error_message`` — empty on success; human-readable on failure.
     """
     try:
@@ -228,9 +281,15 @@ def verify_extension_in_browser(
 
     try:
         with sync_playwright() as pw:
+            headless = os.environ.get("WBOX_VERIFY_HEADLESS", "0") == "1"
+            _report(
+                progress,
+                "Launching Chrome"
+                + (" (headless)" if headless else " (a window will open — please wait)"),
+            )
             ctx = pw.chromium.launch_persistent_context(
                 user_data_dir,
-                headless=True,
+                headless=headless,
                 args=launch_args,
                 ignore_default_args=IGNORE_DEFAULT_ARGS,
                 **CONTEXT_OPTIONS,
@@ -238,6 +297,7 @@ def verify_extension_in_browser(
             try:
                 page = ctx.new_page()
 
+                _report(progress, "Opening Whitebox login page…")
                 try:
                     page.goto(
                         "https://whitebox-learning.com/login",
@@ -247,6 +307,10 @@ def verify_extension_in_browser(
                 except Exception as exc:
                     return False, False, f"Could not reach login page: {exc}"
 
+                _report(progress, "Loading TalentScreen extension (plugin)…")
+                extension_ok = _wait_for_extension_worker(ctx, page, timeout_ms=3000)
+
+                _report(progress, "Validating email and password…")
                 try:
                     page.fill('input[name="email"]', email)
                     page.fill('input[name="password"]', password)
@@ -254,18 +318,16 @@ def verify_extension_in_browser(
                 except Exception as exc:
                     return False, False, f"Could not interact with login form: {exc}"
 
+                _report(progress, "Waiting for dashboard (login check)…")
                 try:
                     page.wait_for_url("**/user_dashboard**", timeout=10000)
                     login_ok = True
                 except Exception:
                     login_ok = False
 
-                try:
-                    extension_ok = bool(
-                        list(ctx.service_workers) or list(ctx.background_pages)
-                    )
-                except Exception:
-                    extension_ok = False
+                if login_ok and not extension_ok:
+                    _report(progress, "Re-checking extension plugin…")
+                    extension_ok = _wait_for_extension_worker(ctx, page, timeout_ms=5000)
 
                 return login_ok, extension_ok, ""
             finally:

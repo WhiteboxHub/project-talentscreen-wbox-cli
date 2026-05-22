@@ -149,18 +149,121 @@ class TestInstallExtensionFromZip:
     def test_resolve_installs_from_local_zip(self, tmp_path, monkeypatch):
         from jobcli.utils import extension_helpers as helpers
 
-        zip_path = tmp_path / "extension" / "talentscreen-autofill.zip"
-        zip_path.parent.mkdir(parents=True)
+        ext_dir = tmp_path / "extension"
+        ext_dir.mkdir(parents=True)
+        zip_path = ext_dir / "talentscreen-autofill-v2.0.0.zip"
         _make_extension_zip(zip_path)
 
         unpack_dest = tmp_path / "extension_unpacked"
-        monkeypatch.setattr(helpers, "_LOCAL_EXTENSION_ZIP", zip_path)
+        monkeypatch.setattr(helpers, "_EXTENSION_DIR", ext_dir)
         monkeypatch.setattr(helpers, "_LEGACY_UNPACK_DIR", unpack_dest)
         monkeypatch.setattr(helpers, "_BUNDLED_DIR", tmp_path / "no_bundled")
 
         result = helpers.resolve_extension_dir(None)
         assert result == str(unpack_dest.resolve())
         assert (unpack_dest / "manifest.json").is_file()
+
+
+# ───────────────────────────────────────────────────────────────────────
+# get_local_extension_zip
+# ───────────────────────────────────────────────────────────────────────
+
+class TestGetLocalExtensionZip:
+    """Tests for discovering extension ZIPs by name (no hardcoded filename)."""
+
+    def test_finds_versioned_zip_name(self, tmp_path, monkeypatch):
+        from jobcli.utils import extension_helpers as helpers
+
+        ext_dir = tmp_path / "extension"
+        ext_dir.mkdir()
+        zip_path = ext_dir / "talentscreen-autofill-v2.0.0.zip"
+        _make_extension_zip(zip_path)
+        monkeypatch.setattr(helpers, "_EXTENSION_DIR", ext_dir)
+
+        assert helpers.get_local_extension_zip() == zip_path
+
+    def test_prefers_newest_talentscreen_zip(self, tmp_path, monkeypatch):
+        from jobcli.utils import extension_helpers as helpers
+
+        ext_dir = tmp_path / "extension"
+        ext_dir.mkdir()
+        older = ext_dir / "talentscreen-autofill-v1.0.0.zip"
+        newer = ext_dir / "talentscreen-autofill-v2.0.0.zip"
+        _make_extension_zip(older)
+        _make_extension_zip(newer)
+        newer.touch()
+        monkeypatch.setattr(helpers, "_EXTENSION_DIR", ext_dir)
+
+        assert helpers.get_local_extension_zip() == newer
+
+    def test_prefers_talentscreen_pattern_over_other_zips(self, tmp_path, monkeypatch):
+        from jobcli.utils import extension_helpers as helpers
+
+        ext_dir = tmp_path / "extension"
+        ext_dir.mkdir()
+        other = ext_dir / "other-extension.zip"
+        preferred = ext_dir / "talentscreen-autofill-v2.0.0.zip"
+        _make_extension_zip(other)
+        _make_extension_zip(preferred)
+        other.touch()  # newer mtime, but wrong name
+        monkeypatch.setattr(helpers, "_EXTENSION_DIR", ext_dir)
+
+        assert helpers.get_local_extension_zip() == preferred
+
+    def test_falls_back_to_any_zip(self, tmp_path, monkeypatch):
+        from jobcli.utils import extension_helpers as helpers
+
+        ext_dir = tmp_path / "extension"
+        ext_dir.mkdir()
+        zip_path = ext_dir / "my-custom-extension.zip"
+        _make_extension_zip(zip_path)
+        monkeypatch.setattr(helpers, "_EXTENSION_DIR", ext_dir)
+
+        assert helpers.get_local_extension_zip() == zip_path
+
+    def test_returns_none_when_no_zip(self, tmp_path, monkeypatch):
+        from jobcli.utils import extension_helpers as helpers
+
+        ext_dir = tmp_path / "extension"
+        ext_dir.mkdir()
+        monkeypatch.setattr(helpers, "_EXTENSION_DIR", ext_dir)
+
+        assert helpers.get_local_extension_zip() is None
+
+
+# ───────────────────────────────────────────────────────────────────────
+# _wait_for_extension_worker
+# ───────────────────────────────────────────────────────────────────────
+
+class TestWaitForExtensionWorker:
+    def test_returns_true_when_worker_appears_after_delay(self):
+        from jobcli.utils.extension_helpers import _wait_for_extension_worker
+
+        class FakeContext:
+            def __init__(self):
+                self._calls = 0
+
+            @property
+            def service_workers(self):
+                self._calls += 1
+                return [object()] if self._calls >= 2 else []
+
+            @property
+            def background_pages(self):
+                return []
+
+        page = MagicMock()
+        assert _wait_for_extension_worker(FakeContext(), page, timeout_ms=1000) is True
+
+    def test_returns_false_when_never_appears(self):
+        from jobcli.utils.extension_helpers import _wait_for_extension_worker
+
+        ctx = MagicMock()
+        ctx.service_workers = []
+        ctx.background_pages = []
+        page = MagicMock()
+
+        assert _wait_for_extension_worker(ctx, page, timeout_ms=300) is False
 
 
 # ───────────────────────────────────────────────────────────────────────

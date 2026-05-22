@@ -130,13 +130,23 @@ class BaseATSHandler(ABC):
         """
         return None
 
-    def humanized_fill(self, locator, value: str) -> None:
-        """Type into a field with human-like cadence to evade bot detection."""
+    def humanized_fill(self, locator, value: str) -> bool:
+        """Type into a field with human-like cadence. Returns False if already filled."""
+        from jobcli.utils.fill_guard import should_skip_refill
+
         import random as _r
         import sys as _sys
 
         if not value:
-            return
+            return False
+
+        if should_skip_refill(locator, value):
+            if self.logger:
+                self.logger.info(
+                    "Skipping fill — field already has a value",
+                    phase=ExecutionPhase.RULES,
+                )
+            return False
 
         try:
             locator.scroll_into_view_if_needed(timeout=1500)
@@ -185,6 +195,7 @@ class BaseATSHandler(ABC):
             self.page.keyboard.press("Tab")
         except Exception:
             pass
+        return True
 
     def wait_for_page_load(self, timeout: int = 5000) -> None:
         """Wait for page to load."""

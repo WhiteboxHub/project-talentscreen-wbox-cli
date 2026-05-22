@@ -332,6 +332,73 @@ def db_clear_jobs(
         session.close()
 
 
+# Keys cleared by ``wboxcli reset`` (jobs / field memory are kept).
+_RESET_CONFIG_KEYS = (
+    "job_board_username",
+    "job_board_password",
+    "openai_api_key",
+    "anthropic_api_key",
+    "gemini_api_key",
+    "claude_api_key",
+    "default_llm_provider",
+    "resume_pdf_path",
+    "resume_json_path",
+    "extension_path",
+    "sync_server_url",
+)
+
+
+def _run_reset(
+    force: bool = False,
+    *,
+    keep_credentials: bool = False,
+    keep_extension: bool = False,
+) -> None:
+    """Clear Whitebox login, LLM API keys, and resume (jobs and memory are kept)."""
+    console.print("[bold cyan]Reset configuration[/bold cyan]\n")
+    console.print(
+        "[dim]Clears: Whitebox email/password, LLM API keys, resume PDF/JSON paths, "
+        "and stored resume profile.[/dim]"
+    )
+    console.print(
+        "[dim]Keeps: discovered jobs, application logs, field memory, learned locators.[/dim]"
+    )
+    console.print(
+        "[dim]Full database wipe: [cyan]wboxcli db reset[/cyan][/dim]\n"
+    )
+    if not force:
+        if not Confirm.ask(
+            "Reset login, API keys, and resume?",
+            default=False,
+        ):
+            console.print("[yellow]Cancelled.[/yellow]")
+            return
+
+    keys = list(_RESET_CONFIG_KEYS)
+    if keep_credentials:
+        keys = [k for k in keys if k not in ("job_board_username", "job_board_password", "sync_server_url")]
+    if keep_extension:
+        keys = [k for k in keys if k != "extension_path"]
+
+    db = get_database()
+    session = db.get_session()
+    try:
+        config_repo = ConfigRepository(session)
+        user_repo = UserDataRepository(session)
+        n_config = config_repo.delete_keys(keys)
+        n_profile = user_repo.clear_profile_data()
+    finally:
+        session.close()
+
+    console.print(f"[green]✓ Removed {n_config} config setting(s)[/green]")
+    console.print(f"[green]✓ Cleared {n_profile} profile record(s) (resume / questions)[/green]")
+    console.print(
+        "\n[green]Reset complete. Run [cyan]wboxcli[/cyan] or [cyan]setup[/cyan] "
+        "to enter login, LLM keys, and resume again.[/green]"
+    )
+    _print_next_step("setup", "re-enter login, LLM, and resume")
+
+
 def _run_db_reset(force: bool) -> None:
     """Delete the SQLite DB file (+ WAL/SHM/journal) and recreate an empty schema."""
     from jobcli.sync.client import reset_sync_client_singleton
@@ -738,7 +805,7 @@ def login(
     _print_next_step(cmd, hint)
 
 
-@app.command()
+@app.command(name="config")
 def config_cmd(
     key: Optional[str] = typer.Option(None, "--key", "-k", help="Configuration key to view or set"),
     set_value: Optional[str] = typer.Option(None, "--set", help="Set configuration value"),
@@ -825,27 +892,23 @@ def resume_upload(
     # stored in the DB, and downstream code (which prepends CWD to relative
     # paths) would produce errors like
     # ``C:\Users\sampa\"C:\Users\sampa\Downloads\resume.pdf"``.
-    pdf = _clean_path_input(pdf) or ""
-    json_file = _clean_path_input(json_file)
+    from jobcli.utils.resume_helpers import (
+        clean_path_input,
+        load_resume_from_paths,
+        persist_resume,
+        print_profile_summary,
+    )
 
-    # Validate PDF
-    pdf_path = Path(pdf).expanduser().resolve()
-    if not pdf_path.exists():
-        console.print(f"[red]PDF file not found: {pdf_path}[/red]")
-        console.print(
-            "[dim]Tip: don't wrap paths in quotes if they contain no spaces; "
-            "if they do, plain quotes are fine — JobCLI strips them before saving.[/dim]"
-        )
-        raise typer.Exit(1)
+    pdf = clean_path_input(pdf) or ""
+    json_file = clean_path_input(json_file)
 
-    # Use existing JSON if provided, otherwise look for one in the same directory or use a dummy
-    if json_file:
-        json_path = Path(json_file).expanduser().resolve()
-    else:
-        # Try to find a .json file with the same name as the PDF
+    if not json_file:
+        pdf_path = Path(pdf).expanduser().resolve()
+        if not pdf_path.exists():
+            console.print(f"[red]PDF file not found: {pdf_path}[/red]")
+            raise typer.Exit(1)
         json_path = pdf_path.with_suffix(".json")
         if not json_path.exists():
-            # Create a minimal valid JSON so the system doesn't crash
             console.print("[yellow]No JSON provided. Creating a basic profile from your login info...[/yellow]")
             config = get_config()
             minimal_resume = {
@@ -857,54 +920,27 @@ def resume_upload(
                     "location": "",
                     "linkedin": "",
                     "github": "",
-                    "website": ""
+                    "website": "",
                 },
                 "education": [],
                 "experience": [],
                 "skills": [],
                 "projects": [],
-                "summary": "Professional applicant."
+                "summary": "Professional applicant.",
             }
             json_path.write_text(json.dumps(minimal_resume, indent=2))
-
-    if not json_path.exists():
-        console.print(f"[red]JSON file not found: {json_path}[/red]")
-        raise typer.Exit(1)
+        json_file = str(json_path)
 
     try:
-        with open(json_path, encoding="utf-8") as f:
-            resume_data = json.load(f)
-
-        # Use project's native auto-detector to normalize various JSON formats
-        from jobcli.intelligence.synonym_resolver import ResumeAutoDetector
-        normalized_data = ResumeAutoDetector.detect_and_convert(resume_data)
-
-        # Validate with Pydantic
-        resume = ResumeData(**normalized_data)
-
-        console.print(f"✓ Resume JSON validated")
-        console.print(f"  Name: {resume.personal.first_name} {resume.personal.last_name}")
-        console.print(f"  Email: {resume.personal.email}")
-        console.print(f"  Experience entries: {len(resume.experience)}")
-        console.print(f"  Education entries: {len(resume.education)}")
-
+        resume, pdf_path, json_path = load_resume_from_paths(pdf, json_file)
+        print_profile_summary(console, resume, pdf_path)
+        persist_resume(resume, pdf_path, json_path)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Invalid resume JSON: {e}[/red]")
         raise typer.Exit(1)
-
-    # Save to database
-    db = get_database()
-    session = db.get_session()
-    user_data_repo = UserDataRepository(session)
-
-    user_data_repo.save_resume(resume)
-    session.close()
-
-    # Save paths to config
-    config = get_config()
-    config.resume_pdf_path = str(pdf_path.absolute())
-    config.resume_json_path = str(json_path.absolute())
-    save_config(config)
 
     console.print("\n[bold green]✓ Resume uploaded successfully[/bold green]")
     cmd, hint = _suggest_after_login_or_resume()
@@ -1465,10 +1501,24 @@ def agent(
 
 @app.command("reset")
 def cli_reset(
-    force: bool = typer.Option(False, "--force", "-f", help="Same as wboxcli db reset --force"),
+    force: bool = typer.Option(False, "--force", "-f", help="Reset without confirmation"),
+    keep_credentials: bool = typer.Option(
+        False,
+        "--keep-credentials",
+        help="Keep Whitebox email/password and API URL",
+    ),
+    keep_extension: bool = typer.Option(
+        False,
+        "--keep-extension",
+        help="Keep saved extension path",
+    ),
 ) -> None:
-    """Alias for ``wboxcli db reset`` — full local SQLite database wipe (keeps ~/.jobcli logs)."""
-    _run_db_reset(force)
+    """Clear Whitebox login, LLM API keys, and resume. Jobs are kept. Full wipe: ``wboxcli db reset``."""
+    _run_reset(
+        force,
+        keep_credentials=keep_credentials,
+        keep_extension=keep_extension,
+    )
 
 
 if __name__ == "__main__":

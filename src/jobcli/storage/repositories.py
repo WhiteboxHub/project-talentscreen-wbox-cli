@@ -775,6 +775,18 @@ class UserDataRepository:
 
         return user_data.data
 
+    def clear_profile_data(self) -> int:
+        """Delete resume, common questions, and dynamic answers from the DB."""
+        deleted = (
+            self.session.query(UserDataModel)
+            .filter(
+                UserDataModel.data_type.in_(("resume", "questions", "dynamic_answers"))
+            )
+            .delete(synchronize_session=False)
+        )
+        self.session.commit()
+        return deleted
+
 
 class ConfigRepository:
     """Repository for configuration."""
@@ -827,6 +839,18 @@ class ConfigRepository:
         for key, value in config_dict.items():
             if value is not None:
                 self.set(key, str(value))
+
+    def delete_keys(self, keys: list[str]) -> int:
+        """Remove config rows by key. Returns number of rows deleted."""
+        if not keys:
+            return 0
+        deleted = (
+            self.session.query(ConfigModel)
+            .filter(ConfigModel.key.in_(keys))
+            .delete(synchronize_session=False)
+        )
+        self.session.commit()
+        return deleted
 
 
 class FieldAnswerRepository:

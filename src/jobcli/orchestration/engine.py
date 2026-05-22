@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional
 
 from playwright.sync_api import Error, Page, sync_playwright
 
+from jobcli.utils.fill_guard import PLACEHOLDER_VALUES, is_meaningful_value
 from jobcli.utils.logger import JobLogger, global_logger
 from jobcli.profile.schemas import (
     ActionType,
@@ -874,7 +875,7 @@ class ApplicationEngine:
         which checks:
         1. ``config.extension_path``
         2. ``~/.jobcli/extension_unpacked``
-        3. ``extension/talentscreen-autofill.zip`` (unpack to ``~/.jobcli/``)
+        3. Newest ``extension/*.zip`` (unpack to ``~/.jobcli/``)
         4. ``<project-root>/bin/project-talentscreen-autofill-extension``
 
         The resolved path is persisted back so subsequent runs skip the search.
@@ -2076,13 +2077,7 @@ class ApplicationEngine:
     # snapshotting the DOM and handing off to the LLM.
     EXTENSION_AUTOFILL_SETTLE_MS = 2500
 
-    # Values that look "filled" but are actually still the placeholder
-    # (dropdowns whose first option is "Select…" etc.). We treat these as
-    # empty so the LLM is allowed to overwrite them.
-    _SNAPSHOT_PLACEHOLDERS = (
-        "select", "choose", "please choose", "select...", "select an option",
-        "-- select --", "none", "n/a", "na",
-    )
+    _SNAPSHOT_PLACEHOLDERS = tuple(PLACEHOLDER_VALUES)
 
     def _snapshot_filled(self, page: Page) -> dict[str, str]:
         """Return ``{normalized_key: current_value}`` for every form input
@@ -2096,10 +2091,18 @@ class ApplicationEngine:
             raw = page.evaluate(
                 """() => {
                     const out = [];
-                    document.querySelectorAll('input, select, textarea').forEach(el => {
-                        let val = el.value;
+                    document.querySelectorAll(
+                        'input, select, textarea, [contenteditable="true"], [role="combobox"]'
+                    ).forEach(el => {
+                        let val = '';
                         if (el.tagName === 'SELECT' && el.selectedIndex >= 0) {
-                            val = el.options[el.selectedIndex].text;
+                            val = el.options[el.selectedIndex].text || '';
+                        } else if (el.isContentEditable) {
+                            val = el.innerText || el.textContent || '';
+                        } else if (el.getAttribute('role') === 'combobox') {
+                            val = el.innerText || el.textContent || el.value || '';
+                        } else {
+                            val = el.value || '';
                         }
                         if (!val || !val.trim()) return;
                         const v = val.trim();
@@ -2120,7 +2123,7 @@ class ApplicationEngine:
         snap: dict[str, str] = {}
         for row in raw or []:
             v = (row.get("value") or "").strip()
-            if not v or v.lower() in self._SNAPSHOT_PLACEHOLDERS:
+            if not is_meaningful_value(v):
                 continue
             for k in row.get("keys", []) or []:
                 if k:
@@ -2136,6 +2139,32 @@ class ApplicationEngine:
             if ident:
                 idents.add(ident)
         return idents
+
+    def _build_prefilled_field_lines(
+        self,
+        prefilled_snapshot: dict[str, str],
+        ax_tree: Any,
+    ) -> list[str]:
+        """Human-readable lines for the LLM: fields that must not be re-filled."""
+        lines: list[str] = []
+        seen_pairs: set[tuple[str, str]] = set()
+        for key, val in prefilled_snapshot.items():
+            _, _, ident = key.partition(":")
+            if not ident or not is_meaningful_value(val):
+                continue
+            pair = (ident, val.lower())
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+            lines.append(f"- {ident}: already has value '{val}'")
+        for field in getattr(ax_tree, "form_fields", []) or []:
+            val = str(field.get("value", "")).strip()
+            label = field.get("name") or field.get("label") or "unknown"
+            if is_meaningful_value(val):
+                entry = f"- {label}: already has value '{val}'"
+                if entry not in lines:
+                    lines.append(entry)
+        return lines
 
     # Strict application-fill order (do not reorder without updating docs):
     #   1. Chrome extension autofill
@@ -2340,38 +2369,6 @@ class ApplicationEngine:
                 ax_tree.model_dump(), "ax_tree_after_extension_and_rules", ExecutionPhase.LLM
             )
 
-            # ── Don't-refill snapshot ──────────────────────────────────────
-            # Single source of truth for "this field is already populated".
-            # Seeded from the post-extension snapshot; refreshed each LLM iter.
-            prefilled_fields: list[str] = []
-            seen_pairs: set[tuple[str, str]] = set()
-            placeholders = list(self._SNAPSHOT_PLACEHOLDERS)
-
-            # 1. From the live DOM snapshot (most reliable for JS-filled inputs).
-            #    We pick the most descriptive identifier (label > name > id)
-            #    for the human-readable line that gets shown to the LLM.
-            for key, val in prefilled_snapshot.items():
-                prefix, _, ident = key.partition(":")
-                if not ident:
-                    continue
-                pair = (ident, val.lower())
-                if pair in seen_pairs:
-                    continue
-                seen_pairs.add(pair)
-                # Only the highest-quality identifier per (value, prefix) gets
-                # rendered, so the LLM context stays compact.
-                prefilled_fields.append(f"- {ident}: already has value '{val}'")
-
-            # 2. Anything the AX tree saw but the live snapshot missed
-            #    (rare: some custom widgets don't expose ``.value``).
-            for field in ax_tree.form_fields:
-                val = str(field.get("value", "")).strip()
-                label = field.get("name") or field.get("label") or "unknown"
-                if val and val.lower() not in placeholders:
-                    entry = f"- {label}: already has value '{val}'"
-                    if entry not in prefilled_fields:
-                        prefilled_fields.append(entry)
-
             # ── AUTH / LOGIN GATE DETECTION ───────────────────────────────
             # Before letting the LLM touch the form, verify we are NOT on a
             # "Create account or Sign in" wall.  Workday / Oracle HCM /
@@ -2499,10 +2496,13 @@ class ApplicationEngine:
                     pass
 
                 memory_context = memory.build_llm_context(state.detected_ats) or ""
-                # Include fields already filled by the extension autofill
+                prefilled_snapshot = self._snapshot_filled(page)
+                prefilled_fields = self._build_prefilled_field_lines(
+                    prefilled_snapshot, ax_tree
+                )
                 if prefilled_fields:
                     memory_context += (
-                        "\n\n## ALREADY FILLED FIELDS (DO NOT re-fill these — they were set by the autofill extension):\n"
+                        "\n\n## ALREADY FILLED FIELDS (DO NOT re-fill — extension/rules/prior steps):\n"
                         + "\n".join(prefilled_fields)
                     )
                 agent.show_status(f"AI is thinking — Consulting {provider}...", phase=ExecutionPhase.LLM)
