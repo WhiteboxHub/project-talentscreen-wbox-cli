@@ -26,6 +26,7 @@ Production-grade CLI for automated job applications across multiple ATS platform
 - **Four-step fill pipeline** — Extension → Rules → LLM → Human (only when needed). See [Apply fill pipeline](#apply-fill-pipeline).
 - **Interactive Terminal Help** — If the agent fails to find a field, it pauses and asks you in the terminal. You can pick options (Yes/No) or enter values directly without switching to the browser.
 - **Robust Manual Skip** — Typer-friendly skip command handles common typos (`skipp`, `skp`, `s`) during high-speed application loops.
+- **Stop and resume apply** — Press **Ctrl+C** (or type `q` / `quit` / `exit` at any prompt) to stop a batch cleanly. The CLI saves your place, recommends resuming, and asks **yes/no** (default **yes**). Answer **yes** to continue immediately, **no** to stop and use `wboxcli continue` later. See [Stop and resume (Ctrl+C)](#stop-and-resume-ctrlc).
 - **Resume Path Validation** — Automatically detects missing resume files and warns you instead of crashing, ensuring batch continuity.
 - **Multi-Provider LLM** — Native support for OpenAI, Anthropic, and Google Gemini
 - **LinkedIn handling** — LinkedIn URLs prompt to skip (default: yes). If you continue, the CLI hands off the browser until you press ENTER (600s wait in supervised/manual; 60s in `auto`, then the job is skipped).
@@ -265,6 +266,8 @@ wboxcli apply --url "https://boards.greenhouse.io/company/jobs/123"
 
 `wboxcli apply` with no arguments applies to **all pending jobs** in your local DB. Chrome always opens visibly — `apply` is a human-in-the-loop flow by design.
 
+You can **stop anytime** with Ctrl+C and **resume where you left off** — see [Stop and resume (Ctrl+C)](#stop-and-resume-ctrlc).
+
 ## WboxCLI Management Script (`wboxcli.sh`)
 
 A comprehensive local management script is provided at `scripts/wboxcli.sh` to handle installation, updates, database operations, and setups cleanly.
@@ -376,6 +379,8 @@ wboxcli apply --mode auto
 wboxcli apply --mode manual
 ```
 
+During a batch run you can press **Ctrl+C** (or type `q` / `quit` / `exit` at a prompt) to stop cleanly and resume later — see [Stop and resume (Ctrl+C)](#stop-and-resume-ctrlc).
+
 ### Two-tier human prompt (Supervised / Manual)
 
 When the extension + rules + LLM still leave fields empty, the terminal pauses with a yellow panel summarising the gap, then asks for the missing fields in two passes:
@@ -417,6 +422,57 @@ Notes:
 
 ---
 
+## Stop and resume (Ctrl+C)
+
+During a **batch** `wboxcli apply` (no `--url`), you can stop at any time without losing your queue position.
+
+### How to stop
+
+| Action | Result |
+|--------|--------|
+| **Ctrl+C** once | Finishes the current step, closes the browser, saves a checkpoint, shows a summary |
+| **Ctrl+C** twice within 2s | Force quit (emergency) |
+| Type **`q`**, **`quit`**, **`exit`**, or **`:q`** at any terminal prompt | Same clean stop as Ctrl+C |
+
+`quit` in the interactive TUI still only exits the menu — it does **not** clear saved login, resume, or checkpoints.
+
+### What happens after you stop
+
+1. A yellow summary panel shows how many jobs were processed.
+2. The CLI **recommends** resuming and asks:
+
+   **`Resume applications where you left off? [Y/n]`** (default **yes**)
+
+3. **Yes** → the same batch continues immediately (remaining jobs only).
+4. **No** → you exit; resume later with the commands below.
+
+The checkpoint is stored in `~/.jobcli/jobcli.db` under the key `apply_run_checkpoint` (job IDs, next index, mode, sort, limit).
+
+### How to resume later
+
+```bash
+wboxcli continue
+# same as:
+wboxcli apply --continue
+# or in the interactive TUI, type:
+continue
+```
+
+### What “resume” means
+
+| Situation | On resume |
+|-----------|-----------|
+| You stopped **between** jobs | Next pending job in the saved queue runs |
+| You stopped **during** a job | That job is reset to **pending** and **restarted from the beginning** (not mid-form) |
+| Jobs already **submitted**, **skipped**, or **failed** | Unchanged — not re-run |
+| Batch **finishes normally** | Checkpoint is cleared automatically |
+
+Single-URL runs (`wboxcli apply --url …`) do not create a batch checkpoint.
+
+Implementation: [`src/jobcli/utils/apply_checkpoint.py`](src/jobcli/utils/apply_checkpoint.py), wired from [`src/jobcli/cli/main.py`](src/jobcli/cli/main.py) (`_run_apply`).
+
+---
+
 ## LinkedIn Jobs
 
 LinkedIn does not allow reliable bot automation. When `apply` hits a `linkedin.com` URL:
@@ -444,6 +500,8 @@ Job-board landing pages (LinkedIn, Indeed, etc.) may also trigger an earlier han
 | `wboxcli discover --legacy-ui` | Playwright dashboard scrape instead of API (`WBOX_DISCOVER_MODE=browser`) |
 | `wboxcli apply` | Apply to all **pending** jobs (typical flow after `discover`) — Chrome opens visibly |
 | `wboxcli apply --url <url>` | Apply to a single specific job URL |
+| `wboxcli apply --continue` / `-c` | Resume the last batch stopped with Ctrl+C (no yes/no prompt) |
+| `wboxcli continue` | Same as `wboxcli apply --continue` |
 | `wboxcli apply --mode auto / supervised / manual` | Set interaction level (see [Interaction Modes](#interaction-modes)) |
 | `wboxcli questions` | Pre-fill answers to common application questions |
 | `wboxcli open-dashboard` | Launch an interactive browser window logged into Wbox |
@@ -456,6 +514,7 @@ Job-board landing pages (LinkedIn, Indeed, etc.) may also trigger an earlier han
 | Command | Maps to |
 |---------|---------|
 | `jobs`, `status`, `help`, `clear`, `update` | Built-in TUI actions |
+| `continue` | `wboxcli continue` — resume last interrupted apply batch |
 | `login`, `setup` | Interactive onboarding (not CLI `wboxcli setup`) |
 | `resume` | `resume-upload` |
 | `dashboard` | `open-dashboard` |
@@ -506,6 +565,8 @@ src/jobcli/
 ├── llm/                    # AX tree + multi-provider client
 ├── utils/
 │   ├── extension_helpers.py  # ZIP pick/unpack, Chrome + MV3 worker test
+│   ├── apply_checkpoint.py     # Save/load interrupted apply batch (Ctrl+C resume)
+│   ├── exit_signal.py          # Ctrl+C / quit keywords → clean stop
 │   ├── fill_guard.py           # Skip refill on already-populated fields
 │   └── resume_helpers.py       # Resume paths, profile summary, confirm
 ├── storage/                # SQLite models + repositories (~/.jobcli/jobcli.db)
@@ -570,7 +631,7 @@ flowchart LR
 | **③ LLM** | Accessibility Tree loop for custom/questionnaire fields. | Actions targeting filled fields dropped in engine + `tool_executor`. |
 | **④ Human** | Terminal prompts or browser handoff when 1–3 leave gaps (or no LLM key). Required fields first, optional second. | You type only what's still empty. |
 
-**Outside the fill pipeline:** `wboxcli discover` (WBL API + source filter), ATS detection, Apply-button click, LinkedIn 60s manual window, and post-submit status sync.
+**Outside the fill pipeline:** `wboxcli discover` (WBL API + source filter), ATS detection, Apply-button click, LinkedIn 60s manual window, post-submit status sync, and [batch stop/resume](#stop-and-resume-ctrlc) (Ctrl+C checkpoint).
 
 ---
 
@@ -685,7 +746,7 @@ All config lives in `~/.jobcli/` and is written by the interactive commands. **N
 
 | Path | Purpose | Owned by |
 |---|---|---|
-| `~/.jobcli/jobcli.db` | SQLite — credentials, LLM keys, resume paths, API base URL, jobs, learned memory | `wboxcli login`, `wboxcli resume-upload`, `wboxcli config`, `wboxcli discover` |
+| `~/.jobcli/jobcli.db` | SQLite — credentials, LLM keys, resume paths, API base URL, jobs, learned memory, **apply checkpoint** (after Ctrl+C) | `wboxcli login`, `wboxcli resume-upload`, `wboxcli config`, `wboxcli discover`, `wboxcli apply` |
 | `~/.jobcli/extension_unpacked/` | TalentScreen Chrome extension (loaded during `apply`) | `setup`, `doctor`, `apply` (via `resolve_extension_dir`), ZIP in `extension/` |
 | `~/.jobcli/logs/` | Per-job JSON logs, screenshots, DOM snapshots | `wboxcli apply` |
 | `~/.jobcli/venv/` | Managed Python venv (only present from the one-line installer) | `scripts/install.sh` / `scripts/install.ps1` |

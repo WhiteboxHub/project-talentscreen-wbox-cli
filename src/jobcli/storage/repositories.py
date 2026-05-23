@@ -232,6 +232,19 @@ class JobRepository:
         )
         return [_job_model_to_job(j) for j in jobs]
 
+    def list_by_ids(self, job_ids: list[int]) -> list[Job]:
+        """Fetch jobs by id, preserving the order of ``job_ids``."""
+        if not job_ids:
+            return []
+        rows = self.session.query(JobModel).filter(JobModel.id.in_(job_ids)).all()
+        by_id = {j.id: j for j in rows}
+        out: list[Job] = []
+        for jid in job_ids:
+            model = by_id.get(jid)
+            if model is not None:
+                out.append(_job_model_to_job(model))
+        return out
+
     def list_recent_activity(self, since: Optional[datetime] = None) -> list[Job]:
         """List all jobs with status changes since a given datetime."""
         query = self.session.query(JobModel).filter(

@@ -37,6 +37,7 @@ V = "#7c3aed"   # violet
 COMMANDS = {
     "setup":     ["setup"],
     "apply":     None,
+    "continue":  ["continue"],
     "discover":  ["discover"],
     "jobs":      None,
     "status":    None,
@@ -603,6 +604,7 @@ def _cmd_help():
         ("Running", [
             ("apply",          "Apply to all pending jobs (after discover)"),
             ("apply --url URL","Apply to a specific URL"),
+            ("continue",       "Resume last apply stopped with Ctrl+C"),
             ("discover",       "Discover jobs from WBL API (cli_window, paginated)"),
             ("scan",           "Scan ATS portals for openings"),
         ]),
@@ -727,6 +729,9 @@ def _dispatch(raw: str):
     # Apply
     if cmd == "apply":
         _exec(["apply"] + args)
+        return
+    if cmd == "continue":
+        _exec(["continue"])
         return
 
     # Resume aliases — accept the short form ``resume`` *and* the full

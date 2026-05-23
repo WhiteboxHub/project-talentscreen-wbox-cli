@@ -1010,6 +1010,8 @@ def _run_apply(
     limit: Optional[int],
     sort: str,
     mode: str,
+    resume: bool = False,
+    skip_resume_prompt: bool = False,
 ) -> None:
     """Shared implementation for ``wboxcli apply`` (single URL or batch).
 
@@ -1023,11 +1025,23 @@ def _run_apply(
     every prompt the engine exposes (handoff, submit confirm, ASK
     actions, LinkedIn-skip yes/no, manual pauses) via
     ``AgentInterface._get_user_input``.
+
+    After an interrupted batch, the CLI saves a checkpoint and asks whether
+    to resume (yes/no). ``wboxcli continue`` or ``wboxcli apply --continue``
+    skips the prompt and continues the same queue.
     """
+    from jobcli.utils.apply_checkpoint import (
+        clear_apply_checkpoint,
+        jobs_from_checkpoint,
+        load_apply_checkpoint,
+        reset_interrupted_job_to_pending,
+        save_apply_checkpoint,
+    )
     from jobcli.utils.exit_signal import (
         ExitRequested,
         install_global_sigint_handler,
         is_exit_requested,
+        reset_exit_flag,
     )
 
     console.print("[bold cyan]Job Application[/bold cyan]\n")
@@ -1050,6 +1064,8 @@ def _run_apply(
     console.print(
         "[dim]Press [bold]Ctrl+C[/bold] or type [bold]q[/bold] / [bold]quit[/bold] / "
         "[bold]exit[/bold] at any prompt to stop cleanly. Two Ctrl+C within 2s force quits.[/dim]\n"
+        "[dim]After a stop you can resume with [bold]wboxcli continue[/bold] or answer "
+        "[bold]yes[/bold] when prompted.[/dim]\n"
     )
 
     db = get_database()
@@ -1058,8 +1074,31 @@ def _run_apply(
     user_data_repo = UserDataRepository(session)
     job_repo = JobRepository(session)
 
-    resume = user_data_repo.get_resume()
-    if not resume:
+    checkpoint = None
+    if resume and not url:
+        checkpoint = load_apply_checkpoint(session)
+        if not checkpoint:
+            console.print(
+                "[yellow]No interrupted apply run found. Run [cyan]discover[/cyan] then "
+                "[cyan]apply[/cyan], or press Ctrl+C during apply to save a checkpoint.[/yellow]"
+            )
+            session.close()
+            raise typer.Exit(0)
+        mode = checkpoint.mode
+        sort = checkpoint.sort
+        limit = checkpoint.limit
+        try:
+            config.interaction_mode = InteractionMode(mode)
+        except ValueError:
+            pass
+        console.print(
+            f"[cyan]Resuming interrupted run[/cyan] "
+            f"([bold]{checkpoint.remaining_count}[/bold] job(s) remaining)…\n"
+        )
+        reset_exit_flag()
+
+    resume_data = user_data_repo.get_resume()
+    if not resume_data:
         console.print(
             "[red]No resume in the local database.[/red] Run "
             "[cyan]resume-upload --pdf <file.pdf> --json <file.json>[/cyan]."
@@ -1079,15 +1118,22 @@ def _run_apply(
         jobs = [job]
 
     else:
-        jobs = job_repo.list_pending()
-        if sort.lower() == "newest":
-            jobs.reverse()
-
-        if limit:
-            jobs = jobs[:limit]
+        if checkpoint:
+            jobs = jobs_from_checkpoint(session, checkpoint)
+        else:
+            jobs = job_repo.list_pending()
+            if sort.lower() == "newest":
+                jobs.reverse()
+            if limit:
+                jobs = jobs[:limit]
 
         if not jobs:
-            console.print("[yellow]No pending jobs found. Run [cyan]discover[/cyan] first.[/yellow]")
+            if checkpoint:
+                clear_apply_checkpoint(session)
+                console.print("[yellow]No remaining jobs in the saved checkpoint (already finished).[/yellow]")
+            else:
+                console.print("[yellow]No pending jobs found. Run [cyan]discover[/cyan] first.[/yellow]")
+            session.close()
             raise typer.Exit(0)
 
     original_count = len(jobs)
@@ -1108,7 +1154,14 @@ def _run_apply(
 
     console.print(f"Applying to {len(jobs)} job(s)...\n")
 
-    engine = ApplicationEngine(config, resume, db)
+    engine = ApplicationEngine(config, resume_data, db)
+
+    if checkpoint:
+        full_job_ids = list(checkpoint.job_ids)
+        batch_start_index = checkpoint.next_index
+    else:
+        full_job_ids = [j.id for j in jobs if j.id is not None]
+        batch_start_index = 0
 
     # Tally counters so the summary panel is meaningful regardless of how
     # we exit (clean finish, ExitRequested, or unexpected crash).
@@ -1117,6 +1170,8 @@ def _run_apply(
     failed = 0
     processed = 0
     exit_reason: Optional[str] = None
+    interrupted_at_index: Optional[int] = None
+    interrupted_job_id: Optional[int] = None
 
     try:
         try:
@@ -1125,8 +1180,12 @@ def _run_apply(
                 # Allow Ctrl+C between jobs to exit before opening a new tab.
                 if is_exit_requested():
                     exit_reason = "Ctrl+C between jobs"
+                    interrupted_at_index = batch_start_index + (i - 1)
+                    interrupted_job_id = job.id
                     break
                 console.print(f"[bold]Job {i}/{len(jobs)}[/bold]: {job.url}")
+                if job.id is not None:
+                    job_repo.update_status(job.id, ApplicationStatus.IN_PROGRESS)
                 try:
                     status = engine.apply_to_job(job)
                     console.print(f"Status: [green]{status.value}[/green]\n")
@@ -1141,12 +1200,16 @@ def _run_apply(
                         failed += 1
                 except ExitRequested as ex:
                     exit_reason = ex.reason
+                    interrupted_at_index = batch_start_index + (i - 1)
+                    interrupted_job_id = job.id
                     break
                 except KeyboardInterrupt:
                     # Fallback path if the SIGINT handler wasn't installed
                     # (e.g. running under an embedded interpreter). Treated
                     # identically to an ExitRequested.
                     exit_reason = "Ctrl+C (KeyboardInterrupt)"
+                    interrupted_at_index = batch_start_index + (i - 1)
+                    interrupted_job_id = job.id
                     break
                 except Exception as e:
                     console.print(f"[red]Error: {e}[/red]\n")
@@ -1169,6 +1232,26 @@ def _run_apply(
         except Exception as e:
             console.print(f"[dim red]Warning: error during session shutdown: {e}[/dim red]")
 
+    # -----------------------------------------------------------------
+    # Checkpoint + resume prompt (batch runs only)
+    # -----------------------------------------------------------------
+    if exit_reason and not url and full_job_ids and interrupted_at_index is not None:
+        reset_interrupted_job_to_pending(session, interrupted_job_id)
+        save_apply_checkpoint(
+            session,
+            job_ids=full_job_ids,
+            next_index=interrupted_at_index,
+            mode=config.interaction_mode.value,
+            sort=sort,
+            limit=limit,
+        )
+        remaining = max(0, len(full_job_ids) - interrupted_at_index)
+    elif not exit_reason and not url and full_job_ids:
+        clear_apply_checkpoint(session)
+        remaining = 0
+    else:
+        remaining = 0
+
     session.close()
 
     # -----------------------------------------------------------------
@@ -1183,9 +1266,15 @@ def _run_apply(
         f"Failed: [red]{failed}[/red]"
     )
     if exit_reason:
+        resume_hint = ""
+        if remaining:
+            resume_hint = (
+                f"\n\n[dim]Resume later:[/dim] [cyan]wboxcli continue[/cyan] "
+                f"or [cyan]wboxcli apply --continue[/cyan]"
+            )
         console.print(
             Panel(
-                f"[yellow]Exit requested:[/yellow] {exit_reason}\n\n{tally}",
+                f"[yellow]Exit requested:[/yellow] {exit_reason}\n\n{tally}{resume_hint}",
                 title="[bold yellow]>>> JobCLI stopped at your request <<<[/bold yellow]",
                 border_style="yellow",
                 expand=True,
@@ -1215,6 +1304,27 @@ def _run_apply(
         pass
 
     if exit_reason:
+        if remaining and not skip_resume_prompt:
+            reset_exit_flag()
+            console.print(
+                f"\n[bold]You stopped with {remaining} job(s) left in this batch.[/bold]"
+            )
+            if Confirm.ask(
+                "Resume applications where you left off?",
+                default=True,
+            ):
+                _run_apply(
+                    url=None,
+                    limit=limit,
+                    sort=sort,
+                    mode=config.interaction_mode.value,
+                    resume=True,
+                    skip_resume_prompt=True,
+                )
+                return
+            console.print(
+                "[dim]To resume later, run [cyan]wboxcli continue[/cyan].[/dim]"
+            )
         # User-initiated exit is success (0), not an error — consistent
         # with Unix shells (Ctrl+C generally exits programs gracefully).
         raise typer.Exit(0)
@@ -1237,6 +1347,12 @@ def apply(
         "--mode", "-m",
         help="Interaction mode: auto (fully autonomous), supervised (AI + human checkpoints, default), manual (pause at every step)",
     ),
+    continue_run: bool = typer.Option(
+        False,
+        "--continue",
+        "-c",
+        help="Resume the last batch apply stopped with Ctrl+C (same as ``wboxcli continue``).",
+    ),
 ) -> None:
     """Apply to all pending jobs from ``discover`` (or one job with ``--url``).
 
@@ -1249,7 +1365,28 @@ def apply(
     so ``apply`` simply iterates whatever is pending.
     """
     _ = batch  # accepted for backward compatibility with scripts using ``--batch``
-    _run_apply(url=url, limit=limit, sort=sort, mode=mode)
+    _run_apply(
+        url=url,
+        limit=limit,
+        sort=sort,
+        mode=mode,
+        resume=continue_run,
+        skip_resume_prompt=continue_run,
+    )
+
+
+@app.command("continue")
+def continue_apply() -> None:
+    """Resume the last apply batch stopped with Ctrl+C or ``q``/``quit``."""
+    config = get_config()
+    _run_apply(
+        url=None,
+        limit=None,
+        sort="oldest",
+        mode=config.interaction_mode.value if config.interaction_mode else "supervised",
+        resume=True,
+        skip_resume_prompt=True,
+    )
 
 
 @app.command()
