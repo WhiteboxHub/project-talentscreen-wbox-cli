@@ -325,6 +325,15 @@ class ToolExecutor:
 
     def _humanized_fill(self, locator, value: str) -> bool:
         """Fill ``locator`` with human-like keystroke cadence. Returns False if skipped."""
+        from jobcli.utils.fill_guard import is_reserved_form_value
+
+        if is_reserved_form_value(value):
+            if self.logger:
+                self.logger.info(
+                    f"[skip-value] refusing to type reserved keyword '{value}' into field",
+                    phase=ExecutionPhase.LLM,
+                )
+            return False
         if should_skip_refill(locator, value):
             if self.logger:
                 self.logger.info(

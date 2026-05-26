@@ -13,7 +13,13 @@ from pydantic import ValidationError
 from jobcli.profile.derived_profile import derived_country_for_resume, derived_pronouns_for_resume
 from jobcli.profile.resume_normalize import normalize_linkedin_url
 from jobcli.utils.logger import JobLogger
-from jobcli.profile.schemas import DOMSnapshot, ExecutionPhase, LLMActionResponse, ResumeData
+from jobcli.profile.schemas import (
+    ActionType,
+    DOMSnapshot,
+    ExecutionPhase,
+    LLMActionResponse,
+    ResumeData,
+)
 from jobcli.utils.tls import httpx_verify, is_insecure, strategy as tls_strategy
 from jobcli.llm.ax_tree_extractor import AccessibilityTree
 
@@ -383,8 +389,18 @@ Remember to return valid JSON matching the schema in the system prompt.
             return
 
         for act in validated.actions:
+            if act.action not in (
+                ActionType.FILL,
+                ActionType.TYPE,
+                ActionType.SELECT,
+                ActionType.ASK,
+            ):
+                continue
             lbl = (act.field_label or act.selector or "").strip().lower()
             if not lbl:
+                continue
+            if "*" in (act.field_label or act.selector or ""):
+                act.required = True
                 continue
             if lbl in required_labels or any(rl in lbl or lbl in rl for rl in required_labels):
                 act.required = True
@@ -561,7 +577,10 @@ Remember to return valid JSON matching the schema in the system prompt.
             "2. Fill EVERY SINGLE visible form field. **CRITICAL**: If a field already has a non-empty `value` in the snapshot (meaning it was autofilled), DO NOT emit an action for it. Leave it alone! Only fill fields that are empty. DO NOT GUESS mandatory field values.\n"
             "3. **DATA PRIORITY CHAIN:** First use 'User Information'. If missing, use 'Known Answers from Agent Memory'.\n"
             "4. For dropdowns, your value MUST exactly match an option from 'Pre-extracted Dropdown Options' or be a valid option string.\n"
-            "5. If a mandatory field answer is entirely missing, output action=\"ask\", selector=\"<exact field label>\", and value=\"<clarifying question>\".\n"
+            "5. Use action=\"ask\" ONLY for mandatory fields (marked required or with * in the label). "
+            "NEVER ask about optional fields — leave them empty. "
+            "NEVER use the literal word \"skip\" as a fill value.\n"
+            "5b. For mandatory fields with a missing answer, output action=\"ask\", selector=\"<exact field label>\", and value=\"<clarifying question>\".\n"
             "6. Use action=\"fill\" for text, action=\"click\" for buttons, action=\"select\" for dropdowns/comboboxes, action=\"upload\" for files.\n"
             "7. **DROPDOWNS — CRITICAL, READ CAREFULLY**: A field is a dropdown if ANY of the following is true:\n"
             "   - it appears in the 'Pre-extracted Dropdown Options' list above;\n"

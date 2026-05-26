@@ -89,12 +89,32 @@ class ExitRequested(BaseException):
 # treated as "user wants to bail out of the entire apply run".
 _QUIT_KEYWORDS = frozenset({"q", "quit", "exit", ":q", "quit-all", "qq"})
 
+# Typed at a field prompt: skip this optional question (do NOT write into the form).
+# Distinct from quit keywords — "skip" here means "leave blank", not "exit JobCLI".
+_SKIP_FIELD_KEYWORDS = frozenset({
+    "skip",
+    "skipp",
+    "skp",
+    "pass",
+    "n/a",
+    "na",
+    "none",
+    "-",
+})
+
 
 def is_quit_keyword(value: Optional[str]) -> bool:
     """Returns True iff *value* is one of the canonical quit keywords."""
     if value is None:
         return False
     return value.strip().lower() in _QUIT_KEYWORDS
+
+
+def is_skip_field_keyword(value: Optional[str]) -> bool:
+    """True when the user wants to leave a form field empty (not exit the CLI)."""
+    if value is None:
+        return False
+    return value.strip().lower() in _SKIP_FIELD_KEYWORDS
 
 
 # ---------------------------------------------------------------------------

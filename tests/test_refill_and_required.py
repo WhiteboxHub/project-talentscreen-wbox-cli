@@ -862,3 +862,74 @@ class TestConstantsSync:
 
     def test_extension_settle_constant_value(self):
         assert ApplicationEngine.EXTENSION_AUTOFILL_SETTLE_MS == 2500
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Group 8 — Skip keyword must not become form values
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestSkipFieldKeywordHandling:
+    def test_is_skip_field_keyword_recognizes_variants(self):
+        from jobcli.utils.exit_signal import is_skip_field_keyword
+
+        assert is_skip_field_keyword("skip")
+        assert is_skip_field_keyword("SKIP")
+        assert is_skip_field_keyword("skp")
+        assert not is_skip_field_keyword("skipping")
+        assert not is_skip_field_keyword("3")
+
+    def test_request_field_input_skip_returns_none_without_persist(self):
+        agent = _make_agent()
+        agent.page = MagicMock()
+        agent._read_browser_field_value = MagicMock(return_value=None)
+        agent._get_user_input = MagicMock(return_value="skip")
+        agent.persist_human_answer = MagicMock(return_value=True)
+        agent.lookup_db_answer = MagicMock(return_value=(None, "not_found"))
+        agent.show_browser_overlay = MagicMock()
+        agent.clear_browser_overlay = MagicMock()
+        agent.get_attention = MagicMock()
+
+        assert agent.request_field_input("Portfolio URL", required=True) is None
+        agent.persist_human_answer.assert_not_called()
+
+    def test_request_field_input_optional_ask_suppressed(self):
+        agent = _make_agent()
+        agent._get_user_input = MagicMock(return_value="should not run")
+        assert (
+            agent.request_field_input("GitHub URL", required=False) is None
+        )
+        agent._get_user_input.assert_not_called()
+
+    def test_lookup_db_ignores_saved_skip_value(self):
+        agent = _make_agent()
+        agent.memory = MagicMock()
+        agent.memory.get_best_answer.return_value = ("skip", "human")
+        value, source = agent.lookup_db_answer("Portfolio URL")
+        assert value is None
+        assert source == "not_found"
+
+    def test_propagate_required_marks_ask_action(self):
+        ax = _make_ax_tree(
+            [{"role": "textbox", "name": "Years of Experience *", "required": True}]
+        )
+        resp = MagicMock(
+            actions=[
+                BrowserAction(
+                    action=ActionType.ASK,
+                    selector="Years of Experience",
+                    field_label="Years of Experience",
+                )
+            ]
+        )
+        LLMClient._propagate_required_flag(resp, ax)
+        assert resp.actions[0].required is True
+
+    def test_humanized_fill_refuses_skip_literal(self):
+        from jobcli.utils.fill_guard import is_reserved_form_value
+
+        assert is_reserved_form_value("skip")
+        exe = _make_executor(MagicMock())
+        exe._read_live_value = MagicMock(return_value=None)
+        loc = MagicMock()
+        assert exe._humanized_fill(loc, "skip") is False

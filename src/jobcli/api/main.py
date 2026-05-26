@@ -54,6 +54,19 @@ engine_instance: Optional[ApplicationEngine] = None
 should_stop = False
 main_loop: Optional[asyncio.AbstractEventLoop] = None
 
+
+def _maybe_override_mode(engine: ApplicationEngine, interaction_mode: Optional[str]) -> None:
+    """Allow API callers to run the same modes as CLI (auto/supervised/manual)."""
+    if not interaction_mode:
+        return
+    from jobcli.profile.schemas import InteractionMode
+
+    try:
+        mode = InteractionMode(str(interaction_mode).strip().lower())
+    except Exception:
+        return
+    engine.config.interaction_mode = mode
+
 @app.on_event("startup")
 async def startup_event():
     global main_loop
@@ -129,10 +142,9 @@ def get_engine() -> ApplicationEngine:
         
         resume = user_repo.get_resume()
         config = config_repo.get_all()
-        # Force non-headless and AUTO mode for premium dashboard experience
-        from jobcli.profile.schemas import InteractionMode
+        # Keep browser visible for local UI. Do NOT force interaction mode here;
+        # it must match CLI behavior unless a request overrides it.
         config.headless = False
-        config.interaction_mode = InteractionMode.AUTO
         session.close()
         
         if not resume:
@@ -303,6 +315,8 @@ async def handle_dashboard_command(cmd_text: str):
 
 class ApplyRequest(BaseModel):
     url: str
+    # Optional: "auto" | "supervised" | "manual"
+    interaction_mode: Optional[str] = None
 
 class UserInputRequest(BaseModel):
     """User response to UI question."""
@@ -319,6 +333,7 @@ async def apply_single(request: ApplyRequest, background_tasks: BackgroundTasks)
     global should_stop
     should_stop = False
     engine = get_engine()
+    _maybe_override_mode(engine, request.interaction_mode)
     
     def run_single():
         try:
@@ -349,6 +364,7 @@ async def apply_with_ui(request: ApplyRequest, background_tasks: BackgroundTasks
     def run_application():
         try:
             engine = get_engine()
+            _maybe_override_mode(engine, request.interaction_mode)
             job = Job(url=request.url, company="Manual", title="Manual Submission")
             
             # Update UI
@@ -403,6 +419,16 @@ async def submit_user_input(request: UserInputRequest):
         "field": request.field_name,
         "value": request.value
     })
+
+    # The engine blocks on AgentInterface._get_user_input in server mode.
+    # Resume it immediately so curl/UI input actually unpauses the run.
+    try:
+        engine = get_engine()
+        agent = getattr(engine, "active_agent", None)
+        if agent is not None and hasattr(agent, "remote_resume"):
+            agent.remote_resume(request.value)
+    except Exception:
+        pass
     
     # Update UI
     get_engine_callback({

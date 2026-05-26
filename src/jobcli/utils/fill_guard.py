@@ -6,6 +6,8 @@ from typing import FrozenSet, Optional
 
 from playwright.sync_api import Locator
 
+from jobcli.utils.exit_signal import is_skip_field_keyword
+
 # Keep in sync with ApplicationEngine._SNAPSHOT_PLACEHOLDERS and tool_executor._PLACEHOLDER_VALUES.
 PLACEHOLDER_VALUES: FrozenSet[str] = frozenset({
     "select",
@@ -28,7 +30,19 @@ def is_meaningful_value(value: Optional[str]) -> bool:
     v = str(value).strip()
     if not v:
         return False
+    if is_skip_field_keyword(v):
+        return False
     return v.lower() not in PLACEHOLDER_VALUES
+
+
+def is_reserved_form_value(value: Optional[str]) -> bool:
+    """Values that must never be typed into application fields."""
+    if value is None:
+        return False
+    v = str(value).strip()
+    if not v:
+        return False
+    return is_skip_field_keyword(v)
 
 
 def read_locator_value(locator: Locator, *, timeout_ms: int = 500) -> Optional[str]:

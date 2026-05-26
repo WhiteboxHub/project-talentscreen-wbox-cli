@@ -271,6 +271,47 @@ class AgentInterface:
         if ats_type is not None:
             self.ats_type = ats_type
 
+    @staticmethod
+    def _strip_prompt_markup(field_label: str) -> str:
+        """Remove Rich markup suffixes from labels used in terminal prompts."""
+        import re
+
+        return re.sub(r"\[/?[^\]]+\]", "", field_label or "").strip()
+
+    def _read_browser_field_value(self, field_label: str) -> Optional[str]:
+        """Return the live DOM value for *field_label*, if the user already filled it."""
+        from jobcli.utils.fill_guard import is_meaningful_value, read_locator_value
+
+        clean = self._strip_prompt_markup(field_label)
+        if not clean or not self.page:
+            return None
+        candidates: list = []
+        try:
+            candidates.append(self.page.get_by_label(clean, exact=False).first)
+        except Exception:
+            pass
+        try:
+            candidates.append(self.page.get_by_placeholder(clean, exact=False).first)
+        except Exception:
+            pass
+        try:
+            candidates.append(
+                self.page.get_by_role("textbox", name=clean, exact=False).first
+            )
+        except Exception:
+            pass
+        try:
+            candidates.append(
+                self.page.get_by_role("combobox", name=clean, exact=False).first
+            )
+        except Exception:
+            pass
+        for loc in candidates:
+            val = read_locator_value(loc)
+            if is_meaningful_value(val):
+                return val
+        return None
+
     def lookup_db_answer(self, field_label: str) -> tuple[Optional[str], str]:
         """Check the DB for a previously-saved answer to a similar question.
 
@@ -280,13 +321,24 @@ class AgentInterface:
           3. universal saved memory across all ATSes
         Returns ``(value, source)`` or ``(None, "not_found")``.
         """
+        from jobcli.utils.fill_guard import is_reserved_form_value
+
         if not self.memory or not field_label:
             return None, "not_found"
-        return self.memory.get_best_answer(field_label, self.ats_type, self.resume)
+        value, source = self.memory.get_best_answer(
+            self._strip_prompt_markup(field_label), self.ats_type, self.resume
+        )
+        if value and is_reserved_form_value(value):
+            return None, "not_found"
+        return value, source
 
     def persist_human_answer(self, field_label: str, value: str) -> bool:
         """Save a human-supplied answer to the DB so future jobs can reuse it."""
+        from jobcli.utils.fill_guard import is_reserved_form_value
+
         if not self.memory or not field_label or not value:
+            return False
+        if is_reserved_form_value(value):
             return False
         key = (field_label.strip().lower(), value.strip())
         if key in self._saved_this_session:
@@ -893,28 +945,57 @@ class AgentInterface:
         options: Optional[list[str]] = None,
         current_value: Optional[str] = None,
         question_text: Optional[str] = None,
+        required: bool = True,
+        prompt_optional: bool = False,
     ) -> Optional[str]:
         """Ask the human for a missing/failed field value.
 
         Behaviour:
-          1. If a value is already in the DB (any source), return it silently
+          1. If the field already has a value in the browser, return None.
+          2. If a value is already in the DB (any source), return it silently
              — the agent never re-asks a question it has answered before.
-          2. AUTO mode skips human prompts entirely (returns None).
-          3. SUPERVISED / MANUAL show a modal-style panel and BLOCK until the
+          3. Optional fields are only prompted when ``prompt_optional=True``
+             (the failed-fields review pass). LLM ``ASK`` actions never set
+             that flag, so optional questions are skipped in the terminal.
+          4. AUTO mode skips human prompts entirely (returns None).
+          5. SUPERVISED / MANUAL show a modal-style panel and BLOCK until the
              human responds.  The answer is auto-saved to the DB.
+          6. Typing ``skip`` (or pressing Enter on optional fields) leaves the
+             field blank — it is never written into the form.
         """
+        from jobcli.utils.exit_signal import is_skip_field_keyword
+
+        clean_label = self._strip_prompt_markup(field_label)
+
         if current_value and current_value.strip():
             return None
 
-        # 1. DB-first: did we already answer this on a previous job?
-        cached, source = self.lookup_db_answer(field_label)
-        if cached:
+        if not required and not prompt_optional:
+            return None
+
+        # 0. Browser-first: user may have filled the field while the agent waited.
+        browser_val = self._read_browser_field_value(clean_label)
+        if browser_val:
             self.console.print(
-                f"  [dim]Reusing answer for [cyan]{field_label}[/cyan] from {source}: '{cached}'[/dim]"
+                f"  [dim]Using value already entered in browser for "
+                f"[cyan]{clean_label}[/cyan]: '{browser_val}'[/dim]"
             )
             if self.logger:
                 self.logger.info(
-                    f"DB hit for field '{field_label}' (source={source}).",
+                    f"Browser already has value for '{clean_label}'.",
+                    phase=ExecutionPhase.HUMAN,
+                )
+            return browser_val
+
+        # 1. DB-first: did we already answer this on a previous job?
+        cached, source = self.lookup_db_answer(clean_label)
+        if cached:
+            self.console.print(
+                f"  [dim]Reusing answer for [cyan]{clean_label}[/cyan] from {source}: '{cached}'[/dim]"
+            )
+            if self.logger:
+                self.logger.info(
+                    f"DB hit for field '{clean_label}' (source={source}).",
                     phase=ExecutionPhase.HUMAN,
                 )
             return cached
@@ -923,11 +1004,15 @@ class AgentInterface:
             return None
 
         # 2. Show a clear modal-style block — the agent has paused.
-        question = question_text or f"Please provide a value for: {field_label}"
+        question = question_text or f"Please provide a value for: {clean_label}"
         body_lines = [
             f"[bold]Question:[/bold] {question}",
-            f"[dim]Field label:[/dim] [cyan]{field_label}[/cyan]",
+            f"[dim]Field label:[/dim] [cyan]{clean_label}[/cyan]",
         ]
+        if required:
+            body_lines.append("[red]*required[/red]")
+        else:
+            body_lines.append("[dim](optional — Enter or type skip to leave blank)[/dim]")
         if options:
             body_lines.append("")
             body_lines.append("[dim]Available options:[/dim]")
@@ -935,8 +1020,9 @@ class AgentInterface:
                 body_lines.append(f"  {i}. {opt}")
         body_lines.append("")
         body_lines.append(
-            "[dim]Your answer will be saved and reused on future applications. "
-            "Type [bold]q[/bold] / [bold]quit[/bold] (or press Ctrl+C) to exit JobCLI.[/dim]"
+            "[dim]You can answer here OR fill the field in the browser, then press Enter. "
+            "Type [bold]skip[/bold] to leave this field blank. "
+            "Type [bold]q[/bold] / [bold]quit[/bold] (or Ctrl+C) to exit JobCLI.[/dim]"
         )
         self.console.print(
             Panel(
@@ -957,14 +1043,28 @@ class AgentInterface:
         self.get_attention()
 
         answer = self._get_user_input("  Your answer: ")
-        answer = answer.strip()
+        answer = (answer or "").strip()
         self.clear_browser_overlay()
-        if not answer:
+
+        # User may have filled the field in the browser instead of the terminal.
+        browser_val = self._read_browser_field_value(clean_label)
+        if browser_val:
+            self.console.print(
+                f"  [dim]Using browser value for [cyan]{clean_label}[/cyan]: '{browser_val}'[/dim]"
+            )
+            self.persist_human_answer(clean_label, browser_val)
+            return browser_val
+
+        if not answer or is_skip_field_keyword(answer):
+            if answer and is_skip_field_keyword(answer):
+                self.console.print(
+                    f"  [dim]Skipping [cyan]{clean_label}[/cyan] (left blank).[/dim]"
+                )
             return None
 
         # 3. Persist for reuse next time
-        self.persist_human_answer(field_label, answer)
-        self.console.print(f"  [green]+[/green] Saved to memory: [cyan]{field_label}[/cyan] = '{answer}'")
+        self.persist_human_answer(clean_label, answer)
+        self.console.print(f"  [green]+[/green] Saved to memory: [cyan]{clean_label}[/cyan] = '{answer}'")
         return answer
 
     def request_help_finding_element(
@@ -1108,6 +1208,8 @@ class AgentInterface:
             answer = self.request_field_input(
                 f"{label}{label_suffix}",
                 options=options,
+                required=act.required,
+                prompt_optional=not act.required,
             )
             if not answer:
                 return

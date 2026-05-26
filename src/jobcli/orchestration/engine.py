@@ -2597,10 +2597,22 @@ class ApplicationEngine:
                 # answer (DB-first via the agent), persist new answers to
                 # memory, then re-run the LLM so it sees the enriched memory
                 # context and proposes proper FILL actions next time.
-                ask_actions = [a for a in llm_response.actions if a.action == ActionType.ASK]
+                ask_actions = [
+                    a for a in llm_response.actions if a.action == ActionType.ASK
+                ]
+                optional_asks = [
+                    a for a in ask_actions if not a.required
+                ]
+                ask_actions = [a for a in ask_actions if a.required]
+                if optional_asks:
+                    logger.info(
+                        f"Ignoring {len(optional_asks)} optional ASK action(s) "
+                        "(only required * fields are prompted in the terminal).",
+                        phase=ExecutionPhase.LLM,
+                    )
                 if ask_actions:
                     agent.show_status(
-                        f"AI requested {len(ask_actions)} answer(s) — pausing all other actions.",
+                        f"AI requested {len(ask_actions)} required answer(s) — pausing all other actions.",
                         phase=ExecutionPhase.HUMAN,
                     )
                     resolved_actions: list[BrowserAction] = []
@@ -2616,9 +2628,16 @@ class ApplicationEngine:
                         # request_field_input does DB-lookup-first and persists
                         # any new human answer automatically.
                         answer = agent.request_field_input(
-                            label, options=options, question_text=act.value,
+                            label,
+                            options=options,
+                            question_text=act.value,
+                            required=True,
                         )
                         if not answer:
+                            continue
+                        from jobcli.utils.fill_guard import is_reserved_form_value
+
+                        if is_reserved_form_value(answer):
                             continue
                         # Turn the ASK into a concrete browser action.  Using
                         # ``label`` as the selector lets ``_execute_type`` and
@@ -2742,6 +2761,7 @@ class ApplicationEngine:
                             label,
                             options=options,
                             question_text=f"Required field '{label}' is empty.",
+                            required=True,
                         )
                     # Drop the advance clicks for this iteration; only execute
                     # the non-advance actions (fills/selects/uploads).  The
@@ -2987,8 +3007,19 @@ class ApplicationEngine:
                                             field_options = dp["options"]
                                             break
                                 
-                                help_val = agent.request_field_input(label, current_value=act.value or "", options=field_options)
+                                if not act.required:
+                                    continue
+                                help_val = agent.request_field_input(
+                                    label,
+                                    current_value=act.value or "",
+                                    options=field_options,
+                                    required=True,
+                                )
                                 if help_val:
+                                    from jobcli.utils.fill_guard import is_reserved_form_value
+
+                                    if is_reserved_form_value(help_val):
+                                        continue
                                     # Human provided a value (or picked an option). 
                                     # Update action and try one more time.
                                     act.value = help_val
@@ -3362,6 +3393,7 @@ class ApplicationEngine:
                             label,
                             options=options,
                             question_text=f"Required field '{label}' is empty.",
+                            required=True,
                         )
                     llm_response.actions = non_advance2
 
