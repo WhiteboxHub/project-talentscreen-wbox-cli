@@ -590,46 +590,70 @@ def _exec(args: list[str]):
 # ── Internal Commands ─────────────────────────────────────────────────
 def _cmd_help():
     console.print()
-    console.print(f"  [{K}]Commands:[/]")
+    console.print(f"  [{K}]W-BOX CLI — Commands & shortcuts[/]")
     console.print()
 
     groups = [
         ("Getting started", [
-            ("setup",     "One-shot validation + extension download + browser test"),
-            ("login",     "Configure credentials"),
-            ("resume",    "Upload resume PDF + JSON"),
-            ("config",    "View/edit configuration"),
-            ("questions", "Pre-fill common answers"),
+            ("setup",              "One-shot login + LLM + resume + discover"),
+            ("login",              "Configure Whitebox email/password"),
+            ("resume",             "Upload resume PDF + JSON"),
+            ("config",             "View/edit configuration"),
+            ("questions",          "Pre-fill common screening answers"),
+            ("doctor",             "Health check (Playwright, DB, extension)"),
         ]),
-        ("Running", [
-            ("apply",          "Apply to all pending jobs (after discover)"),
-            ("apply --url URL","Apply to a specific URL"),
-            ("continue",       "Resume last apply stopped with Ctrl+C"),
-            ("discover",       "Discover jobs from WBL API (cli_window, paginated)"),
-            ("scan",           "Scan ATS portals for openings"),
+        ("Running jobs", [
+            ("apply",              "Apply to all pending jobs (supervised mode)"),
+            ("apply --url URL",    "Apply to one specific job URL"),
+            ("continue",           "Resume apply stopped with Ctrl+C"),
+            ("discover",           "Pull jobs from Whitebox Learning"),
+            ("scan",               "Scan ATS portals for openings"),
+        ]),
+        ("During apply (prompts)", [
+            ("skip / skipp / s",   "Leave current field blank (never typed into form)"),
+            ("Enter",              "Accept default / continue handoff"),
+            ("q / quit / exit",    "Stop the entire apply run cleanly"),
+            ("Ctrl+C",             "Stop cleanly (Ctrl+C twice = force quit)"),
+            ("skip (handoff)",     "Skip current job, move to next"),
+            ("cancel (handoff)",   "Cancel current job"),
         ]),
         ("Info", [
-            ("status",    "Show current status"),
-            ("jobs",      "List pending jobs"),
-            ("doctor",    "Health check"),
-            ("sync",      "Sync learned patterns with server"),
+            ("status",             "Show LLM/login/resume/jobs status"),
+            ("jobs",               "List pending jobs"),
+            ("sync",               "Sync learned patterns with server"),
+            ("log",                "Show recent application logs"),
+            ("log JOB_ID",         "Logs for a specific job id"),
+        ]),
+        ("Install & update", [
+            ("update",             "Update WboxCLI code and dependencies"),
+            ("uninstall",          "Remove WboxCLI"),
+            ("build.bat",          "Windows dev: activate venv + launch CLI"),
+            ("curl install (Mac/Linux)",
+                                   "curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/install.sh | bash"),
+            ("curl install (dev branch)",
+                                   "JOBCLI_BRANCH=dev curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.sh | bash"),
+            ("PowerShell install", ".\\scripts\\install.ps1"),
+        ]),
+        ("API / server (same engine)", [
+            ("server",             "Start FastAPI control center (port 8000)"),
+            ("curl apply",         'curl -X POST http://127.0.0.1:8000/api/apply/with-ui -H "Content-Type: application/json" -d "{\\"url\\":\\"...\\",\\"interaction_mode\\":\\"supervised\\"}"'),
+            ("curl discover",      "curl -X POST http://127.0.0.1:8000/api/discover"),
+            ("curl status",        "curl http://127.0.0.1:8000/api/status"),
         ]),
         ("Other", [
-            ("server",    "Start web UI dashboard"),
-            ("dashboard", "Open Whitebox dashboard in browser"),
-            ("reset",     "Clear login, API keys, resume (keep jobs)"),
-            ("db reset",  "Wipe entire database (via wboxcli db reset)"),
-            ("update",    "Update WboxCLI code and dependencies"),
-            ("uninstall", "Full uninstallation"),
-            ("clear",     "Clear the screen"),
-            ("exit",      "Exit"),
+            ("dashboard",          "Open Whitebox dashboard in browser"),
+            ("reset",              "Clear login, API keys, resume (keep jobs)"),
+            ("db reset",           "Wipe entire database"),
+            ("clear",              "Clear the screen"),
+            ("help",               "Show this help"),
+            ("exit",               "Exit interactive CLI"),
         ]),
     ]
 
     for group_name, cmds in groups:
         console.print(f"  [{D}]{group_name}[/]")
         for cmd_name, desc in cmds:
-            console.print(f"    [{K}]{cmd_name:<20}[/] [{D}]{desc}[/]")
+            console.print(f"    [{K}]{cmd_name:<22}[/] [{D}]{desc}[/]")
         console.print()
 
 

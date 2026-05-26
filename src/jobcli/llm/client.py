@@ -575,6 +575,7 @@ Remember to return valid JSON matching the schema in the system prompt.
             "question instead of clicking it.\n"
             "1. You are filling out a job application. Check if the Apply button should be clicked first.\n"
             "2. Fill EVERY SINGLE visible form field. **CRITICAL**: If a field already has a non-empty `value` in the snapshot (meaning it was autofilled), DO NOT emit an action for it. Leave it alone! Only fill fields that are empty. DO NOT GUESS mandatory field values.\n"
+            "2b. **OPTIONAL FIELDS**: Do NOT emit actions for optional fields (no * / not required) when you have no value. Leave them blank.\n"
             "3. **DATA PRIORITY CHAIN:** First use 'User Information'. If missing, use 'Known Answers from Agent Memory'.\n"
             "4. For dropdowns, your value MUST exactly match an option from 'Pre-extracted Dropdown Options' or be a valid option string.\n"
             "5. Use action=\"ask\" ONLY for mandatory fields (marked required or with * in the label). "

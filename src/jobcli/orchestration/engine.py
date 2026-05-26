@@ -303,6 +303,38 @@ def _coerce_dropdown_actions(llm_response, ax_tree, logger=None) -> int:
     return coerced
 
 
+def _filter_actionable_llm_actions(llm_response, logger=None) -> None:
+    """Drop ASK actions, reserved keywords, and empty optional fills."""
+    from jobcli.utils.fill_guard import is_reserved_form_value
+
+    if not llm_response or not llm_response.actions:
+        return
+
+    kept: list[BrowserAction] = []
+    for act in llm_response.actions:
+        if act.action == ActionType.ASK:
+            continue
+        if act.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT):
+            if act.value and is_reserved_form_value(str(act.value)):
+                if logger:
+                    logger.info(
+                        f"Dropping reserved keyword value for "
+                        f"'{act.field_label or act.selector}'",
+                        phase=ExecutionPhase.LLM,
+                    )
+                continue
+            if not (act.value and str(act.value).strip()) and not act.required:
+                if logger:
+                    logger.debug(
+                        f"Skipping empty optional {act.action.value} "
+                        f"for '{act.field_label or act.selector}'",
+                        phase=ExecutionPhase.LLM,
+                    )
+                continue
+        kept.append(act)
+    llm_response.actions = kept
+
+
 def _empty_required_fields(ax_tree) -> list[str]:
     """Return labels of required fields that are still empty on the current page.
 
@@ -2735,7 +2767,7 @@ class ApplicationEngine:
                 # known dropdown label is rewritten to SELECT so the executor
                 # opens the dropdown instead of typing into the closed widget.
                 _coerce_dropdown_actions(llm_response, ax_tree, logger)
-                llm_response.actions = [a for a in llm_response.actions if a.action != ActionType.ASK]
+                _filter_actionable_llm_actions(llm_response, logger)
 
                 # ── Required-fields-first gate ────────────────────────────
                 # If the LLM wants to click Next/Continue/Submit/Apply but
@@ -2917,11 +2949,12 @@ class ApplicationEngine:
                 #       eyes on the browser to finish the form.
                 failed_actions = executor.get_failed_actions()
                 if failed_actions:
-                    # Bucket (a): fields missing a value.
+                    # Bucket (a): required fields missing a value only.
                     missing_value = [
                         a for a in failed_actions
                         if a.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT)
                         and not (a.value and str(a.value).strip())
+                        and a.required
                     ]
                     # Bucket (b): fields that had a value but the selector
                     # refused it.
@@ -2987,13 +3020,23 @@ class ApplicationEngine:
                             value=act.value,
                         )
 
-                    still_broken = selector_failed + retry_failed
+                    still_broken = [
+                        a for a in (selector_failed + retry_failed)
+                        if a.required or (
+                            a.value and str(a.value).strip()
+                            and a.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT)
+                        )
+                    ]
 
                     # If clicking buttons failed and that was the only thing that failed, we must not
                     # swallow it! Catch the un-filtered failures so we don't infinitely skip them.
                     if not still_broken and failed_actions:
-                        still_broken = failed_actions
+                        still_broken = [
+                            a for a in failed_actions
+                            if a.required or a.action == ActionType.CLICK
+                        ]
 
+                    handoff = None
                     if still_broken:
                         resolved_count = 0
                         if self.config.interaction_mode != InteractionMode.AUTO:
@@ -3055,17 +3098,18 @@ class ApplicationEngine:
                                 ),
                                 hint="When done, press ENTER and JobCLI will continue.",
                             )
-                        if handoff.cancelled:
-                            logger.log_phase_end(ExecutionPhase.LLM, False)
-                            return False
-                        page = handoff.page
-                        agent.page = page
-                        # Human may have advanced the form — re-extract so the
-                        # next iteration sees the updated page.
-                        try:
-                            ax_tree = extractor.extract()
-                        except Exception:
-                            pass
+                        if handoff is not None:
+                            if handoff.cancelled:
+                                logger.log_phase_end(ExecutionPhase.LLM, False)
+                                return False
+                            page = handoff.page
+                            agent.page = page
+                            # Human may have advanced the form — re-extract so the
+                            # next iteration sees the updated page.
+                            try:
+                                ax_tree = extractor.extract()
+                            except Exception:
+                                pass
 
                 if not failed_actions and not ask_actions:
                     agent.show_success("All actions completed.")
@@ -3373,7 +3417,7 @@ class ApplicationEngine:
                 _strip_apply_clicks_when_filling_only(llm_response, "fill_empty_fields_only")
                 _strip_third_party_apply_clicks(llm_response, logger)
                 _coerce_dropdown_actions(llm_response, ax_tree, logger)
-                llm_response.actions = [a for a in llm_response.actions if a.action != ActionType.ASK]
+                _filter_actionable_llm_actions(llm_response, logger)
 
                 # Required-fields-first gate (same as the inner loop).
                 non_advance2, advance2 = _split_off_advance_clicks(llm_response)
