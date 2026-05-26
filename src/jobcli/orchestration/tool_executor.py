@@ -175,27 +175,7 @@ class ToolExecutor:
         # ``show_failed_fields`` → human-driven retry instead of silently
         # leaving the form blank.
         if action.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT):
-            from jobcli.utils.fill_guard import is_reserved_form_value
-
-            if action.value and is_reserved_form_value(str(action.value)):
-                if self.logger:
-                    self.logger.info(
-                        f"Refusing to type reserved keyword '{action.value}' "
-                        f"into '{action.field_label or action.selector}'",
-                        phase=ExecutionPhase.LLM,
-                    )
-                return False
-
             if not (action.value and str(action.value).strip()):
-                # Optional empty fields are intentionally left blank — not a failure.
-                if not action.required:
-                    if self.logger:
-                        self.logger.debug(
-                            f"Skipping optional empty {action.action.value} "
-                            f"for '{action.field_label or action.selector}'",
-                            phase=ExecutionPhase.LLM,
-                        )
-                    return True
                 if self.logger:
                     self.logger.warning(
                         f"{action.action.value} on '{action.field_label or action.selector}' "

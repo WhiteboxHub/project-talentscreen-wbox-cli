@@ -196,6 +196,18 @@ def _normalize_label(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip().lower()
 
 
+def _urls_meaningfully_different(before: str, after: str) -> bool:
+    """True when handoff navigation moved to a different page (not hash/query noise)."""
+    from urllib.parse import urlparse
+
+    if not before or not after:
+        return False
+    b, a = urlparse(before), urlparse(after)
+    if b.netloc.lower() != a.netloc.lower():
+        return True
+    return b.path.rstrip("/") != a.path.rstrip("/")
+
+
 def _build_dropdown_label_set(ax_tree) -> dict[str, dict]:
     """Return ``{normalized_label: {options, type}}`` for every dropdown on the page.
 
@@ -301,38 +313,6 @@ def _coerce_dropdown_actions(llm_response, ax_tree, logger=None) -> int:
             )
 
     return coerced
-
-
-def _filter_actionable_llm_actions(llm_response, logger=None) -> None:
-    """Drop ASK actions, reserved keywords, and empty optional fills."""
-    from jobcli.utils.fill_guard import is_reserved_form_value
-
-    if not llm_response or not llm_response.actions:
-        return
-
-    kept: list[BrowserAction] = []
-    for act in llm_response.actions:
-        if act.action == ActionType.ASK:
-            continue
-        if act.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT):
-            if act.value and is_reserved_form_value(str(act.value)):
-                if logger:
-                    logger.info(
-                        f"Dropping reserved keyword value for "
-                        f"'{act.field_label or act.selector}'",
-                        phase=ExecutionPhase.LLM,
-                    )
-                continue
-            if not (act.value and str(act.value).strip()) and not act.required:
-                if logger:
-                    logger.debug(
-                        f"Skipping empty optional {act.action.value} "
-                        f"for '{act.field_label or act.selector}'",
-                        phase=ExecutionPhase.LLM,
-                    )
-                continue
-        kept.append(act)
-    llm_response.actions = kept
 
 
 def _empty_required_fields(ax_tree) -> list[str]:
@@ -1312,6 +1292,9 @@ class ApplicationEngine:
             current_url=job.url,
         )
 
+        self._submit_declined_by_user = False
+        self._form_ready_for_submit = False
+
         mode = self.config.interaction_mode
         
         # ── Resume Path Validation ──────────────────────────────────────
@@ -1562,6 +1545,13 @@ class ApplicationEngine:
                 success = self._fill_form_rules(page, state, logger, ats_type)
             if not success:
                 self._check_stop()
+                if getattr(self, "_submit_declined_by_user", False):
+                    agent.show_status(
+                        "Submission skipped — moving to the next job.",
+                        phase=ExecutionPhase.HUMAN,
+                    )
+                    self.job_repo.update_status(job.id or 0, ApplicationStatus.SKIPPED)
+                    return ApplicationStatus.SKIPPED
                 agent.show_warning("Automation could not complete the form.")
                 handoff = self._handoff_human_in_loop(
                     agent,
@@ -1591,7 +1581,9 @@ class ApplicationEngine:
                 # If the human advanced (e.g. clicked Next/Submit), give
                 # the agent one more pass on the *new* page rather than
                 # declaring success/failure based on the old one.
-                if handoff.advanced:
+                if getattr(self, "_form_ready_for_submit", False):
+                    success = self._submission_looks_plausible(page)
+                if not success and handoff.advanced:
                     self._check_stop()
                     agent.show_status(
                         "Continuing from where you left off...",
@@ -2767,7 +2759,7 @@ class ApplicationEngine:
                 # known dropdown label is rewritten to SELECT so the executor
                 # opens the dropdown instead of typing into the closed widget.
                 _coerce_dropdown_actions(llm_response, ax_tree, logger)
-                _filter_actionable_llm_actions(llm_response, logger)
+                llm_response.actions = [a for a in llm_response.actions if a.action != ActionType.ASK]
 
                 # ── Required-fields-first gate ────────────────────────────
                 # If the LLM wants to click Next/Continue/Submit/Apply but
@@ -2949,12 +2941,11 @@ class ApplicationEngine:
                 #       eyes on the browser to finish the form.
                 failed_actions = executor.get_failed_actions()
                 if failed_actions:
-                    # Bucket (a): required fields missing a value only.
+                    # Bucket (a): fields missing a value.
                     missing_value = [
                         a for a in failed_actions
                         if a.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT)
                         and not (a.value and str(a.value).strip())
-                        and a.required
                     ]
                     # Bucket (b): fields that had a value but the selector
                     # refused it.
@@ -3020,23 +3011,13 @@ class ApplicationEngine:
                             value=act.value,
                         )
 
-                    still_broken = [
-                        a for a in (selector_failed + retry_failed)
-                        if a.required or (
-                            a.value and str(a.value).strip()
-                            and a.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT)
-                        )
-                    ]
+                    still_broken = selector_failed + retry_failed
 
                     # If clicking buttons failed and that was the only thing that failed, we must not
                     # swallow it! Catch the un-filtered failures so we don't infinitely skip them.
                     if not still_broken and failed_actions:
-                        still_broken = [
-                            a for a in failed_actions
-                            if a.required or a.action == ActionType.CLICK
-                        ]
+                        still_broken = failed_actions
 
-                    handoff = None
                     if still_broken:
                         resolved_count = 0
                         if self.config.interaction_mode != InteractionMode.AUTO:
@@ -3098,18 +3079,17 @@ class ApplicationEngine:
                                 ),
                                 hint="When done, press ENTER and JobCLI will continue.",
                             )
-                        if handoff is not None:
-                            if handoff.cancelled:
-                                logger.log_phase_end(ExecutionPhase.LLM, False)
-                                return False
-                            page = handoff.page
-                            agent.page = page
-                            # Human may have advanced the form — re-extract so the
-                            # next iteration sees the updated page.
-                            try:
-                                ax_tree = extractor.extract()
-                            except Exception:
-                                pass
+                        if handoff.cancelled:
+                            logger.log_phase_end(ExecutionPhase.LLM, False)
+                            return False
+                        page = handoff.page
+                        agent.page = page
+                        # Human may have advanced the form — re-extract so the
+                        # next iteration sees the updated page.
+                        try:
+                            ax_tree = extractor.extract()
+                        except Exception:
+                            pass
 
                 if not failed_actions and not ask_actions:
                     agent.show_success("All actions completed.")
@@ -3417,7 +3397,7 @@ class ApplicationEngine:
                 _strip_apply_clicks_when_filling_only(llm_response, "fill_empty_fields_only")
                 _strip_third_party_apply_clicks(llm_response, logger)
                 _coerce_dropdown_actions(llm_response, ax_tree, logger)
-                _filter_actionable_llm_actions(llm_response, logger)
+                llm_response.actions = [a for a in llm_response.actions if a.action != ActionType.ASK]
 
                 # Required-fields-first gate (same as the inner loop).
                 non_advance2, advance2 = _split_off_advance_clicks(llm_response)
@@ -3630,8 +3610,10 @@ class ApplicationEngine:
                 return False
 
             # ── Confirm submission (integrated checkpoint) ────────────────
+            self._form_ready_for_submit = True
             if not agent.confirm_submission():
                 agent.show_warning("Submission declined by user.")
+                self._submit_declined_by_user = True
                 logger.log_phase_end(ExecutionPhase.LLM, False)
                 return False
 

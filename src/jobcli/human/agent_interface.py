@@ -272,19 +272,11 @@ class AgentInterface:
             self.ats_type = ats_type
 
     @staticmethod
-    def _normalize_field_label(field_label: str) -> str:
-        """Strip Rich markup and prompt suffixes so DB keys stay stable."""
-        import re
-
-        s = re.sub(r"\[/?[^\]]+\]", "", field_label or "").strip()
-        s = re.sub(r"\s*\(optional[^)]*\)\s*$", "", s, flags=re.I).strip()
-        s = re.sub(r"\s*\*required\s*$", "", s, flags=re.I).strip()
-        return s
-
-    @staticmethod
     def _strip_prompt_markup(field_label: str) -> str:
         """Remove Rich markup suffixes from labels used in terminal prompts."""
-        return AgentInterface._normalize_field_label(field_label)
+        import re
+
+        return re.sub(r"\[/?[^\]]+\]", "", field_label or "").strip()
 
     def _read_browser_field_value(self, field_label: str) -> Optional[str]:
         """Return the live DOM value for *field_label*, if the user already filled it."""
@@ -353,11 +345,7 @@ class AgentInterface:
             return False
         self._saved_this_session.add(key)
         saved = self.memory.save_field_answer(
-            self._normalize_field_label(field_label),
-            value,
-            self.ats_type,
-            success=True,
-            source="human",
+            field_label, value, self.ats_type, success=True, source="human"
         )
         if saved and self.logger:
             self.logger.info(
@@ -681,8 +669,9 @@ class AgentInterface:
         )
         self.get_attention()
         try:
-            res = self._get_user_input("  Submit now? (y/n) [y]: ", default="y")
-            return res.lower().startswith("y") or res == ""
+            # Reuse ask_yes_no so y/yes/Y, Enter (default yes), and whitespace
+            # all behave consistently — bare startswith("y") rejected " y".
+            return self.ask_yes_no("  Submit now?", default=True)
         finally:
             self.clear_browser_overlay()
 
@@ -856,7 +845,7 @@ class AgentInterface:
         except Exception:
             pass
 
-        advanced = bool(url_after) and url_after != url_before
+        advanced = _urls_meaningfully_different(url_before, url_after)
 
         if advanced:
             self.show_success(
@@ -1161,9 +1150,22 @@ class AgentInterface:
         *,
         dropdown_options_by_selector: Optional[dict[str, list[str]]] = None,
     ) -> list[BrowserAction]:
-        """For each failed **required** field: try DB first, then prompt human.
+        """For each failed field: try DB first, then prompt human.
 
-        Optional fields are never prompted — leave them blank on the form.
+        Splits failed fields into two tiers:
+
+        * **Required** — the field's ``required`` flag is true (propagated
+          from the AX tree). Prompted first, one by one, with a red
+          ``*required`` tag so the user can't miss them.
+        * **Optional** — everything else. Shown afterwards in a dim section
+          with ``(optional, press Enter to skip)``; the user can skip any
+          of them by pressing Enter.
+
+        Returns a list of new :class:`BrowserAction` objects with the
+        collected values populated, ready to be re-executed against the
+        browser. Every human-supplied answer is also saved to the DB (via
+        ``request_field_input`` → ``AgentMemory.save_field_answer``) so
+        the next job on this ATS reuses it automatically.
         """
         if not failed_actions:
             return []
@@ -1172,21 +1174,27 @@ class AgentInterface:
             a for a in failed_actions
             if a.action in (ActionType.SELECT, ActionType.FILL, ActionType.TYPE)
             and not (a.value and a.value.strip())
-            and a.required
         ]
         if not actionable:
             return []
 
-        required = actionable
+        # Split into required vs optional. We rely on the AX-tree-driven
+        # ``required`` flag that the LLM client propagates onto each
+        # action; anything unmarked is treated as optional.
+        required = [a for a in actionable if a.required]
+        optional = [a for a in actionable if not a.required]
 
+        # Header banner — clear "agent stopped" signal with counts so the
+        # user sees the scope at a glance.
         if self.mode != InteractionMode.AUTO:
             self.console.print(
                 Panel(
                     (
-                        f"[bold]Required fields needing input:[/bold] [yellow]{len(required)}[/yellow]\n"
-                        "[dim]Only fields marked * on the form are prompted. "
-                        "Type [bold]skip[/bold] to leave a required field blank. "
-                        "Type [bold]q[/bold] / [bold]quit[/bold] to exit JobCLI.[/dim]"
+                        f"[bold]Required fields:[/bold] [yellow]{len(required)}[/yellow]    "
+                        f"[dim]Optional fields:[/dim] [dim]{len(optional)}[/dim]\n"
+                        "[dim]Required fields must be answered. Optional fields can be "
+                        "skipped by pressing Enter. Every answer you give is saved and "
+                        "reused on future applications.[/dim]"
                     ),
                     title="[bold yellow]>>> AGENT PAUSED — REVIEW NEEDED <<<[/bold yellow]",
                     border_style="yellow",
@@ -1195,16 +1203,19 @@ class AgentInterface:
 
         filled: list[BrowserAction] = []
 
-        def _collect(act: BrowserAction) -> None:
+        def _collect(act: BrowserAction, label_suffix: str) -> None:
             label = act.field_label or act.selector
             options = (dropdown_options_by_selector or {}).get(act.selector)
             answer = self.request_field_input(
-                label,
+                f"{label}{label_suffix}",
                 options=options,
-                required=True,
+                required=act.required,
+                prompt_optional=not act.required,
             )
             if not answer:
                 return
+            # Coerce FILL → SELECT when the field is a known dropdown so the
+            # executor uses the dropdown-friendly strategy.
             action_type = act.action
             if options and action_type in (ActionType.FILL, ActionType.TYPE):
                 action_type = ActionType.SELECT
@@ -1218,7 +1229,14 @@ class AgentInterface:
                 f"[dim](must answer, {len(required)} total)[/dim]"
             )
             for act in required:
-                _collect(act)
+                _collect(act, "  [red]*required[/red]")
+
+        if optional and self.mode != InteractionMode.AUTO:
+            self.console.print(
+                f"\n  [dim]Optional fields ({len(optional)} total — press Enter to skip)[/dim]"
+            )
+            for act in optional:
+                _collect(act, "  [dim](optional, Enter to skip)[/dim]")
 
         return filled
 

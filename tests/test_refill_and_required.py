@@ -613,10 +613,11 @@ class TestShowFailedFieldsTwoTier:
         out = agent.show_failed_fields(acts)
         assert len(out) == 1
         assert out[0].value == "Jane"
+        # The label string passed to request_field_input includes the *required marker.
         args, _ = agent.request_field_input.call_args
-        assert args[0] == "First Name"
+        assert "*required" in args[0]
 
-    def test_show_failed_fields_only_optional_suppressed(self):
+    def test_show_failed_fields_only_optional_uses_optional_hint(self):
         agent = _make_agent()
         agent.request_field_input = MagicMock(return_value="github.com/jane")
         acts = [
@@ -628,12 +629,15 @@ class TestShowFailedFieldsTwoTier:
             ),
         ]
         out = agent.show_failed_fields(acts)
-        assert out == []
-        agent.request_field_input.assert_not_called()
+        assert len(out) == 1
+        args, _ = agent.request_field_input.call_args
+        assert "optional" in args[0].lower()
+        assert "skip" in args[0].lower()
 
-    def test_show_failed_fields_required_prompted_optional_ignored(self):
+    def test_show_failed_fields_required_prompted_before_optional(self):
         agent = _make_agent()
-        agent.request_field_input = MagicMock(side_effect=["v1", "v2"])
+        # Each call returns a distinct value so we can verify order.
+        agent.request_field_input = MagicMock(side_effect=["v1", "v2", "v3", "v4"])
         acts = [
             BrowserAction(
                 action=ActionType.FILL,
@@ -660,16 +664,21 @@ class TestShowFailedFieldsTwoTier:
                 required=True,
             ),
         ]
-        out = agent.show_failed_fields(acts)
-        assert len(out) == 2
-        assert agent.request_field_input.call_count == 2
+        agent.show_failed_fields(acts)
         prompted_labels = [c.args[0] for c in agent.request_field_input.call_args_list]
-        assert "Required 1" in prompted_labels
-        assert "Required 2" in prompted_labels
-        assert not any("Optional" in lbl for lbl in prompted_labels)
+        # Required prompts must precede optional prompts in the call list,
+        # regardless of input ordering.
+        first_optional_idx = next(
+            i for i, lbl in enumerate(prompted_labels) if "optional" in lbl.lower()
+        )
+        first_required_idx = next(
+            i for i, lbl in enumerate(prompted_labels) if "*required" in lbl
+        )
+        assert first_required_idx < first_optional_idx
 
     def test_show_failed_fields_blank_answer_skips_action(self):
         agent = _make_agent()
+        # Required gets "Jane"; optional gets None (user pressed Enter to skip).
         agent.request_field_input = MagicMock(side_effect=["Jane", None])
         acts = [
             BrowserAction(
@@ -677,6 +686,12 @@ class TestShowFailedFieldsTwoTier:
                 selector="#first_name",
                 field_label="First Name",
                 required=True,
+            ),
+            BrowserAction(
+                action=ActionType.FILL,
+                selector="#github",
+                field_label="GitHub URL",
+                required=False,
             ),
         ]
         out = agent.show_failed_fields(acts)
@@ -847,6 +862,30 @@ class TestConstantsSync:
 
     def test_extension_settle_constant_value(self):
         assert ApplicationEngine.EXTENSION_AUTOFILL_SETTLE_MS == 2500
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Group 8 — Submit confirm + handoff URL semantics
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestSubmitConfirmAndHandoffUrl:
+    def test_urls_meaningfully_different_ignores_hash_and_query(self):
+        from jobcli.orchestration.engine import _urls_meaningfully_different
+
+        base = "https://jobs.lever.co/trellis/abc/apply"
+        assert not _urls_meaningfully_different(base, base + "#section")
+        assert not _urls_meaningfully_different(base, base + "?ref=1")
+        assert _urls_meaningfully_different(base, base.replace("/apply", "/thanks"))
+
+    def test_confirm_submission_accepts_y_with_whitespace(self):
+        agent = _make_agent()
+        agent.show_browser_overlay = MagicMock()
+        agent.clear_browser_overlay = MagicMock()
+        agent.get_attention = MagicMock()
+        agent.ask_yes_no = MagicMock(return_value=True)
+        assert agent.confirm_submission() is True
+        agent.ask_yes_no.assert_called_once()
 
 
 # ──────────────────────────────────────────────────────────────────────
