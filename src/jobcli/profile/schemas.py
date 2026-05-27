@@ -487,8 +487,11 @@ class Config(BaseModel):
     log_directory: str = Field(default="~/.jobcli/logs")
     database_path: str = Field(default="~/.jobcli/jobcli.db")
 
-    # WBL HTTP API (JobCLI discover / sync); persisted by setup/login. Env overrides: JOBCLI_SYNC_SERVER_URL, NEXT_PUBLIC_API_URL
+    # WBL HTTP API base for discover/sync; persisted by setup/login.
     sync_server_url: Optional[str] = None
+
+    # Usage analytics
+    tracking_enabled: bool = True
 
     # Derived profile: infer country from US city/state when country blank
     infer_location_country: bool = True

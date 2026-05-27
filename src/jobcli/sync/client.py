@@ -15,14 +15,7 @@ _DEFAULT_WBL_API_BASE = "https://api.whitebox-learning.com/api"
 # that authenticates wins and is cached in local config. The user is never
 # prompted for an API base URL.
 #
-# Only the production WBL API is probed — the legacy ``127.0.0.1:8000``
-# local-backend candidate was removed because (a) running both probes against
-# every login wasted ~5s on the localhost connection refusal on the vast
-# majority of machines where no local backend was running, and (b) the
-# resulting "WBL login failed" error block confusingly showed a
-# ``connection failed`` for localhost even when the production endpoint was
-# the real problem. Developers running a local FastAPI can still point at it
-# manually via ``jobcli config --key sync_server_url --set http://127.0.0.1:8000/api``.
+# Only the production WBL API is probed.
 WBL_API_CANDIDATES: tuple[str, ...] = (
     "https://api.whitebox-learning.com/api",
 )
@@ -195,8 +188,8 @@ _api_suffix_warned = False
 def _normalize_wbl_api_base(url: str) -> str:
     """Ensure base URL ends with ``/api`` (WBL mounts ``/login``, ``/positions/*`` there).
 
-    If ``sync_server_url`` is saved as ``http://127.0.0.1:8000``, requests would
-    otherwise hit ``/login`` and return 404; the real route is ``/api/login``.
+    If ``sync_server_url`` is saved without ``/api``, requests would otherwise
+    hit ``/login`` and return 404; the real route is ``/api/login``.
     """
     global _api_suffix_warned
     u = url.strip().rstrip("/")
@@ -249,13 +242,16 @@ class SyncClient:
         return self._get_server_url()
 
     def _get_server_url(self) -> str:
+        """Resolve WBL API base URL.
+
+        Uses the saved ``sync_server_url`` when present, otherwise falls back
+        to the production WBL API base.
+        """
         cfg = self._resolve_config()
-        url = (cfg.sync_server_url or "").strip()
-        if not url:
-            url = os.getenv("JOBCLI_SYNC_SERVER_URL") or os.getenv("NEXT_PUBLIC_API_URL") or ""
-        if not url:
-            url = _DEFAULT_WBL_API_BASE
-        return _normalize_wbl_api_base(url)
+        configured = (cfg.sync_server_url or "").strip()
+        if configured:
+            return _normalize_wbl_api_base(configured)
+        return _normalize_wbl_api_base(_DEFAULT_WBL_API_BASE)
 
     def login(self) -> bool:
         """Authenticate with the WBL API and store token/candidate_id.
@@ -278,7 +274,9 @@ class SyncClient:
         candidates: list[str] = []
         saved = (cfg.sync_server_url or "").strip()
         if saved:
-            candidates.append(_normalize_wbl_api_base(saved))
+            norm_saved = _normalize_wbl_api_base(saved)
+            if norm_saved not in candidates:
+                candidates.append(norm_saved)
         for c in WBL_API_CANDIDATES:
             norm = _normalize_wbl_api_base(c)
             if norm not in candidates:
@@ -619,6 +617,33 @@ class SyncClient:
 
         response = requests.post(url, json=payload, headers=headers, timeout=20, verify=_requests_verify())
         response.raise_for_status()
+        return response.json()
+
+    def upload_usage_events(self, events: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Upload usage analytics events in bulk."""
+        if not events:
+            return {"status": "skipped", "ingested": 0}
+        headers = self.get_auth_headers()
+        if "Authorization" not in headers:
+            return {"status": "error", "message": "Authentication required for analytics sync"}
+        headers["Content-Type"] = "application/json"
+        url = f"{self._get_server_url()}/analytics/usage_events/bulk"
+        response = requests.post(
+            url,
+            json={"events": events},
+            headers=headers,
+            timeout=20,
+            verify=_requests_verify(),
+        )
+        if not response.ok:
+            detail = response.text[:600] if response.text else f"HTTP {response.status_code}"
+            logger.error(
+                "Analytics bulk upload failed (%s %s): %s",
+                response.status_code,
+                url,
+                detail,
+            )
+            response.raise_for_status()
         return response.json()
 
 

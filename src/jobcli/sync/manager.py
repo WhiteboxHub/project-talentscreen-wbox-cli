@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from jobcli.storage.models import Database, SyncMetadataModel
 from jobcli.storage.repositories import JobRepository
 from jobcli.sync import client, extractor, sqlite_merger
+from jobcli.analytics.service import flush_usage_events
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +119,11 @@ class SyncManager:
                 version=new_version or self._metadata.last_version,
                 downloaded_count=downloaded
             )
-            
+
+            usage_results = flush_usage_events(Database(str(self.session.bind.url)))
+            results["usage_sync_status"] = usage_results.get("status")
+            results["usage_event_count"] = usage_results.get("count", 0)
+
             logger.info("Synchronization complete.")
             
         except Exception as e:
