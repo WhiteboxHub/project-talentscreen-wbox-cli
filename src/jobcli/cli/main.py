@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -29,6 +30,12 @@ from jobcli.storage.repositories import (
     UserDataRepository,
 )
 from jobcli.utils.constants import DASHBOARD_SUMMARY_DAYS, REFERENCE_LINKS_COUNT, SUPPORTED_DOMAINS
+from jobcli.analytics.service import (
+    build_apply_run_log,
+    flush_usage_events,
+    resolve_user_id,
+    track_usage_event,
+)
 
 app = typer.Typer(
     name="wboxcli",
@@ -85,11 +92,8 @@ def _suggest_after_login_or_resume() -> tuple[str, str]:
         return "setup", "download the TalentScreen extension and verify your setup"
     return "discover", "pull job listings from WBL"
 
-# ``wboxcli config --key`` accepts these env-style names as aliases for the stored field.
-CONFIG_CMD_KEY_ALIASES: dict[str, str] = {
-    "JOBCLI_SYNC_SERVER_URL": "sync_server_url",
-    "NEXT_PUBLIC_API_URL": "sync_server_url",
-}
+# ``wboxcli config --key`` aliases for stored fields.
+CONFIG_CMD_KEY_ALIASES: dict[str, str] = {}
 
 
 def ensure_config_dir() -> None:
@@ -152,6 +156,60 @@ def save_config(config: Config) -> None:
     config_repo = ConfigRepository(session)
     config_repo.save_config(config)
     session.close()
+
+
+def _track_command_event(
+    *,
+    db: Database,
+    config: Config,
+    command: str,
+    started_at: float,
+    result: str,
+    jobs_attempted_count: Optional[int] = None,
+    jobs_submitted_count: Optional[int] = None,
+    jobs_failed_count: Optional[int] = None,
+    metadata: Optional[dict] = None,
+    processed_job_ids: Optional[list[int]] = None,
+    exit_reason: Optional[str] = None,
+) -> None:
+    if not config.tracking_enabled:
+        return
+    try:
+        duration_ms = int((time.time() - started_at) * 1000)
+        user_id = resolve_user_id(config.job_board_username)
+        md = dict(metadata or {})
+        if command == "apply":
+            run_log = build_apply_run_log(
+                db,
+                config=config,
+                user_id=user_id,
+                result=result,
+                run_started_at=started_at,
+                jobs_attempted_count=int(jobs_attempted_count or 0),
+                jobs_submitted_count=int(jobs_submitted_count or 0),
+                jobs_failed_count=int(jobs_failed_count or 0),
+                processed_job_ids=processed_job_ids or [],
+                exit_reason=exit_reason,
+            )
+            md["apply_run_log"] = run_log
+            md["apply_summary"] = run_log.get("summary", {})
+        track_usage_event(
+            db,
+            user_id=user_id,
+            event_name="cli_command_completed",
+            command=command,
+            result=result,
+            duration_ms=duration_ms,
+            jobs_attempted_count=jobs_attempted_count,
+            jobs_submitted_count=jobs_submitted_count,
+            jobs_failed_count=jobs_failed_count,
+            metadata=md,
+        )
+        # Best-effort immediate upload so analytics reaches backend even if the
+        # user closes the terminal before running an explicit "wboxcli sync".
+        flush_usage_events(db, batch_size=50)
+    except Exception:
+        pass
 
 
 def _require_wbl_credentials_for_discovery(config: Config) -> None:
@@ -472,6 +530,7 @@ def setup() -> None:
     Run ``login`` first to save credentials (no ``.env`` file is used). Then ``setup`` will
     pick those up from local config and continue with resume, discover, and a browser test.
     """
+    started_at = time.time()
     console.print("[bold cyan]╔══════════════════════════════════════╗[/bold cyan]")
     console.print("[bold cyan]║       W-BOX CLI — One-Shot Setup     ║[/bold cyan]")
     console.print("[bold cyan]╚══════════════════════════════════════╝[/bold cyan]\n")
@@ -675,6 +734,14 @@ def setup() -> None:
             _print_next_step("resume-upload --pdf <file.pdf> --json <file.json>", "load your resume")
         else:
             _print_next_step("setup", "re-run after fixing the issues above")
+    _track_command_event(
+        db=db,
+        config=config,
+        command="setup",
+        started_at=started_at,
+        result="success" if (has_llm and resume_loaded and browser_ok) else "warning",
+        metadata={"jobs_found": jobs_found},
+    )
 
 
 @app.command()
@@ -682,12 +749,21 @@ def login(
     auto: bool = typer.Option(False, "--auto", help="Skip prompts if credentials already saved in local config"),
 ) -> None:
     """Configure credentials for job boards and LLM APIs."""
+    started_at = time.time()
     console.print("[bold cyan]JobCLI Login[/bold cyan]\n")
 
     config = get_config()
     
     if auto and config.job_board_username and (config.openai_api_key or config.anthropic_api_key or config.gemini_api_key):
         console.print("[green]✓ Credentials already saved in local config. Skipping manual entry.[/green]")
+        _track_command_event(
+            db=get_database(),
+            config=config,
+            command="login",
+            started_at=started_at,
+            result="success",
+            metadata={"auto": True},
+        )
         return
 
     # Job board credentials
@@ -709,10 +785,7 @@ def login(
     # Auto-detect the WBL API base URL. Only one endpoint is probed:
     #   - https://api.whitebox-learning.com/api   (production)
     # Probe it with the supplied credentials and save it if authentication
-    # succeeds. The legacy ``127.0.0.1:8000`` localhost probe was removed
-    # because it added noise to error messages on machines with no local
-    # backend running. Developers who need a local backend can still set it
-    # explicitly via ``wboxcli config --key sync_server_url --set <url>``.
+    # succeeds.
     # If the probe uncovers actionable issues (bad creds, TLS) we surface a
     # concise warning.
     from jobcli.sync.client import (
@@ -803,6 +876,14 @@ def login(
         console.print(f"[yellow]⚠ {line}[/yellow]")
     cmd, hint = _suggest_after_login_or_resume()
     _print_next_step(cmd, hint)
+    _track_command_event(
+        db=get_database(),
+        config=config,
+        command="login",
+        started_at=started_at,
+        result="success",
+        metadata={"warnings": len(probe_warning_lines)},
+    )
 
 
 @app.command(name="config")
@@ -812,7 +893,7 @@ def config_cmd(
 ) -> None:
     """View or modify configuration.
 
-    Use ``sync_server_url`` for the WBL API base (aliases: JOBCLI_SYNC_SERVER_URL, NEXT_PUBLIC_API_URL), e.g.:
+    Use ``sync_server_url`` for the WBL API base, e.g.:
 
         wboxcli config --key sync_server_url --set https://api.whitebox-learning.com/api
     """
@@ -1044,6 +1125,7 @@ def _run_apply(
         reset_exit_flag,
     )
 
+    started_at = time.time()
     console.print("[bold cyan]Job Application[/bold cyan]\n")
 
     # Install the SIGINT handler before we touch any blocking primitive so
@@ -1169,6 +1251,7 @@ def _run_apply(
     skipped = 0
     failed = 0
     processed = 0
+    processed_job_ids: list[int] = []
     exit_reason: Optional[str] = None
     interrupted_at_index: Optional[int] = None
     interrupted_job_id: Optional[int] = None
@@ -1190,6 +1273,8 @@ def _run_apply(
                     status = engine.apply_to_job(job)
                     console.print(f"Status: [green]{status.value}[/green]\n")
                     processed += 1
+                    if job.id is not None:
+                        processed_job_ids.append(job.id)
                     # Match on the enum value to avoid importing every status.
                     sv = getattr(status, "value", str(status)).lower()
                     if "submit" in sv or "success" in sv or "complete" in sv:
@@ -1215,6 +1300,8 @@ def _run_apply(
                     console.print(f"[red]Error: {e}[/red]\n")
                     failed += 1
                     processed += 1
+                    if job.id is not None:
+                        processed_job_ids.append(job.id)
                     continue
         except ExitRequested as ex:
             # ExitRequested raised by ``engine.start_session()`` (i.e. user
@@ -1327,8 +1414,31 @@ def _run_apply(
             )
         # User-initiated exit is success (0), not an error — consistent
         # with Unix shells (Ctrl+C generally exits programs gracefully).
+        _track_command_event(
+            db=db,
+            config=config,
+            command="apply",
+            started_at=started_at,
+            result="interrupted",
+            jobs_attempted_count=processed,
+            jobs_submitted_count=submitted,
+            jobs_failed_count=failed,
+            processed_job_ids=processed_job_ids,
+            exit_reason=exit_reason,
+        )
         raise typer.Exit(0)
 
+    _track_command_event(
+        db=db,
+        config=config,
+        command="apply",
+        started_at=started_at,
+        result="success",
+        jobs_attempted_count=processed,
+        jobs_submitted_count=submitted,
+        jobs_failed_count=failed,
+        processed_job_ids=processed_job_ids,
+    )
     _print_next_step("discover", "refresh listings, then run apply again")
 
 
@@ -1406,6 +1516,7 @@ def discover(
     ``JOBCLI_DISCOVER_PAGE_SIZE``, ``JOBCLI_DISCOVER_STATUS``. Use ``--legacy-ui``
     only for the old dashboard scraper.
     """
+    started_at = time.time()
     console.print("[bold cyan]Job Discovery[/bold cyan]\n")
 
     config = get_config()
@@ -1428,6 +1539,14 @@ def discover(
         else:
             console.print("\n[yellow]No jobs imported (empty window or missing credentials).[/yellow]")
             _print_next_step("login", "verify credentials & API base URL, then re-run discover")
+        _track_command_event(
+            db=db,
+            config=config,
+            command="discover",
+            started_at=started_at,
+            result="success",
+            metadata={"jobs_imported": len(new_jobs)},
+        )
 
     except Exception as e:
         msg = str(e)
@@ -1440,6 +1559,13 @@ def discover(
         else:
             console.print(f"\n[red]Discovery failed: {e}[/red]")
             _print_next_step("login", "fix credentials / API base URL, then re-run discover")
+        _track_command_event(
+            db=db,
+            config=config,
+            command="discover",
+            started_at=started_at,
+            result="error",
+        )
     finally:
         session.close()
 
@@ -1553,7 +1679,9 @@ def doctor_cmd(
 @app.command("sync")
 def sync_cmd() -> None:
     """Sync learned knowledge and job activity with the central server."""
+    started_at = time.time()
     db = get_database()
+    cfg = get_config()
     with db.get_session() as session:
         from jobcli.sync.manager import SyncManager
         manager = SyncManager(session)
@@ -1584,10 +1712,27 @@ def sync_cmd() -> None:
                     console.print(f"  [yellow]⚠[/yellow] Activity sync failed: {results.get('activity_error')}")
 
                 console.print("\n[bold green]✓ Synchronization complete[/bold green]")
+                _track_command_event(
+                    db=db,
+                    config=cfg,
+                    command="sync",
+                    started_at=started_at,
+                    result="success",
+                    metadata={"activity_count": results.get("activity_count", 0), "usage_event_count": results.get("usage_event_count", 0)},
+                )
+                from jobcli.analytics.service import flush_usage_events as _flush_usage_events
+
+                post_sync = _flush_usage_events(db)
+                if post_sync.get("status") == "success" and post_sync.get("count", 0) > 0:
+                    console.print(
+                        f"  [green]✓[/green] Uploaded {post_sync['count']} usage analytics event(s)"
+                    )
             else:
                 console.print(f"[red]Sync failed: {results['error']}[/red]")
+                _track_command_event(db=db, config=cfg, command="sync", started_at=started_at, result="error")
         except Exception as e:
             console.print(f"[red]Sync error: {e}[/red]")
+            _track_command_event(db=db, config=cfg, command="sync", started_at=started_at, result="error")
 
 
 

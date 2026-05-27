@@ -4,6 +4,7 @@ import os
 import subprocess
 import signal
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Set
 from queue import Queue
@@ -17,6 +18,7 @@ from jobcli.orchestration.engine import ApplicationEngine
 from jobcli.profile.schemas import Config, ResumeData, ApplicationStatus, Job
 from jobcli.storage.models import Database
 from jobcli.storage.repositories import UserDataRepository, JobRepository, ConfigRepository
+from jobcli.storage.repositories import AnalyticsEventRepository
 
 app = FastAPI(title="JobCLI Control Center API")
 
@@ -310,6 +312,10 @@ class UserInputRequest(BaseModel):
     field_name: str
     value: str
 
+
+class UsageEventsBulkRequest(BaseModel):
+    events: List[Dict[str, Any]]
+
 # Global session storage for tracking active applications
 active_sessions: Dict[str, Dict[str, Any]] = {}
 session_input_queues: Dict[str, Queue] = {}
@@ -513,6 +519,50 @@ async def discover_jobs(background_tasks: BackgroundTasks):
     
     background_tasks.add_task(run_discover)
     return {"message": "Discovery started"}
+
+
+@app.post("/api/analytics/usage_events/bulk")
+async def ingest_usage_events(request: UsageEventsBulkRequest):
+    """Ingest usage analytics events for dashboarding."""
+    db_path = os.getenv("DATABASE_PATH", "~/.jobcli/jobcli.db")
+    db_path = os.path.expandvars(os.path.expanduser(db_path))
+    db = Database(f"sqlite:///{Path(db_path).as_posix()}")
+    with db.get_session() as session:
+        repo = AnalyticsEventRepository(session)
+        normalized: list[dict[str, Any]] = []
+        for event in request.events:
+            row = dict(event)
+            ts = row.get("event_ts")
+            if isinstance(ts, str):
+                try:
+                    row["event_ts"] = datetime.fromisoformat(ts.replace("Z", "+00:00")).replace(tzinfo=None)
+                except ValueError:
+                    row["event_ts"] = datetime.now()
+            normalized.append(row)
+        ingested = repo.ingest_events(normalized)
+        return {"status": "success", "ingested": ingested}
+
+
+@app.get("/api/analytics/summary")
+async def analytics_summary():
+    """Return global analytics counters for admin dashboards."""
+    db_path = os.getenv("DATABASE_PATH", "~/.jobcli/jobcli.db")
+    db_path = os.path.expandvars(os.path.expanduser(db_path))
+    db = Database(f"sqlite:///{Path(db_path).as_posix()}")
+    with db.get_session() as session:
+        summary = AnalyticsEventRepository(session).global_summary()
+        return {"status": "success", "summary": summary}
+
+
+@app.get("/api/analytics/users/{user_id}/applications/summary")
+async def analytics_user_summary(user_id: str):
+    """Return per-user application analytics summary."""
+    db_path = os.getenv("DATABASE_PATH", "~/.jobcli/jobcli.db")
+    db_path = os.path.expandvars(os.path.expanduser(db_path))
+    db = Database(f"sqlite:///{Path(db_path).as_posix()}")
+    with db.get_session() as session:
+        summary = AnalyticsEventRepository(session).per_user_summary(user_id)
+        return {"status": "success", "summary": summary}
 
 # Mount the static files
 ui_dist = Path(__file__).parent.parent.parent / "ui" / "dist"

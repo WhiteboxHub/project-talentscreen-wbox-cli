@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import Integer, or_, update, nullslast
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from jobcli.ats.schemas.locator_schemas import LearnedLocator
@@ -32,6 +33,8 @@ from jobcli.storage.models import (
     InteractionLogModel,
     JobModel,
     LearnedLocatorModel,
+    UsageEventQueueModel,
+    AnalyticsEventModel,
     SyncMetadataModel,
     UserDataModel,
 )
@@ -1258,3 +1261,109 @@ class SyncMetadataRepository:
         """Return the number of applications completed since the last sync."""
         row = self.get_or_create()
         return row.apps_since_sync or 0
+
+
+class UsageEventQueueRepository:
+    """Repository for local usage event outbox queue."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def enqueue(self, *, user_id: str, event_name: str, command: Optional[str], result: Optional[str], event_ts: datetime, duration_ms: Optional[int], payload: dict[str, Any]) -> None:
+        row = UsageEventQueueModel(
+            user_id=user_id,
+            event_name=event_name,
+            command=command,
+            result=result,
+            event_ts=event_ts,
+            duration_ms=duration_ms,
+            payload=payload,
+            status="queued",
+            attempts=0,
+        )
+        self.session.add(row)
+        self.session.commit()
+
+    def list_ready(self, limit: int = 50) -> list[UsageEventQueueModel]:
+        now = datetime.now()
+        return (
+            self.session.query(UsageEventQueueModel)
+            .filter(
+                UsageEventQueueModel.status == "queued",
+                or_(UsageEventQueueModel.next_retry_at.is_(None), UsageEventQueueModel.next_retry_at <= now),
+            )
+            .order_by(UsageEventQueueModel.id.asc())
+            .limit(max(1, limit))
+            .all()
+        )
+
+    def mark_sent(self, rows: list[UsageEventQueueModel]) -> None:
+        if not rows:
+            return
+        now = datetime.now()
+        for row in rows:
+            row.status = "sent"
+            row.sent_at = now
+            row.next_retry_at = None
+        self.session.commit()
+
+    def mark_retry(self, rows: list[UsageEventQueueModel], retry_after_seconds: int) -> None:
+        if not rows:
+            return
+        retry_at = datetime.now().timestamp() + max(1, retry_after_seconds)
+        retry_dt = datetime.fromtimestamp(retry_at)
+        for row in rows:
+            row.attempts = int(row.attempts or 0) + 1
+            row.next_retry_at = retry_dt
+        self.session.commit()
+
+
+class AnalyticsEventRepository:
+    """Repository for persisted analytics dashboard data."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def ingest_events(self, events: list[dict[str, Any]]) -> int:
+        count = 0
+        for e in events:
+            row = AnalyticsEventModel(
+                user_id=str(e.get("user_id") or ""),
+                event_name=str(e.get("event_name") or ""),
+                command=e.get("command"),
+                result=e.get("result"),
+                event_ts=e.get("event_ts") or datetime.now(),
+                duration_ms=e.get("duration_ms"),
+                jobs_attempted_count=e.get("jobs_attempted_count"),
+                jobs_submitted_count=e.get("jobs_submitted_count"),
+                jobs_failed_count=e.get("jobs_failed_count"),
+                event_metadata=e.get("metadata") or {},
+            )
+            self.session.add(row)
+            count += 1
+        self.session.commit()
+        return count
+
+    def global_summary(self) -> dict[str, int]:
+        total_events = self.session.query(func.count(AnalyticsEventModel.id)).scalar() or 0
+        total_users = self.session.query(func.count(func.distinct(AnalyticsEventModel.user_id))).scalar() or 0
+        total_jobs_attempted = self.session.query(func.coalesce(func.sum(AnalyticsEventModel.jobs_attempted_count), 0)).scalar() or 0
+        total_jobs_submitted = self.session.query(func.coalesce(func.sum(AnalyticsEventModel.jobs_submitted_count), 0)).scalar() or 0
+        total_jobs_failed = self.session.query(func.coalesce(func.sum(AnalyticsEventModel.jobs_failed_count), 0)).scalar() or 0
+        return {
+            "total_events": int(total_events),
+            "total_users": int(total_users),
+            "total_jobs_attempted": int(total_jobs_attempted),
+            "total_jobs_submitted": int(total_jobs_submitted),
+            "total_jobs_failed": int(total_jobs_failed),
+        }
+
+    def per_user_summary(self, user_id: str) -> dict[str, Any]:
+        rows = self.session.query(AnalyticsEventModel).filter(AnalyticsEventModel.user_id == user_id).all()
+        return {
+            "user_id": user_id,
+            "events": len(rows),
+            "jobs_attempted": sum(int(r.jobs_attempted_count or 0) for r in rows),
+            "jobs_submitted": sum(int(r.jobs_submitted_count or 0) for r in rows),
+            "jobs_failed": sum(int(r.jobs_failed_count or 0) for r in rows),
+        }

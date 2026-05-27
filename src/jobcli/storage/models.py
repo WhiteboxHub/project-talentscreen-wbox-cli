@@ -201,6 +201,45 @@ class SyncMetadataModel(Base):
     updated_at      = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
+class UsageEventQueueModel(Base):
+    """Local usage analytics outbox queued for remote delivery."""
+
+    __tablename__ = "usage_event_queue"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(255), nullable=False)
+    event_name = Column(String(100), nullable=False)
+    command = Column(String(100), nullable=True)
+    result = Column(String(50), nullable=True)
+    event_ts = Column(DateTime, default=datetime.now, nullable=False)
+    duration_ms = Column(Integer, nullable=True)
+    payload = Column(JSON, nullable=False, default=dict)
+    attempts = Column(Integer, default=0, nullable=False)
+    next_retry_at = Column(DateTime, nullable=True)
+    sent_at = Column(DateTime, nullable=True)
+    status = Column(String(32), default="queued", nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+
+class AnalyticsEventModel(Base):
+    """Server-side analytics warehouse rows for dashboard queries."""
+
+    __tablename__ = "analytics_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(255), nullable=False)
+    event_name = Column(String(100), nullable=False)
+    command = Column(String(100), nullable=True)
+    result = Column(String(50), nullable=True)
+    event_ts = Column(DateTime, default=datetime.now, nullable=False)
+    duration_ms = Column(Integer, nullable=True)
+    jobs_attempted_count = Column(Integer, nullable=True)
+    jobs_submitted_count = Column(Integer, nullable=True)
+    jobs_failed_count = Column(Integer, nullable=True)
+    event_metadata = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+
 class Database:
     """Database connection manager."""
 
