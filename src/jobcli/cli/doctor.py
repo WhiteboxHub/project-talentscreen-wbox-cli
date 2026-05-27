@@ -20,7 +20,7 @@ def run_doctor(console: "Console", wbox_smoke: bool = False) -> int:
     bad = "[red]FAIL[/red]"
     warn = "[yellow]WARN[/yellow]"
 
-    console.print("[bold cyan]jobcli doctor[/bold cyan]\n")
+    console.print("[bold cyan]wboxcli doctor[/bold cyan]\n")
 
     # Python
     py = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
@@ -74,7 +74,7 @@ def run_doctor(console: "Console", wbox_smoke: bool = False) -> int:
         if has_board:
             console.print("Job board (Whitebox) credentials: [green]set[/green]")
         else:
-            console.print(f"Job board credentials: {warn} (discover/login flows need `jobcli login`)")
+            console.print(f"Job board credentials: {warn} (discover/login flows need `wboxcli login`)")
     except Exception as e:
         console.print(f"Config load: {bad} ({e})")
         issues += 1
@@ -135,19 +135,25 @@ def run_doctor(console: "Console", wbox_smoke: bool = False) -> int:
     # Browser Extension Auto-Discovery
     try:
         from jobcli.cli.main import get_config
+        from jobcli.utils.extension_helpers import (
+            get_local_extension_zip,
+            maybe_install_local_extension_zip,
+            resolve_extension_dir,
+        )
+
         cfg = get_config()
-        ext_path = cfg.extension_path
-        
-        if not ext_path or not os.path.exists(ext_path):
-            # Mirror the engine's auto-discovery logic
-            discovered = Path(__file__).parent.parent / "extension"
-            if discovered.exists():
-                ext_path = str(discovered.absolute())
-        
-        if ext_path and os.path.exists(ext_path):
-            console.print(f"Browser Extension ({Path(ext_path).name}): {ok}")
+        local_zip = get_local_extension_zip()
+        if local_zip:
+            console.print(f"Extension ZIP ({local_zip.name}): {ok}")
+            maybe_install_local_extension_zip()
+
+        ext_path = resolve_extension_dir(cfg.extension_path)
+        if ext_path and (Path(ext_path) / "manifest.json").is_file():
+            console.print(f"Browser Extension unpacked ({Path(ext_path).name}): {ok}")
         else:
-            console.print(f"Browser Extension: {warn} (not found, automation will rely on rules/AI only)")
+            console.print(
+                f"Browser Extension: {warn} (not found — copy a built ZIP to extension/ and run setup)"
+            )
     except Exception:
         pass
 

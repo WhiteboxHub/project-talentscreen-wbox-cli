@@ -2,6 +2,7 @@
 __pycache__/
 *.py[codz]
 *$py.class
+.DS_Store
 
 # C extensions
 *.so
@@ -75,6 +76,7 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+docs/archive/
 
 # PyBuilder
 .pybuilder/
@@ -230,3 +232,60 @@ logs/**/*.webm
 # macOS duplicate files (created by copy-paste or AirDrop)
 * 2.*
 * 2/
+
+# JobCLI specific: runtime artifacts
+# Execution snapshots (debug system)
+snapshots/
+*.snapshot.json
+
+# Healing patterns (learned selectors)
+healing_patterns.json
+
+# Application memory database
+application_memory.json
+
+# Telemetry data
+telemetry/
+*.telemetry.json
+
+# Trace logs (structured logs for observability)
+traces/
+*.trace.log
+
+# Replay sessions
+replay_sessions/
+
+# Temporary test files
+test_*.pdf
+test_*.docx
+test_resume.*
+test_cover_letter.*
+
+# AI reasoning dumps
+ai_reasoning/
+*.reasoning.json
+
+# Timeline exports
+timeline_*.html
+timeline_*.json
+
+# Failure reports
+failure_reports/
+*_failure_report.html
+
+# Session reports
+*_session_report.txt
+
+# Overlay debug files
+overlay_*.html
+
+# Executable wrappers
+bin/
+
+# Local extension package (ZIP from autofill-extension build)
+extension/*
+!extension/.gitkeep
+
+# JobCLI runtime (local dev + accidental copies)
+.jobcli/
+extension_unpacked/

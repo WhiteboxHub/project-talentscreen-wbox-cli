@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional
 
 from playwright.sync_api import Error, Page, sync_playwright
 
+from jobcli.utils.fill_guard import PLACEHOLDER_VALUES, is_meaningful_value
 from jobcli.utils.logger import JobLogger, global_logger
 from jobcli.profile.schemas import (
     ActionType,
@@ -193,6 +194,18 @@ def _normalize_label(s: str) -> str:
         return ""
     s = s.replace("*", " ").replace(":", " ").replace("?", " ")
     return re.sub(r"\s+", " ", s).strip().lower()
+
+
+def _urls_meaningfully_different(before: str, after: str) -> bool:
+    """True when handoff navigation moved to a different page (not hash/query noise)."""
+    from urllib.parse import urlparse
+
+    if not before or not after:
+        return False
+    b, a = urlparse(before), urlparse(after)
+    if b.netloc.lower() != a.netloc.lower():
+        return True
+    return b.path.rstrip("/") != a.path.rstrip("/")
 
 
 def _build_dropdown_label_set(ax_tree) -> dict[str, dict]:
@@ -870,15 +883,23 @@ class ApplicationEngine:
     def _resolve_extension_dir(self) -> Optional[str]:
         """Pick a valid TalentScreen extension directory or return ``None``.
 
-        Delegates to :func:`jobcli.extension.helpers.resolve_extension_dir`
+        Delegates to :func:`jobcli.utils.extension_helpers.resolve_extension_dir`
         which checks:
         1. ``config.extension_path``
-        2. ``~/.jobcli/extension_unpacked`` (legacy)
-        3. ``<project-root>/bin/project-talentscreen-autofill-extension``
+        2. ``~/.jobcli/extension_unpacked``
+        3. Newest ``extension/*.zip`` (unpack to ``~/.jobcli/``)
+        4. ``<project-root>/bin/project-talentscreen-autofill-extension``
 
         The resolved path is persisted back so subsequent runs skip the search.
         """
-        from jobcli.extension.helpers import resolve_extension_dir
+        from jobcli.utils.extension_helpers import (
+            get_local_extension_zip,
+            maybe_install_local_extension_zip,
+            resolve_extension_dir,
+        )
+
+        if get_local_extension_zip():
+            maybe_install_local_extension_zip()
 
         configured = (self.config.extension_path or "").strip()
         resolved = resolve_extension_dir(configured or None)
@@ -1271,6 +1292,9 @@ class ApplicationEngine:
             current_url=job.url,
         )
 
+        self._submit_declined_by_user = False
+        self._form_ready_for_submit = False
+
         mode = self.config.interaction_mode
         
         # ── Resume Path Validation ──────────────────────────────────────
@@ -1298,10 +1322,9 @@ class ApplicationEngine:
                 apply_stealth(self.context, logger=logger)
             self.anti_bot.logger = logger
 
-            # Resume data is injected into the TalentScreen extension's storage
-            # via chrome.storage.local through the background service worker
-            # (see engine._inject_resume_into_extension), not via DOM attributes.
-            self._inject_resume_into_extension(page, logger)
+            # Pre-load resume into extension storage (fill is triggered on the
+            # application form in _run_extension_autofill_phase, before the LLM).
+            self._inject_resume_into_extension(page, logger, trigger_fill=False)
 
             # AgentInterface is created once and used throughout the loop.
             # Memory + ATS type are populated as soon as we know them so every
@@ -1522,8 +1545,18 @@ class ApplicationEngine:
                 success = self._fill_form_rules(page, state, logger, ats_type)
             if not success:
                 self._check_stop()
+                if getattr(self, "_submit_declined_by_user", False):
+                    agent.show_status(
+                        "Submission skipped — moving to the next job.",
+                        phase=ExecutionPhase.HUMAN,
+                    )
+                    self.job_repo.update_status(job.id or 0, ApplicationStatus.SKIPPED)
+                    return ApplicationStatus.SKIPPED
                 agent.show_warning("Automation could not complete the form.")
-                handoff = agent.handoff_to_human(
+                handoff = self._handoff_human_in_loop(
+                    agent,
+                    logger,
+                    state,
                     reason="The agent could not finish the form on its own.",
                     hint="Fill any missing fields and submit (or click Next) yourself. "
                          "When you're done, press ENTER and the agent will resume from "
@@ -1548,7 +1581,9 @@ class ApplicationEngine:
                 # If the human advanced (e.g. clicked Next/Submit), give
                 # the agent one more pass on the *new* page rather than
                 # declaring success/failure based on the old one.
-                if handoff.advanced:
+                if getattr(self, "_form_ready_for_submit", False):
+                    success = self._submission_looks_plausible(page)
+                if not success and handoff.advanced:
                     self._check_stop()
                     agent.show_status(
                         "Continuing from where you left off...",
@@ -1806,14 +1841,9 @@ class ApplicationEngine:
         before AND after the resume upload — which is the seam where most
         forms reveal additional fields.
 
-        Why this is necessary
-        ---------------------
-        The bundled TalentScreen Chrome extension's autofill is gated behind
-        ``autoRunActive`` AND a "side-panel open" check in
-        ``content.js``. Neither is satisfied in a Playwright session, so the
-        extension never fires. Doing the deterministic fill ourselves keeps
-        the LLM phase focused on compliance / long-form questions that
-        actually need reasoning.
+        Runs after extension autofill and before the LLM. Also used as a
+        fallback when the LLM makes no progress and for resume-upload helpers.
+        Fill order: extension → rules → LLM.
         """
         merged: Dict[str, bool] = {}
 
@@ -1913,7 +1943,13 @@ class ApplicationEngine:
         )
         return None
 
-    def _inject_resume_into_extension(self, page: Page, logger: JobLogger) -> None:
+    def _inject_resume_into_extension(
+        self,
+        page: Page,
+        logger: JobLogger,
+        *,
+        trigger_fill: bool = True,
+    ) -> None:
         """Make the TalentScreen autofill extension actually fire on this tab.
 
         Reading the extension's own ``content.js`` (downloaded into
@@ -1993,52 +2029,62 @@ class ApplicationEngine:
 
             logger.info("Successfully injected resume into extension storage.")
 
-            # Bonus: poke every tab the extension matches and ask it to
-            # fillForm directly. The content script's onMessage handler runs
-            # ``fillForm(data, true, ...)`` with ``manual=true``, which
-            # bypasses the side-panel-open AND autoRunActive gates. This is
-            # best-effort — if the content script hasn't injected yet (page
-            # still loading), the sendMessage simply errors, which is fine.
-            try:
-                poke_js = f"""
-                    async () => {{
-                        const tabs = await new Promise(r =>
-                            chrome.tabs.query({{}}, r)
-                        );
-                        let poked = 0;
-                        for (const t of tabs) {{
-                            if (!t.id) continue;
-                            try {{
-                                await new Promise((resolve) => {{
-                                    chrome.tabs.sendMessage(
-                                        t.id,
-                                        {{
-                                            action: 'fill_form',
-                                            normalizedData: {resume_json},
-                                            resumeFile: null,
-                                            manualEdits: {{}}
-                                        }},
-                                        () => {{
-                                            // Ignore lastError; tab just may not have the CS loaded.
-                                            const _ = chrome.runtime.lastError;
-                                            resolve();
-                                        }}
-                                    );
-                                }});
-                                poked += 1;
-                            }} catch (e) {{ /* swallow */ }}
-                        }}
-                        return poked;
-                    }}
-                """
-                bg_target.evaluate(poke_js)
-            except Exception:
-                # Bonus path — failure is expected on pages that haven't
-                # loaded the content script yet. Not worth logging.
-                pass
+            if trigger_fill:
+                self._send_extension_fill_message(bg_target, resume_json, logger)
 
         except Exception as e:
             logger.error(f"Failed to inject resume into extension: {e}")
+
+    def _send_extension_fill_message(
+        self, bg_target: Any, resume_json: str, logger: JobLogger
+    ) -> None:
+        """Ask the active Playwright tab's content script to run ``fillForm``."""
+        try:
+            poke_js = f"""
+                async () => {{
+                    const tabs = await new Promise(r =>
+                        chrome.tabs.query({{ active: true, currentWindow: true }}, r)
+                    );
+                    const tab = tabs && tabs[0];
+                    if (!tab || !tab.id) return {{ ok: false, reason: 'no_active_tab' }};
+                    let err = null;
+                    await new Promise((resolve) => {{
+                        chrome.tabs.sendMessage(
+                            tab.id,
+                            {{
+                                action: 'fill_form',
+                                normalizedData: {resume_json},
+                                resumeFile: null,
+                                manualEdits: {{}}
+                            }},
+                            () => {{
+                                err = chrome.runtime.lastError
+                                    ? chrome.runtime.lastError.message
+                                    : null;
+                                resolve();
+                            }}
+                        );
+                    }});
+                    return {{ ok: !err, tabId: tab.id, url: tab.url || '', error: err }};
+                }}
+            """
+            result = bg_target.evaluate(poke_js)
+            if result and result.get("ok"):
+                logger.info(
+                    "Extension fill_form dispatched to active tab "
+                    f"(tab {result.get('tabId')})",
+                    phase=ExecutionPhase.RULES,
+                )
+            else:
+                logger.debug(
+                    f"Extension fill_form on active tab did not confirm: {result}",
+                    phase=ExecutionPhase.RULES,
+                )
+        except Exception as e:
+            logger.debug(
+                f"Extension fill_form dispatch failed: {e}",
+                phase=ExecutionPhase.RULES,
+            )
 
     # ── Don't-refill snapshot ────────────────────────────────────────────
     # The TalentScreen extension, the deterministic rule pass, and the LLM
@@ -2051,18 +2097,11 @@ class ApplicationEngine:
     # the snapshot is dropped before it reaches the executor.
     # ────────────────────────────────────────────────────────────────────
 
-    # Tunable: how long to wait after page navigation for the TalentScreen
-    # extension's asynchronous autofill to land before we snapshot the DOM.
-    # Bumping this above ~2s significantly slows multi-page wizards.
-    EXTENSION_AUTOFILL_SETTLE_MS = 1500
+    # Tunable: how long to wait after dispatching extension fill_form before
+    # snapshotting the DOM and handing off to the LLM.
+    EXTENSION_AUTOFILL_SETTLE_MS = 2500
 
-    # Values that look "filled" but are actually still the placeholder
-    # (dropdowns whose first option is "Select…" etc.). We treat these as
-    # empty so the LLM is allowed to overwrite them.
-    _SNAPSHOT_PLACEHOLDERS = (
-        "select", "choose", "please choose", "select...", "select an option",
-        "-- select --", "none", "n/a", "na",
-    )
+    _SNAPSHOT_PLACEHOLDERS = tuple(PLACEHOLDER_VALUES)
 
     def _snapshot_filled(self, page: Page) -> dict[str, str]:
         """Return ``{normalized_key: current_value}`` for every form input
@@ -2076,10 +2115,18 @@ class ApplicationEngine:
             raw = page.evaluate(
                 """() => {
                     const out = [];
-                    document.querySelectorAll('input, select, textarea').forEach(el => {
-                        let val = el.value;
+                    document.querySelectorAll(
+                        'input, select, textarea, [contenteditable="true"], [role="combobox"]'
+                    ).forEach(el => {
+                        let val = '';
                         if (el.tagName === 'SELECT' && el.selectedIndex >= 0) {
-                            val = el.options[el.selectedIndex].text;
+                            val = el.options[el.selectedIndex].text || '';
+                        } else if (el.isContentEditable) {
+                            val = el.innerText || el.textContent || '';
+                        } else if (el.getAttribute('role') === 'combobox') {
+                            val = el.innerText || el.textContent || el.value || '';
+                        } else {
+                            val = el.value || '';
                         }
                         if (!val || !val.trim()) return;
                         const v = val.trim();
@@ -2100,12 +2147,140 @@ class ApplicationEngine:
         snap: dict[str, str] = {}
         for row in raw or []:
             v = (row.get("value") or "").strip()
-            if not v or v.lower() in self._SNAPSHOT_PLACEHOLDERS:
+            if not is_meaningful_value(v):
                 continue
             for k in row.get("keys", []) or []:
                 if k:
                     snap[k] = v
         return snap
+
+    @staticmethod
+    def _snapshot_field_idents(snapshot: dict[str, str]) -> set[str]:
+        """Unique field identifiers from a :meth:`_snapshot_filled` dict."""
+        idents: set[str] = set()
+        for key in snapshot:
+            _, _, ident = key.partition(":")
+            if ident:
+                idents.add(ident)
+        return idents
+
+    def _build_prefilled_field_lines(
+        self,
+        prefilled_snapshot: dict[str, str],
+        ax_tree: Any,
+    ) -> list[str]:
+        """Human-readable lines for the LLM: fields that must not be re-filled."""
+        lines: list[str] = []
+        seen_pairs: set[tuple[str, str]] = set()
+        for key, val in prefilled_snapshot.items():
+            _, _, ident = key.partition(":")
+            if not ident or not is_meaningful_value(val):
+                continue
+            pair = (ident, val.lower())
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+            lines.append(f"- {ident}: already has value '{val}'")
+        for field in getattr(ax_tree, "form_fields", []) or []:
+            val = str(field.get("value", "")).strip()
+            label = field.get("name") or field.get("label") or "unknown"
+            if is_meaningful_value(val):
+                entry = f"- {label}: already has value '{val}'"
+                if entry not in lines:
+                    lines.append(entry)
+        return lines
+
+    # Strict application-fill order (do not reorder without updating docs):
+    #   1. Chrome extension autofill
+    #   2. Rules-based ATS handlers
+    #   3. LLM agent loop
+    #   4. Human-in-the-loop (handoff / terminal prompts) only when 1–3 leave gaps
+    FILL_PIPELINE_STEPS = (
+        "① Extension",
+        "② Rules",
+        "③ LLM",
+        "④ Human (if needed)",
+    )
+
+    def _log_fill_pipeline_start(self, logger: JobLogger, agent: "AgentInterface") -> None:
+        pipeline = " → ".join(self.FILL_PIPELINE_STEPS)
+        logger.info(f"Fill pipeline: {pipeline}", phase=ExecutionPhase.RULES)
+        agent.show_status(
+            f"Pipeline: {pipeline}",
+            phase=ExecutionPhase.RULES,
+        )
+
+    def _handoff_human_in_loop(
+        self,
+        agent: "AgentInterface",
+        logger: JobLogger,
+        state: ApplicationState,
+        reason: str,
+        hint: str,
+    ) -> "HandoffResult":
+        """Phase 4 — human takes the browser after extension, rules, and LLM."""
+        state.current_phase = ExecutionPhase.HUMAN
+        logger.log_phase_start(ExecutionPhase.HUMAN)
+        logger.info(
+            "Phase 4/4: Human-in-the-loop (extension, rules, and LLM already ran)",
+            phase=ExecutionPhase.HUMAN,
+        )
+        agent.show_phase_banner("Human-in-the-loop (4/4)")
+        result = agent.handoff_to_human(reason=reason, hint=hint)
+        logger.log_phase_end(ExecutionPhase.HUMAN, not result.cancelled)
+        return result
+
+    def _run_extension_autofill_phase(
+        self,
+        page: Page,
+        logger: JobLogger,
+        agent: "AgentInterface",
+    ) -> dict[str, str]:
+        """Phase 1/4 — TalentScreen Chrome extension autofill.
+
+        Injects resume → ``fill_form`` on active tab → settle wait → snapshot.
+        """
+        agent.show_phase_banner("Chrome extension autofill (1/4)")
+        if not self.extension_dir:
+            logger.warning(
+                "Extension not loaded — skipping extension autofill; LLM only.",
+                phase=ExecutionPhase.RULES,
+            )
+            return self._snapshot_filled(page)
+
+        agent.show_status(
+            "Running TalentScreen extension autofill…",
+            phase=ExecutionPhase.RULES,
+        )
+        before = self._snapshot_filled(page)
+        before_idents = self._snapshot_field_idents(before)
+
+        self._inject_resume_into_extension(page, logger, trigger_fill=True)
+        page.wait_for_timeout(self.EXTENSION_AUTOFILL_SETTLE_MS)
+
+        after = self._snapshot_filled(page)
+        new_idents = self._snapshot_field_idents(after) - before_idents
+        self._last_extension_filled_count = len(new_idents)
+
+        if new_idents:
+            sample = ", ".join(sorted(new_idents)[:10])
+            if len(new_idents) > 10:
+                sample += ", …"
+            agent.show_success(
+                f"Extension filled {len(new_idents)} field(s): {sample}"
+            )
+            logger.info(
+                f"Extension autofill populated {len(new_idents)} field(s): "
+                f"{sorted(new_idents)}",
+                phase=ExecutionPhase.RULES,
+            )
+        else:
+            logger.info(
+                "Extension autofill produced no new visible fields — LLM will continue.",
+                phase=ExecutionPhase.RULES,
+            )
+
+        return after
 
     def _action_target_already_filled(
         self,
@@ -2143,36 +2318,31 @@ class ApplicationEngine:
         apply_was_clicked: bool = False,
         resume_pdf_path: Optional[str] = None,
     ) -> bool:
-        """Unified agent loop: LLM drives form-filling, human is integrated inline.
+        """Application fill: extension → rules → LLM → human-in-the-loop (last).
 
-        This replaces the old separate _phase_llm + _phase_human waterfall.
-        The ``agent`` (AgentInterface) handles every human-facing checkpoint;
-        its behaviour adapts automatically based on InteractionMode.
+        Phases 1–3 run in a fixed order before any LLM iteration. Phase 4
+        (``_handoff_human_in_loop`` / ``show_failed_fields``) runs only when
+        automation cannot finish or ``InteractionMode`` requires review.
         """
-        logger.log_phase_start(ExecutionPhase.LLM)
-        state.current_phase = ExecutionPhase.LLM
-
         llm_client = self._get_llm_client(logger)
         provider = self.config.default_llm_provider
 
         if not llm_client:
-            # Don't just bail — a missing/invalid LLM key is a routine
-            # situation (free tier exhausted, key rotated, network down).
-            # Hand the form to the human so they can finish it, then return
-            # success based on whether the resulting page looks plausible.
             agent.show_warning(
                 f"No API key for {provider} — switching to human-driven mode."
             )
-            handoff = agent.handoff_to_human(
+            handoff = self._handoff_human_in_loop(
+                agent,
+                logger,
+                state,
                 reason=f"AI provider '{provider}' has no API key configured.",
                 hint="Fill and submit the form yourself in the browser. "
                      "When you're done, press ENTER and JobCLI will record the result.",
             )
-            logger.log_phase_end(ExecutionPhase.LLM, not handoff.cancelled)
             return (not handoff.cancelled) and self._submission_looks_plausible(handoff.page)
 
         try:
-            page.wait_for_timeout(1500)
+            page.wait_for_timeout(500)
             self._dismiss_cookie_consent(page, logger)
 
             if apply_was_clicked:
@@ -2182,51 +2352,46 @@ class ApplicationEngine:
                 except Exception:
                     pass
 
-            # ── TalentScreen Extension Autofill ───────────────────────────
-            # The TalentScreen Chrome Web Store extension autofills the form
-            # natively once resume data is loaded into its chrome.storage.
-            # No custom button injection needed — the extension handles UI.
-            # ──────────────────────────────────────────────────────────────
+            self._log_fill_pipeline_start(logger, agent)
 
-            # Extract AFTER extension fill so the LLM sees updated field values
+            # ── Phase 1/4: TalentScreen extension autofill ────────────────
+            self._last_extension_filled_count = 0
+            prefilled_snapshot = self._run_extension_autofill_phase(page, logger, agent)
+
+            # ── Phase 2/4: Rules-based prefill ────────────────────────────
+            agent.show_phase_banner("Rules-based fill (2/4)")
+            rules_handler = None
+            self._last_rules_filled_count = 0
+            try:
+                rules_handler = ATSHandlerFactory.create_handler(
+                    state.detected_ats, page, self.resume, logger
+                )
+                if rules_handler and state.detected_ats not in (ATSType.UNKNOWN,):
+                    self._set_workday_modal_resume_path(rules_handler)
+                    agent.show_status(
+                        f"Running {state.detected_ats.value} rules (after extension)…",
+                        phase=ExecutionPhase.RULES,
+                    )
+                    prefill_results = self._run_rules_prefill(
+                        rules_handler, page, logger, agent,
+                        AccessibilityTreeExtractor(page), state,
+                    )
+                    filled = [k for k, v in (prefill_results or {}).items() if v]
+                    self._last_rules_filled_count = len(filled)
+                    if filled:
+                        prefilled_snapshot = self._snapshot_filled(page)
+                        page.wait_for_timeout(500)
+            except Exception as e:
+                logger.debug(
+                    f"Rules prefill after extension raised {e!r}",
+                    phase=ExecutionPhase.RULES,
+                )
+
             extractor = AccessibilityTreeExtractor(page)
             ax_tree = extractor.extract()
-            logger.save_structured_dom(ax_tree.model_dump(), "ax_tree_snapshot", ExecutionPhase.LLM)
-
-            # ── Don't-refill snapshot ──────────────────────────────────────
-            # Single source of truth for "this field is already populated".
-            # Used by the LLM context (so the model is told NOT to re-fill)
-            # AND by the per-iteration action filter further down. Refreshed
-            # at the top of every LLM iteration so it never goes stale.
-            prefilled_snapshot: dict[str, str] = self._snapshot_filled(page)
-            prefilled_fields: list[str] = []
-            seen_pairs: set[tuple[str, str]] = set()
-            placeholders = list(self._SNAPSHOT_PLACEHOLDERS)
-
-            # 1. From the live DOM snapshot (most reliable for JS-filled inputs).
-            #    We pick the most descriptive identifier (label > name > id)
-            #    for the human-readable line that gets shown to the LLM.
-            for key, val in prefilled_snapshot.items():
-                prefix, _, ident = key.partition(":")
-                if not ident:
-                    continue
-                pair = (ident, val.lower())
-                if pair in seen_pairs:
-                    continue
-                seen_pairs.add(pair)
-                # Only the highest-quality identifier per (value, prefix) gets
-                # rendered, so the LLM context stays compact.
-                prefilled_fields.append(f"- {ident}: already has value '{val}'")
-
-            # 2. Anything the AX tree saw but the live snapshot missed
-            #    (rare: some custom widgets don't expose ``.value``).
-            for field in ax_tree.form_fields:
-                val = str(field.get("value", "")).strip()
-                label = field.get("name") or field.get("label") or "unknown"
-                if val and val.lower() not in placeholders:
-                    entry = f"- {label}: already has value '{val}'"
-                    if entry not in prefilled_fields:
-                        prefilled_fields.append(entry)
+            logger.save_structured_dom(
+                ax_tree.model_dump(), "ax_tree_after_extension_and_rules", ExecutionPhase.LLM
+            )
 
             # ── AUTH / LOGIN GATE DETECTION ───────────────────────────────
             # Before letting the LLM touch the form, verify we are NOT on a
@@ -2295,61 +2460,6 @@ class ApplicationEngine:
                 logger.log_phase_end(ExecutionPhase.LLM, False)
                 return False
 
-            # ── ATS-handler pre-pass + persistent reference ───────────────
-            # Every ATS has its own handler (Ashby, Workday, Greenhouse,
-            # Lever…) with hardcoded, battle-tested selectors for the
-            # common fields (firstName, lastName, email, phone, linkedin,
-            # resume upload) AND for the common "click option" patterns
-            # (Yes/No radios, custom dropdowns).
-            #
-            # We deliberately do NOT delegate this to the bundled TalentScreen
-            # Chrome extension. The extension's content.js (see
-            # `~/.jobcli/extension_unpacked/content.js`) gates ``fillForm``
-            # behind two conditions that are not satisfied in a Playwright
-            # session: the side-panel must be open in this window AND
-            # ``autoRunActive`` must be true. Neither is true here, so the
-            # extension's pageload listener returns immediately without
-            # touching the form. Running this Python pass guarantees the
-            # cheap-and-deterministic fields are filled BEFORE the LLM is
-            # consulted — which keeps token cost low and is robust to
-            # extension version drift.
-            rules_handler = None
-            self._last_rules_filled_count = 0
-            try:
-                rules_handler = ATSHandlerFactory.create_handler(
-                    state.detected_ats, page, self.resume, logger
-                )
-                if rules_handler and state.detected_ats not in (ATSType.UNKNOWN,):
-                    self._set_workday_modal_resume_path(rules_handler)
-                    agent.show_status(
-                        f"Running {state.detected_ats.value} handler for known fields…",
-                        phase=ExecutionPhase.RULES,
-                    )
-                    prefill_results = self._run_rules_prefill(
-                        rules_handler, page, logger, agent, extractor, state
-                    )
-                    filled = [k for k, v in (prefill_results or {}).items() if v]
-                    self._last_rules_filled_count = len(filled)
-                    if filled:
-                        try:
-                            ax_tree = extractor.extract()
-                            logger.save_structured_dom(
-                                ax_tree.model_dump(),
-                                "ax_tree_after_rules_prefill",
-                                ExecutionPhase.LLM,
-                            )
-                        except Exception as e:
-                            logger.debug(
-                                f"Re-extract after rules prefill failed: {e}",
-                                phase=ExecutionPhase.RULES,
-                            )
-            except Exception as e:
-                logger.debug(
-                    f"Could not create pre-pass handler: {e}",
-                    phase=ExecutionPhase.RULES,
-                )
-
-
             from jobcli.intelligence.memory import AgentMemory
             from jobcli.intelligence.synonym_resolver import SynonymResolver
 
@@ -2365,6 +2475,15 @@ class ApplicationEngine:
             agent.set_context(memory=memory)
 
             task = "fill_form_fields_only" if apply_was_clicked else "find_apply_button_and_fill_form"
+
+            # ── Phase 3/4: LLM agent loop ─────────────────────────────────
+            logger.log_phase_start(ExecutionPhase.LLM)
+            state.current_phase = ExecutionPhase.LLM
+            agent.show_phase_banner("LLM autofill (3/4)")
+            logger.info(
+                "Phase 3/4: LLM agent (phases 1–2 complete)",
+                phase=ExecutionPhase.LLM,
+            )
 
             MAX_ASK_LOOPS = 3
             loop_count = 0
@@ -2401,10 +2520,13 @@ class ApplicationEngine:
                     pass
 
                 memory_context = memory.build_llm_context(state.detected_ats) or ""
-                # Include fields already filled by the extension autofill
+                prefilled_snapshot = self._snapshot_filled(page)
+                prefilled_fields = self._build_prefilled_field_lines(
+                    prefilled_snapshot, ax_tree
+                )
                 if prefilled_fields:
                     memory_context += (
-                        "\n\n## ALREADY FILLED FIELDS (DO NOT re-fill these — they were set by the autofill extension):\n"
+                        "\n\n## ALREADY FILLED FIELDS (DO NOT re-fill — extension/rules/prior steps):\n"
                         + "\n".join(prefilled_fields)
                     )
                 agent.show_status(f"AI is thinking — Consulting {provider}...", phase=ExecutionPhase.LLM)
@@ -2499,10 +2621,22 @@ class ApplicationEngine:
                 # answer (DB-first via the agent), persist new answers to
                 # memory, then re-run the LLM so it sees the enriched memory
                 # context and proposes proper FILL actions next time.
-                ask_actions = [a for a in llm_response.actions if a.action == ActionType.ASK]
+                ask_actions = [
+                    a for a in llm_response.actions if a.action == ActionType.ASK
+                ]
+                optional_asks = [
+                    a for a in ask_actions if not a.required
+                ]
+                ask_actions = [a for a in ask_actions if a.required]
+                if optional_asks:
+                    logger.info(
+                        f"Ignoring {len(optional_asks)} optional ASK action(s) "
+                        "(only required * fields are prompted in the terminal).",
+                        phase=ExecutionPhase.LLM,
+                    )
                 if ask_actions:
                     agent.show_status(
-                        f"AI requested {len(ask_actions)} answer(s) — pausing all other actions.",
+                        f"AI requested {len(ask_actions)} required answer(s) — pausing all other actions.",
                         phase=ExecutionPhase.HUMAN,
                     )
                     resolved_actions: list[BrowserAction] = []
@@ -2518,9 +2652,16 @@ class ApplicationEngine:
                         # request_field_input does DB-lookup-first and persists
                         # any new human answer automatically.
                         answer = agent.request_field_input(
-                            label, options=options, question_text=act.value,
+                            label,
+                            options=options,
+                            question_text=act.value,
+                            required=True,
                         )
                         if not answer:
+                            continue
+                        from jobcli.utils.fill_guard import is_reserved_form_value
+
+                        if is_reserved_form_value(answer):
                             continue
                         # Turn the ASK into a concrete browser action.  Using
                         # ``label`` as the selector lets ``_execute_type`` and
@@ -2644,6 +2785,7 @@ class ApplicationEngine:
                             label,
                             options=options,
                             question_text=f"Required field '{label}' is empty.",
+                            required=True,
                         )
                     # Drop the advance clicks for this iteration; only execute
                     # the non-advance actions (fills/selects/uploads).  The
@@ -2693,15 +2835,14 @@ class ApplicationEngine:
                     # and autofill the fields *before* we scan the DOM again.
                     # Usually takes ~4-7 seconds for the React state to update.
                     wait_time = 8000
-                    agent.show_status(f"Upload done — waiting {wait_time/1000}s for autofill...", phase=ExecutionPhase.LLM)
+                    agent.show_status(
+                        f"Upload done — waiting {wait_time/1000}s, then extension + rules…",
+                        phase=ExecutionPhase.LLM,
+                    )
                     page.wait_for_timeout(wait_time)
-                    # Re-run the deterministic rules pass NOW: many ATSes
-                    # only reveal personal-info fields after the resume is
-                    # uploaded (Ashby/Greenhouse reveal LinkedIn / phone /
-                    # location only post-upload), and we want those filled
-                    # before the LLM iteration sees the page again. This
-                    # significantly cuts LLM token usage and keeps the loop
-                    # from re-asking for already-known data.
+                    prefilled_snapshot = self._run_extension_autofill_phase(
+                        page, logger, agent
+                    )
                     if rules_handler is not None:
                         try:
                             post_upload_results = self._run_rules_prefill(
@@ -2710,6 +2851,8 @@ class ApplicationEngine:
                             self._last_rules_filled_count += sum(
                                 1 for v in (post_upload_results or {}).values() if v
                             )
+                            prefilled_snapshot = self._snapshot_filled(page)
+                            page.wait_for_timeout(500)
                         except Exception as e:
                             logger.debug(
                                 f"Post-upload rules pass raised {e!r}",
@@ -2888,8 +3031,19 @@ class ApplicationEngine:
                                             field_options = dp["options"]
                                             break
                                 
-                                help_val = agent.request_field_input(label, current_value=act.value or "", options=field_options)
+                                if not act.required:
+                                    continue
+                                help_val = agent.request_field_input(
+                                    label,
+                                    current_value=act.value or "",
+                                    options=field_options,
+                                    required=True,
+                                )
                                 if help_val:
+                                    from jobcli.utils.fill_guard import is_reserved_form_value
+
+                                    if is_reserved_form_value(help_val):
+                                        continue
                                     # Human provided a value (or picked an option). 
                                     # Update action and try one more time.
                                     act.value = help_val
@@ -2940,19 +3094,16 @@ class ApplicationEngine:
                 if not failed_actions and not ask_actions:
                     agent.show_success("All actions completed.")
                     # One-line tally so the user can see who did the work.
-                    # ``_last_rules_filled_count`` is set by
-                    # ``_run_rules_prefill`` (deterministic Python pass).
-                    # ``llm_response.actions`` is the LLM's *latest* plan;
-                    # we approximate LLM cost as the number of FILL/SELECT/
-                    # CLICK actions it had to issue.
                     try:
                         llm_actions = len([
                             a for a in (llm_response.actions or [])
                             if a.action in (ActionType.FILL, ActionType.SELECT, ActionType.CLICK, ActionType.TYPE, ActionType.UPLOAD)
                         ])
+                        ext_n = getattr(self, "_last_extension_filled_count", 0) or 0
                         rules_n = getattr(self, "_last_rules_filled_count", 0) or 0
                         logger.info(
-                            f"Fill summary — rules pre-pass: {rules_n} field(s), "
+                            f"Fill summary — extension: {ext_n} field(s), "
+                            f"rules: {rules_n} field(s), "
                             f"LLM iteration {loop_count}: {llm_actions} action(s).",
                             phase=ExecutionPhase.LLM,
                         )
@@ -3266,6 +3417,7 @@ class ApplicationEngine:
                             label,
                             options=options,
                             question_text=f"Required field '{label}' is empty.",
+                            required=True,
                         )
                     llm_response.actions = non_advance2
 
@@ -3375,7 +3527,10 @@ class ApplicationEngine:
                 agent.show_warning(
                     f"Cannot submit yet — {preview}"
                 )
-                handoff = agent.handoff_to_human(
+                handoff = self._handoff_human_in_loop(
+                    agent,
+                    logger,
+                    state,
                     reason=(
                         "The form isn't ready to submit. "
                         f"{preview}. "
@@ -3455,8 +3610,10 @@ class ApplicationEngine:
                 return False
 
             # ── Confirm submission (integrated checkpoint) ────────────────
+            self._form_ready_for_submit = True
             if not agent.confirm_submission():
                 agent.show_warning("Submission declined by user.")
+                self._submit_declined_by_user = True
                 logger.log_phase_end(ExecutionPhase.LLM, False)
                 return False
 

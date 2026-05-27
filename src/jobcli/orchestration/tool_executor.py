@@ -6,6 +6,14 @@ from typing import Any, Optional, List, Union
 
 from playwright.sync_api import FrameLocator, Page
 
+from jobcli.utils.fill_guard import (
+    PLACEHOLDER_VALUES,
+    read_locator_value,
+    should_skip_refill,
+)
+
+# Back-compat alias for tests and internal checks.
+_PLACEHOLDER_VALUES = PLACEHOLDER_VALUES
 from jobcli.utils.logger import JobLogger
 from jobcli.profile.schemas import (
     ATSType,
@@ -29,15 +37,6 @@ _ATS_IFRAME_PATTERNS = [
     "paylocity.com",
     "myworkdayjobs.com",
 ]
-
-# Values that look "filled" but are really still the placeholder option of
-# a select element. We treat these as empty so the executor is allowed to
-# overwrite them. Kept in sync with engine._SNAPSHOT_PLACEHOLDERS.
-_PLACEHOLDER_VALUES = frozenset({
-    "select", "choose", "please choose", "select...", "select an option",
-    "-- select --", "none", "n/a", "na",
-})
-
 
 class ToolExecutor:
     """Execute browser actions safely with validation."""
@@ -151,32 +150,11 @@ class ToolExecutor:
         return roots
 
     def _read_live_value(self, selector: str) -> Optional[str]:
-        """Best-effort read of the current value of an input/textarea/select.
-
-        Used by the FILL/TYPE skip-refill guard. Returns ``None`` if the
-        selector doesn't resolve, the element isn't a fillable input, or
-        anything else goes wrong — callers MUST treat ``None`` as "I don't
-        know" (i.e. proceed with the fill) rather than as "empty".
-        """
+        """Best-effort read of the current value of an input/textarea/select."""
         if not selector:
             return None
         try:
-            loc = self.page.locator(selector).first
-            if loc.count() == 0:
-                return None
-            try:
-                val = loc.input_value(timeout=500)
-            except Exception:
-                # Not an <input>/<textarea>/<select>, or detached element.
-                try:
-                    val = loc.evaluate(
-                        "el => (el.tagName === 'SELECT' && el.selectedIndex >= 0)"
-                        " ? el.options[el.selectedIndex].text"
-                        " : (el.value !== undefined ? el.value : '')"
-                    )
-                except Exception:
-                    return None
-            return val if isinstance(val, str) else None
+            return read_locator_value(self.page.locator(selector).first)
         except Exception:
             return None
 
@@ -213,21 +191,20 @@ class ToolExecutor:
         # also call ``execute_action`` directly. Treat a field that
         # currently has a real value as already-done so no phase
         # overwrites it.
-        if action.action in (ActionType.FILL, ActionType.TYPE):
+        if action.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT):
             try:
-                live = (self._read_live_value(action.selector) or "").strip()
-                if live and live.lower() not in _PLACEHOLDER_VALUES:
-                    if self.logger:
-                        self.logger.info(
-                            f"[skip-refill] '{action.field_label or action.selector}' "
-                            f"already has '{live}' — not overwriting.",
-                            phase=ExecutionPhase.LLM,
-                        )
-                    return True
+                if action.selector:
+                    loc = self.page.locator(action.selector).first
+                    if should_skip_refill(loc, str(action.value) if action.value else None):
+                        live = read_locator_value(loc) or ""
+                        if self.logger:
+                            self.logger.info(
+                                f"[skip-refill] '{action.field_label or action.selector}' "
+                                f"already has '{live}' — not overwriting.",
+                                phase=ExecutionPhase.LLM,
+                            )
+                        return True
             except Exception:
-                # If the live-read fails (selector doesn't resolve, page
-                # navigated, etc.), fall through to the normal fill path
-                # so we never silently swallow an action that should run.
                 pass
 
         try:
@@ -346,24 +323,24 @@ class ToolExecutor:
             # Warm-up is best-effort; never block the actual fill.
             pass
 
-    def _humanized_fill(self, locator, value: str) -> None:
-        """Fill ``locator`` with ``value`` using human-like keystroke cadence.
+    def _humanized_fill(self, locator, value: str) -> bool:
+        """Fill ``locator`` with human-like keystroke cadence. Returns False if skipped."""
+        from jobcli.utils.fill_guard import is_reserved_form_value
 
-        Replaces the old ``click → fill("") → press_sequentially(delay=35)``
-        sequence, which completed an entire multi-field form in ~3s and
-        tripped Ashby / Cloudflare spam classifiers that profile keystroke
-        timing.  The humanised version:
-
-          * Focuses the field with a real click (triggers focus events).
-          * Waits a short randomised pause before typing (reaction time).
-          * If the field already has content, uses
-            ``Ctrl+A → Backspace`` via the keyboard (real key events)
-            instead of the silent ``fill("")`` which just overwrites
-            ``.value`` without keystrokes.
-          * Types with a per-key delay of 60-140ms plus an occasional
-            150-350ms "thinking" pause every few words.
-          * Tabs out with a small pre-Tab pause so blur fires cleanly.
-        """
+        if is_reserved_form_value(value):
+            if self.logger:
+                self.logger.info(
+                    f"[skip-value] refusing to type reserved keyword '{value}' into field",
+                    phase=ExecutionPhase.LLM,
+                )
+            return False
+        if should_skip_refill(locator, value):
+            if self.logger:
+                self.logger.info(
+                    "[skip-refill] field already populated — not retyping",
+                    phase=ExecutionPhase.LLM,
+                )
+            return False
         import random as _r
         # Hover before clicking — real clicks always land after a
         # mouse-move.  Anti-bot models track mouse-path entropy, and
@@ -421,6 +398,7 @@ class ToolExecutor:
             self.page.keyboard.press("Tab")
         except Exception:
             pass
+        return True
 
     def _is_workday_ats(self) -> bool:
         t = self.ats_type

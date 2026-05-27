@@ -31,7 +31,7 @@ from jobcli.storage.repositories import (
 from jobcli.utils.constants import DASHBOARD_SUMMARY_DAYS, REFERENCE_LINKS_COUNT, SUPPORTED_DOMAINS
 
 app = typer.Typer(
-    name="jobcli",
+    name="wboxcli",
     help="Production-grade CLI for automated job applications",
 )
 
@@ -56,7 +56,7 @@ def _print_next_step(command: str, hint: str = "") -> None:
     output and the user can't miss it as the terminal scrolls.
     """
     from rich.panel import Panel
-    body_lines = [f"  [bold cyan]jobcli {command}[/bold cyan]"]
+    body_lines = [f"  [bold cyan]wboxcli {command}[/bold cyan]"]
     if hint:
         body_lines.append(f"  [dim]{hint}[/dim]")
     console.print()
@@ -85,7 +85,7 @@ def _suggest_after_login_or_resume() -> tuple[str, str]:
         return "setup", "download the TalentScreen extension and verify your setup"
     return "discover", "pull job listings from WBL"
 
-# ``jobcli config --key`` accepts these env-style names as aliases for the stored field.
+# ``wboxcli config --key`` accepts these env-style names as aliases for the stored field.
 CONFIG_CMD_KEY_ALIASES: dict[str, str] = {
     "JOBCLI_SYNC_SERVER_URL": "sync_server_url",
     "NEXT_PUBLIC_API_URL": "sync_server_url",
@@ -127,7 +127,7 @@ def get_config() -> Config:
     resume paths, API base URL, extension path) are written by interactive
     commands (``login``, ``resume-upload``, ``setup``) and persisted in
     ``~/.jobcli/jobcli.db``. To change a value later, use
-    ``jobcli config --key <name> --set <value>`` or re-run ``jobcli login``.
+    ``wboxcli config --key <name> --set <value>`` or re-run ``wboxcli login``.
     """
     db = get_database()
     session = db.get_session()
@@ -218,7 +218,7 @@ def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uni
     """Remove all JobCLI configuration, databases, and global shims.
 
     Works on Windows and macOS/Linux. On Windows we cannot delete the active
-    venv while ``jobcli.exe`` is still running, so the venv is left for the
+    venv while ``wboxcli.exe`` is still running, so the venv is left for the
     bundled ``scripts/uninstall.ps1`` to clean up (or a manual rm after the
     process exits).
     """
@@ -227,7 +227,7 @@ def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uni
     console.print("[bold red]JobCLI Uninstall[/bold red]\n")
     if not force:
         confirm = Confirm.ask(
-            "Delete all JobCLI data in ~/.jobcli (config, jobs, logs, resume, memory) and the wboxcli/jobcli shims?",
+            "Delete all JobCLI data in ~/.jobcli (config, jobs, logs, resume, memory) and the wboxcli shims?",
             default=False,
         )
         if not confirm:
@@ -283,7 +283,7 @@ def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uni
 
     # Remove the global shims dropped by install.ps1 / install.sh
     bin_dir = Path.home() / ".local" / "bin"
-    shim_names = ("wboxcli.cmd", "jobcli.cmd") if is_windows else ("wboxcli", "jobcli")
+    shim_names = ("wboxcli.cmd",) if is_windows else ("wboxcli",)
     for name in shim_names:
         shim = bin_dir / name
         if shim.exists() or shim.is_symlink():
@@ -296,14 +296,14 @@ def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uni
 
     if leftover_paths:
         console.print()
-        console.print("[yellow]Some files could not be removed while jobcli was still running.[/yellow]")
+        console.print("[yellow]Some files could not be removed while wboxcli was still running.[/yellow]")
         console.print("[yellow]Close this terminal and finish cleanup with:[/yellow]")
         if is_windows:
             console.print('  [cyan]Remove-Item -Recurse -Force "$env:USERPROFILE\\.jobcli"[/cyan]')
-            console.print('  [cyan]Remove-Item -Force "$env:USERPROFILE\\.local\\bin\\wboxcli.cmd","$env:USERPROFILE\\.local\\bin\\jobcli.cmd"[/cyan]')
+            console.print('  [cyan]Remove-Item -Force "$env:USERPROFILE\\.local\\bin\\wboxcli.cmd"[/cyan]')
             console.print('  [dim](or)[/dim] [cyan]irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.ps1 | iex[/cyan]')
         else:
-            console.print('  [cyan]rm -rf ~/.jobcli ~/.local/bin/wboxcli ~/.local/bin/jobcli[/cyan]')
+            console.print('  [cyan]rm -rf ~/.jobcli ~/.local/bin/wboxcli[/cyan]')
             console.print('  [dim](or)[/dim] [cyan]curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.sh | bash[/cyan]')
     else:
         console.print("\n[green]JobCLI has been fully uninstalled.[/green]")
@@ -330,6 +330,73 @@ def db_clear_jobs(
         console.print(f"[green]✓ Removed {n} job record(s) and related logs.[/green]")
     finally:
         session.close()
+
+
+# Keys cleared by ``wboxcli reset`` (jobs / field memory are kept).
+_RESET_CONFIG_KEYS = (
+    "job_board_username",
+    "job_board_password",
+    "openai_api_key",
+    "anthropic_api_key",
+    "gemini_api_key",
+    "claude_api_key",
+    "default_llm_provider",
+    "resume_pdf_path",
+    "resume_json_path",
+    "extension_path",
+    "sync_server_url",
+)
+
+
+def _run_reset(
+    force: bool = False,
+    *,
+    keep_credentials: bool = False,
+    keep_extension: bool = False,
+) -> None:
+    """Clear Whitebox login, LLM API keys, and resume (jobs and memory are kept)."""
+    console.print("[bold cyan]Reset configuration[/bold cyan]\n")
+    console.print(
+        "[dim]Clears: Whitebox email/password, LLM API keys, resume PDF/JSON paths, "
+        "and stored resume profile.[/dim]"
+    )
+    console.print(
+        "[dim]Keeps: discovered jobs, application logs, field memory, learned locators.[/dim]"
+    )
+    console.print(
+        "[dim]Full database wipe: [cyan]wboxcli db reset[/cyan][/dim]\n"
+    )
+    if not force:
+        if not Confirm.ask(
+            "Reset login, API keys, and resume?",
+            default=False,
+        ):
+            console.print("[yellow]Cancelled.[/yellow]")
+            return
+
+    keys = list(_RESET_CONFIG_KEYS)
+    if keep_credentials:
+        keys = [k for k in keys if k not in ("job_board_username", "job_board_password", "sync_server_url")]
+    if keep_extension:
+        keys = [k for k in keys if k != "extension_path"]
+
+    db = get_database()
+    session = db.get_session()
+    try:
+        config_repo = ConfigRepository(session)
+        user_repo = UserDataRepository(session)
+        n_config = config_repo.delete_keys(keys)
+        n_profile = user_repo.clear_profile_data()
+    finally:
+        session.close()
+
+    console.print(f"[green]✓ Removed {n_config} config setting(s)[/green]")
+    console.print(f"[green]✓ Cleared {n_profile} profile record(s) (resume / questions)[/green]")
+    console.print(
+        "\n[green]Reset complete. Run [cyan]wboxcli[/cyan] or [cyan]setup[/cyan] "
+        "to enter login, LLM keys, and resume again.[/green]"
+    )
+    _print_next_step("setup", "re-enter login, LLM, and resume")
 
 
 def _run_db_reset(force: bool) -> None:
@@ -508,7 +575,14 @@ def setup() -> None:
     browser_error: str = ""
 
     # ── 4a: Resolve & validate extension path ───────────────────────────────
-    from jobcli.extension.helpers import resolve_extension_dir
+    from jobcli.utils.extension_helpers import (
+        get_local_extension_zip,
+        maybe_install_local_extension_zip,
+        resolve_extension_dir,
+    )
+
+    if get_local_extension_zip():
+        maybe_install_local_extension_zip()
 
     ext_dir = resolve_extension_dir(config.extension_path)
 
@@ -638,7 +712,7 @@ def login(
     # succeeds. The legacy ``127.0.0.1:8000`` localhost probe was removed
     # because it added noise to error messages on machines with no local
     # backend running. Developers who need a local backend can still set it
-    # explicitly via ``jobcli config --key sync_server_url --set <url>``.
+    # explicitly via ``wboxcli config --key sync_server_url --set <url>``.
     # If the probe uncovers actionable issues (bad creds, TLS) we surface a
     # concise warning.
     from jobcli.sync.client import (
@@ -661,13 +735,13 @@ def login(
             # credentials and discover retries on demand.
             if LOGIN_ERR_BAD_CREDENTIALS in kinds:
                 probe_warning_lines.append(
-                    "WBL did not accept these credentials. Re-run 'jobcli login' "
+                    "WBL did not accept these credentials. Re-run 'wboxcli login' "
                     "with the correct email/password — discover will fail otherwise."
                 )
             if LOGIN_ERR_ACCOUNT_LOCKED in kinds:
                 probe_warning_lines.append(
                     "Your WBL account appears inactive/locked. Contact Recruiting "
-                    "before running 'jobcli discover'."
+                    "before running 'wboxcli discover'."
                 )
             if LOGIN_ERR_SSL in kinds:
                 probe_warning_lines.append(
@@ -678,7 +752,7 @@ def login(
             if LOGIN_ERR_RATE_LIMIT in kinds:
                 probe_warning_lines.append(
                     "WBL rate-limited the login probe. Wait a minute, then run "
-                    "'jobcli discover' — credentials were saved successfully."
+                    "'wboxcli discover' — credentials were saved successfully."
                 )
     else:
         # No creds yet — save the production URL so SyncClient has a starting point.
@@ -731,7 +805,7 @@ def login(
     _print_next_step(cmd, hint)
 
 
-@app.command()
+@app.command(name="config")
 def config_cmd(
     key: Optional[str] = typer.Option(None, "--key", "-k", help="Configuration key to view or set"),
     set_value: Optional[str] = typer.Option(None, "--set", help="Set configuration value"),
@@ -740,7 +814,7 @@ def config_cmd(
 
     Use ``sync_server_url`` for the WBL API base (aliases: JOBCLI_SYNC_SERVER_URL, NEXT_PUBLIC_API_URL), e.g.:
 
-        jobcli config --key sync_server_url --set https://api.whitebox-learning.com/api
+        wboxcli config --key sync_server_url --set https://api.whitebox-learning.com/api
     """
     config = get_config()
 
@@ -818,27 +892,23 @@ def resume_upload(
     # stored in the DB, and downstream code (which prepends CWD to relative
     # paths) would produce errors like
     # ``C:\Users\sampa\"C:\Users\sampa\Downloads\resume.pdf"``.
-    pdf = _clean_path_input(pdf) or ""
-    json_file = _clean_path_input(json_file)
+    from jobcli.utils.resume_helpers import (
+        clean_path_input,
+        load_resume_from_paths,
+        persist_resume,
+        print_profile_summary,
+    )
 
-    # Validate PDF
-    pdf_path = Path(pdf).expanduser().resolve()
-    if not pdf_path.exists():
-        console.print(f"[red]PDF file not found: {pdf_path}[/red]")
-        console.print(
-            "[dim]Tip: don't wrap paths in quotes if they contain no spaces; "
-            "if they do, plain quotes are fine — JobCLI strips them before saving.[/dim]"
-        )
-        raise typer.Exit(1)
+    pdf = clean_path_input(pdf) or ""
+    json_file = clean_path_input(json_file)
 
-    # Use existing JSON if provided, otherwise look for one in the same directory or use a dummy
-    if json_file:
-        json_path = Path(json_file).expanduser().resolve()
-    else:
-        # Try to find a .json file with the same name as the PDF
+    if not json_file:
+        pdf_path = Path(pdf).expanduser().resolve()
+        if not pdf_path.exists():
+            console.print(f"[red]PDF file not found: {pdf_path}[/red]")
+            raise typer.Exit(1)
         json_path = pdf_path.with_suffix(".json")
         if not json_path.exists():
-            # Create a minimal valid JSON so the system doesn't crash
             console.print("[yellow]No JSON provided. Creating a basic profile from your login info...[/yellow]")
             config = get_config()
             minimal_resume = {
@@ -850,54 +920,27 @@ def resume_upload(
                     "location": "",
                     "linkedin": "",
                     "github": "",
-                    "website": ""
+                    "website": "",
                 },
                 "education": [],
                 "experience": [],
                 "skills": [],
                 "projects": [],
-                "summary": "Professional applicant."
+                "summary": "Professional applicant.",
             }
             json_path.write_text(json.dumps(minimal_resume, indent=2))
-
-    if not json_path.exists():
-        console.print(f"[red]JSON file not found: {json_path}[/red]")
-        raise typer.Exit(1)
+        json_file = str(json_path)
 
     try:
-        with open(json_path, encoding="utf-8") as f:
-            resume_data = json.load(f)
-
-        # Use project's native auto-detector to normalize various JSON formats
-        from jobcli.intelligence.synonym_resolver import ResumeAutoDetector
-        normalized_data = ResumeAutoDetector.detect_and_convert(resume_data)
-
-        # Validate with Pydantic
-        resume = ResumeData(**normalized_data)
-
-        console.print(f"✓ Resume JSON validated")
-        console.print(f"  Name: {resume.personal.first_name} {resume.personal.last_name}")
-        console.print(f"  Email: {resume.personal.email}")
-        console.print(f"  Experience entries: {len(resume.experience)}")
-        console.print(f"  Education entries: {len(resume.education)}")
-
+        resume, pdf_path, json_path = load_resume_from_paths(pdf, json_file)
+        print_profile_summary(console, resume, pdf_path)
+        persist_resume(resume, pdf_path, json_path)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Invalid resume JSON: {e}[/red]")
         raise typer.Exit(1)
-
-    # Save to database
-    db = get_database()
-    session = db.get_session()
-    user_data_repo = UserDataRepository(session)
-
-    user_data_repo.save_resume(resume)
-    session.close()
-
-    # Save paths to config
-    config = get_config()
-    config.resume_pdf_path = str(pdf_path.absolute())
-    config.resume_json_path = str(json_path.absolute())
-    save_config(config)
 
     console.print("\n[bold green]✓ Resume uploaded successfully[/bold green]")
     cmd, hint = _suggest_after_login_or_resume()
@@ -967,8 +1010,10 @@ def _run_apply(
     limit: Optional[int],
     sort: str,
     mode: str,
+    resume: bool = False,
+    skip_resume_prompt: bool = False,
 ) -> None:
-    """Shared implementation for ``jobcli apply`` (single URL or batch).
+    """Shared implementation for ``wboxcli apply`` (single URL or batch).
 
     Exit semantics
     --------------
@@ -980,11 +1025,23 @@ def _run_apply(
     every prompt the engine exposes (handoff, submit confirm, ASK
     actions, LinkedIn-skip yes/no, manual pauses) via
     ``AgentInterface._get_user_input``.
+
+    After an interrupted batch, the CLI saves a checkpoint and asks whether
+    to resume (yes/no). ``wboxcli continue`` or ``wboxcli apply --continue``
+    skips the prompt and continues the same queue.
     """
+    from jobcli.utils.apply_checkpoint import (
+        clear_apply_checkpoint,
+        jobs_from_checkpoint,
+        load_apply_checkpoint,
+        reset_interrupted_job_to_pending,
+        save_apply_checkpoint,
+    )
     from jobcli.utils.exit_signal import (
         ExitRequested,
         install_global_sigint_handler,
         is_exit_requested,
+        reset_exit_flag,
     )
 
     console.print("[bold cyan]Job Application[/bold cyan]\n")
@@ -1007,6 +1064,8 @@ def _run_apply(
     console.print(
         "[dim]Press [bold]Ctrl+C[/bold] or type [bold]q[/bold] / [bold]quit[/bold] / "
         "[bold]exit[/bold] at any prompt to stop cleanly. Two Ctrl+C within 2s force quits.[/dim]\n"
+        "[dim]After a stop you can resume with [bold]wboxcli continue[/bold] or answer "
+        "[bold]yes[/bold] when prompted.[/dim]\n"
     )
 
     db = get_database()
@@ -1015,8 +1074,31 @@ def _run_apply(
     user_data_repo = UserDataRepository(session)
     job_repo = JobRepository(session)
 
-    resume = user_data_repo.get_resume()
-    if not resume:
+    checkpoint = None
+    if resume and not url:
+        checkpoint = load_apply_checkpoint(session)
+        if not checkpoint:
+            console.print(
+                "[yellow]No interrupted apply run found. Run [cyan]discover[/cyan] then "
+                "[cyan]apply[/cyan], or press Ctrl+C during apply to save a checkpoint.[/yellow]"
+            )
+            session.close()
+            raise typer.Exit(0)
+        mode = checkpoint.mode
+        sort = checkpoint.sort
+        limit = checkpoint.limit
+        try:
+            config.interaction_mode = InteractionMode(mode)
+        except ValueError:
+            pass
+        console.print(
+            f"[cyan]Resuming interrupted run[/cyan] "
+            f"([bold]{checkpoint.remaining_count}[/bold] job(s) remaining)…\n"
+        )
+        reset_exit_flag()
+
+    resume_data = user_data_repo.get_resume()
+    if not resume_data:
         console.print(
             "[red]No resume in the local database.[/red] Run "
             "[cyan]resume-upload --pdf <file.pdf> --json <file.json>[/cyan]."
@@ -1036,15 +1118,22 @@ def _run_apply(
         jobs = [job]
 
     else:
-        jobs = job_repo.list_pending()
-        if sort.lower() == "newest":
-            jobs.reverse()
-
-        if limit:
-            jobs = jobs[:limit]
+        if checkpoint:
+            jobs = jobs_from_checkpoint(session, checkpoint)
+        else:
+            jobs = job_repo.list_pending()
+            if sort.lower() == "newest":
+                jobs.reverse()
+            if limit:
+                jobs = jobs[:limit]
 
         if not jobs:
-            console.print("[yellow]No pending jobs found. Run [cyan]discover[/cyan] first.[/yellow]")
+            if checkpoint:
+                clear_apply_checkpoint(session)
+                console.print("[yellow]No remaining jobs in the saved checkpoint (already finished).[/yellow]")
+            else:
+                console.print("[yellow]No pending jobs found. Run [cyan]discover[/cyan] first.[/yellow]")
+            session.close()
             raise typer.Exit(0)
 
     original_count = len(jobs)
@@ -1065,7 +1154,14 @@ def _run_apply(
 
     console.print(f"Applying to {len(jobs)} job(s)...\n")
 
-    engine = ApplicationEngine(config, resume, db)
+    engine = ApplicationEngine(config, resume_data, db)
+
+    if checkpoint:
+        full_job_ids = list(checkpoint.job_ids)
+        batch_start_index = checkpoint.next_index
+    else:
+        full_job_ids = [j.id for j in jobs if j.id is not None]
+        batch_start_index = 0
 
     # Tally counters so the summary panel is meaningful regardless of how
     # we exit (clean finish, ExitRequested, or unexpected crash).
@@ -1074,6 +1170,8 @@ def _run_apply(
     failed = 0
     processed = 0
     exit_reason: Optional[str] = None
+    interrupted_at_index: Optional[int] = None
+    interrupted_job_id: Optional[int] = None
 
     try:
         try:
@@ -1082,8 +1180,12 @@ def _run_apply(
                 # Allow Ctrl+C between jobs to exit before opening a new tab.
                 if is_exit_requested():
                     exit_reason = "Ctrl+C between jobs"
+                    interrupted_at_index = batch_start_index + (i - 1)
+                    interrupted_job_id = job.id
                     break
                 console.print(f"[bold]Job {i}/{len(jobs)}[/bold]: {job.url}")
+                if job.id is not None:
+                    job_repo.update_status(job.id, ApplicationStatus.IN_PROGRESS)
                 try:
                     status = engine.apply_to_job(job)
                     console.print(f"Status: [green]{status.value}[/green]\n")
@@ -1098,12 +1200,16 @@ def _run_apply(
                         failed += 1
                 except ExitRequested as ex:
                     exit_reason = ex.reason
+                    interrupted_at_index = batch_start_index + (i - 1)
+                    interrupted_job_id = job.id
                     break
                 except KeyboardInterrupt:
                     # Fallback path if the SIGINT handler wasn't installed
                     # (e.g. running under an embedded interpreter). Treated
                     # identically to an ExitRequested.
                     exit_reason = "Ctrl+C (KeyboardInterrupt)"
+                    interrupted_at_index = batch_start_index + (i - 1)
+                    interrupted_job_id = job.id
                     break
                 except Exception as e:
                     console.print(f"[red]Error: {e}[/red]\n")
@@ -1126,6 +1232,26 @@ def _run_apply(
         except Exception as e:
             console.print(f"[dim red]Warning: error during session shutdown: {e}[/dim red]")
 
+    # -----------------------------------------------------------------
+    # Checkpoint + resume prompt (batch runs only)
+    # -----------------------------------------------------------------
+    if exit_reason and not url and full_job_ids and interrupted_at_index is not None:
+        reset_interrupted_job_to_pending(session, interrupted_job_id)
+        save_apply_checkpoint(
+            session,
+            job_ids=full_job_ids,
+            next_index=interrupted_at_index,
+            mode=config.interaction_mode.value,
+            sort=sort,
+            limit=limit,
+        )
+        remaining = max(0, len(full_job_ids) - interrupted_at_index)
+    elif not exit_reason and not url and full_job_ids:
+        clear_apply_checkpoint(session)
+        remaining = 0
+    else:
+        remaining = 0
+
     session.close()
 
     # -----------------------------------------------------------------
@@ -1140,9 +1266,15 @@ def _run_apply(
         f"Failed: [red]{failed}[/red]"
     )
     if exit_reason:
+        resume_hint = ""
+        if remaining:
+            resume_hint = (
+                f"\n\n[dim]Resume later:[/dim] [cyan]wboxcli continue[/cyan] "
+                f"or [cyan]wboxcli apply --continue[/cyan]"
+            )
         console.print(
             Panel(
-                f"[yellow]Exit requested:[/yellow] {exit_reason}\n\n{tally}",
+                f"[yellow]Exit requested:[/yellow] {exit_reason}\n\n{tally}{resume_hint}",
                 title="[bold yellow]>>> JobCLI stopped at your request <<<[/bold yellow]",
                 border_style="yellow",
                 expand=True,
@@ -1172,6 +1304,27 @@ def _run_apply(
         pass
 
     if exit_reason:
+        if remaining and not skip_resume_prompt:
+            reset_exit_flag()
+            console.print(
+                f"\n[bold]You stopped with {remaining} job(s) left in this batch.[/bold]"
+            )
+            if Confirm.ask(
+                "Resume applications where you left off?",
+                default=True,
+            ):
+                _run_apply(
+                    url=None,
+                    limit=limit,
+                    sort=sort,
+                    mode=config.interaction_mode.value,
+                    resume=True,
+                    skip_resume_prompt=True,
+                )
+                return
+            console.print(
+                "[dim]To resume later, run [cyan]wboxcli continue[/cyan].[/dim]"
+            )
         # User-initiated exit is success (0), not an error — consistent
         # with Unix shells (Ctrl+C generally exits programs gracefully).
         raise typer.Exit(0)
@@ -1185,7 +1338,7 @@ def apply(
     batch: bool = typer.Option(
         False,
         "--batch",
-        help="[Deprecated] No effect — `jobcli apply` already applies to all pending jobs when no --url is given.",
+        help="[Deprecated] No effect — `wboxcli apply` already applies to all pending jobs when no --url is given.",
     ),
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of jobs when applying to many"),
     sort: str = typer.Option("oldest", "--sort", "-s", help="Sort when applying to many: oldest | newest"),
@@ -1193,6 +1346,12 @@ def apply(
         "supervised",
         "--mode", "-m",
         help="Interaction mode: auto (fully autonomous), supervised (AI + human checkpoints, default), manual (pause at every step)",
+    ),
+    continue_run: bool = typer.Option(
+        False,
+        "--continue",
+        "-c",
+        help="Resume the last batch apply stopped with Ctrl+C (same as ``wboxcli continue``).",
     ),
 ) -> None:
     """Apply to all pending jobs from ``discover`` (or one job with ``--url``).
@@ -1206,7 +1365,28 @@ def apply(
     so ``apply`` simply iterates whatever is pending.
     """
     _ = batch  # accepted for backward compatibility with scripts using ``--batch``
-    _run_apply(url=url, limit=limit, sort=sort, mode=mode)
+    _run_apply(
+        url=url,
+        limit=limit,
+        sort=sort,
+        mode=mode,
+        resume=continue_run,
+        skip_resume_prompt=continue_run,
+    )
+
+
+@app.command("continue")
+def continue_apply() -> None:
+    """Resume the last apply batch stopped with Ctrl+C or ``q``/``quit``."""
+    config = get_config()
+    _run_apply(
+        url=None,
+        limit=None,
+        sort="oldest",
+        mode=config.interaction_mode.value if config.interaction_mode else "supervised",
+        resume=True,
+        skip_resume_prompt=True,
+    )
 
 
 @app.command()
@@ -1458,10 +1638,24 @@ def agent(
 
 @app.command("reset")
 def cli_reset(
-    force: bool = typer.Option(False, "--force", "-f", help="Same as jobcli db reset --force"),
+    force: bool = typer.Option(False, "--force", "-f", help="Reset without confirmation"),
+    keep_credentials: bool = typer.Option(
+        False,
+        "--keep-credentials",
+        help="Keep Whitebox email/password and API URL",
+    ),
+    keep_extension: bool = typer.Option(
+        False,
+        "--keep-extension",
+        help="Keep saved extension path",
+    ),
 ) -> None:
-    """Alias for ``jobcli db reset`` — full local SQLite database wipe (keeps ~/.jobcli logs)."""
-    _run_db_reset(force)
+    """Clear Whitebox login, LLM API keys, and resume. Jobs are kept. Full wipe: ``wboxcli db reset``."""
+    _run_reset(
+        force,
+        keep_credentials=keep_credentials,
+        keep_extension=keep_extension,
+    )
 
 
 if __name__ == "__main__":

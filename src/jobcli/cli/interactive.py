@@ -3,9 +3,11 @@
 Just a clean prompt. No heavy panels. Information when you need it.
 """
 
+import locale
 import os
 import sys
 import time
+from pathlib import Path
 try:
     import readline
 except ImportError:
@@ -35,6 +37,7 @@ V = "#7c3aed"   # violet
 COMMANDS = {
     "setup":     ["setup"],
     "apply":     None,
+    "continue":  ["continue"],
     "discover":  ["discover"],
     "jobs":      None,
     "status":    None,
@@ -47,6 +50,9 @@ COMMANDS = {
     "sync":      ["sync"],
     "server":    ["server"],
     "dashboard": ["open-dashboard"],
+    "reset":     ["reset"],
+    "uninstall": ["uninstall"],
+    "update":    ["update"],
     "clear":     None,
     "help":      None,
     "exit":      None,
@@ -89,7 +95,7 @@ def _next_step_panel(command: str, hint: str = "") -> None:
 
     Mirrors ``main.py:_print_next_step`` but uses the bare TUI command name
     (``apply``, ``discover`` …) since the user is already inside the
-    interactive shell and never needs to prefix with ``jobcli``.
+    interactive shell and never needs to prefix with ``wboxcli``.
     """
     from rich.panel import Panel
     body_lines = [f"  [bold #f0abfc]> {command}[/]"]
@@ -179,6 +185,8 @@ def _validate_wbox_and_extension(
     email: str,
     password: str,
     ext_dir: str | None = None,
+    *,
+    on_progress=None,
 ) -> tuple[bool, bool, str | None, str]:
     """Validate Whitebox credentials AND load the TalentScreen extension in
     a single visible Chrome launch.
@@ -187,13 +195,40 @@ def _validate_wbox_and_extension(
     -------
     ``(login_ok, extension_ok, resolved_ext_dir, error_message)``
     """
-    from jobcli.extension.helpers import resolve_extension_dir, verify_extension_in_browser
+    from jobcli.utils.extension_helpers import (
+        _report as _ext_report,
+        get_local_extension_zip,
+        maybe_install_local_extension_zip,
+        resolve_extension_dir,
+        verify_extension_in_browser,
+    )
 
+    if get_local_extension_zip():
+        _ext_report(on_progress, "Preparing extension from ZIP…")
+        maybe_install_local_extension_zip()
+
+    _ext_report(on_progress, "Locating extension files…")
     resolved = resolve_extension_dir(ext_dir)
     if not resolved:
-        return (False, False, None, "TalentScreen extension not found in bin folder or config")
+        zip_hint = get_local_extension_zip()
+        if zip_hint is None:
+            err = (
+                "TalentScreen extension not found. Build the extension ZIP, then copy it to "
+                "project-talentscreen-wbox-cli/extension/ (any .zip name; see "
+                "docs/SETUP_WINDOWS_MAC.md). On Windows: .\\build.ps1 in the "
+                "autofill-extension repo, then Copy-Item dist\\*.zip to extension\\."
+            )
+        else:
+            err = (
+                "TalentScreen extension not unpacked. ZIP exists but "
+                "~/.jobcli/extension_unpacked/ is missing — run: "
+                "python -m jobcli.cli.main doctor  (with PYTHONPATH=src set)"
+            )
+        return (False, False, None, err)
 
-    login_ok, extension_ok, err = verify_extension_in_browser(resolved, email, password)
+    login_ok, extension_ok, err = verify_extension_in_browser(
+        resolved, email, password, progress=on_progress
+    )
     return (login_ok, extension_ok, resolved, err)
 
 
@@ -223,22 +258,35 @@ def _run_onboarding(force: bool = False):
             db_config = repo.get_all()
 
             # ── Step 1 — Whitebox Learning Login + Browser/Extension Test ──
-            # A single headless Chrome window doubles as the credential check and the
+            # A single visible Chrome window doubles as the credential check and the
             # extension smoke test, so we never launch two browsers in a row.
-            console.print(f"[{D}]Step 1/4[/] — [bold]Whitebox Learning Credentials[/bold]")
+            console.print(f"[{D}]Step 1/3[/] — [bold]Whitebox Learning Credentials[/bold]")
             if force or not db_config.job_board_username or not db_config.job_board_password:
                 while True:
                     email = input(f"{PURP}Whitebox Email: {RST}").strip()
                     password = getpass.getpass(f"{PURP}Whitebox Password: {RST}").strip()
 
-                    with console.status(
-                        f"[{D}]Opening browser, loading TalentScreen extension, validating login...[/]",
-                        spinner="dots",
-                        spinner_style="#e879f9",
-                    ):
-                        login_ok, extension_ok, ext_dir, err = _validate_wbox_and_extension(
-                            email, password, db_config.extension_path
-                        )
+                    def _browser_progress(msg: str) -> None:
+                        console.print(f"  [{D}]… {msg}[/]")
+                        sys.stdout.flush()
+
+                    console.print()
+                    console.print(
+                        f"[bold #e879f9]Please wait[/] [{D}]— browser test in progress "
+                        f"(usually 15–30 seconds).[/]"
+                    )
+                    console.print(
+                        f"[{D}]  Chrome may open briefly. Do not close it until the checks below finish.[/]"
+                    )
+                    console.print()
+
+                    login_ok, extension_ok, ext_dir, err = _validate_wbox_and_extension(
+                        email,
+                        password,
+                        db_config.extension_path,
+                        on_progress=_browser_progress,
+                    )
+                    console.print()
 
                     if login_ok:
                         db_config.job_board_username = email
@@ -267,7 +315,7 @@ def _run_onboarding(force: bool = False):
 
             # ── Step 2 — LLM Provider + API Key ──
             console.print()
-            console.print(f"[{D}]Step 2/4[/] — [bold]Select LLM Provider for Automation[/bold]")
+            console.print(f"[{D}]Step 2/3[/] — [bold]Select LLM Provider for Automation[/bold]")
             console.print()
             console.print(f"[{K}]> 1. OpenAI (Recommended)[/]")
             console.print(f"  [{D}]Requires OPENAI_API_KEY[/]")
@@ -286,8 +334,11 @@ def _run_onboarding(force: bool = False):
 
                 api_key = input(f"{PURP}Enter {prompt_name} API Key: {RST}").strip()
 
-                with console.status(f"[{D}]Validating API key...[/]", spinner="dots", spinner_style="#e879f9"):
-                    is_valid = _validate_llm(provider, api_key)
+                console.print()
+                console.print(f"[bold #e879f9]Please wait[/] [{D}]— validating {prompt_name} API key…[/]")
+                sys.stdout.flush()
+                is_valid = _validate_llm(provider, api_key)
+                console.print()
 
                 if is_valid:
                     db_config.default_llm_provider = provider
@@ -306,27 +357,60 @@ def _run_onboarding(force: bool = False):
             session.commit()
             _next_hint("upload your resume (PDF + JSON) so the agent can answer for you")
 
-            # ── Step 3 — Resume Upload ──
+            # ── Step 3 — Resume Upload + profile confirmation ──
             console.print()
-            console.print(f"[{D}]Step 3/4[/] — [bold]Resume Upload[/bold]")
+            console.print(f"[{D}]Step 3/3[/] — [bold]Resume Upload[/bold]")
             if force or not has_resume:
-                pdf_path = input(f"{PURP}Path to Resume PDF: {RST}").strip()
-                json_path = input(f"{PURP}Path to Resume JSON: {RST}").strip()
-                session.close()  # Close session before running subprocess
+                from jobcli.utils.resume_helpers import (
+                    confirm_profile_prompt,
+                    load_resume_from_paths,
+                    persist_resume,
+                    print_profile_summary,
+                )
 
-                pdf_path = os.path.abspath(os.path.expanduser(pdf_path))
-                json_path = os.path.abspath(os.path.expanduser(json_path))
+                session.close()
 
-                console.print(f"\n[{D}]Uploading resume...[/]")
-                _exec(["resume-upload", "--pdf", pdf_path, "--json", json_path])
+                while True:
+                    pdf_path = input(f"{PURP}Path to Resume PDF: {RST}").strip()
+                    json_path = input(f"{PURP}Path to Resume JSON: {RST}").strip()
 
-                # ── Step 4 — Discover jobs from Whitebox dashboard ──
-                console.print(f"\n[{D}]Step 4/4[/] — [bold]Discovering jobs from Whitebox Learning...[/]")
-                _exec(["discover"])
+                    try:
+                        resume, pdf_resolved, json_resolved = load_resume_from_paths(
+                            pdf_path, json_path
+                        )
+                    except ValueError as exc:
+                        console.print(f"[bold white on #c026d3] ✗ [/] [red]{exc}[/red]")
+                        continue
+                    except Exception as exc:
+                        console.print(
+                            f"[bold white on #c026d3] ✗ [/] [red]Invalid resume JSON: {exc}[/red]"
+                        )
+                        continue
+
+                    console.print()
+                    print_profile_summary(console, resume, pdf_resolved)
+
+                    if not confirm_profile_prompt():
+                        console.print(f"[{D}]Re-enter your resume paths to try again.[/]\n")
+                        continue
+
+                    persist_resume(resume, pdf_resolved, json_resolved)
+                    console.print("[bold green]✓ Resume uploaded successfully[/bold green]\n")
+
+                    _next_step_panel(
+                        "discover",
+                        "pull fresh job listings from Whitebox",
+                    )
+                    _exec(["discover"])
+                    _next_step_panel(
+                        "apply",
+                        "start applying when you are ready (run manually)",
+                    )
+                    break
             else:
                 session.close()
 
-            console.print(f"\n[{K}]✓ Setup complete! You are ready to apply to jobs.[/]")
+            console.print(f"\n[{K}]✓ Setup complete! You are ready to discover and apply to jobs.[/]")
     except Exception as e:
         import traceback
         console.print(f"[red]Error during setup: {e}[/red]")
@@ -404,43 +488,101 @@ def _print_welcome():
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
-def _find_jobcli_bin() -> str:
+def _project_root() -> Path:
+    return Path(__file__).resolve().parent.parent.parent.parent
+
+
+def _running_from_dev_tree() -> bool:
+    """True when launched from build.bat / repo (PYTHONPATH=src or project .venv)."""
+    py_path = os.environ.get("PYTHONPATH", "").replace("\\", "/")
+    if "src" in py_path.split(os.pathsep) or py_path.rstrip("/").endswith("/src"):
+        return True
+    if os.name == "nt":
+        venv_py = _project_root() / ".venv" / "Scripts" / "python.exe"
+        if venv_py.is_file():
+            try:
+                return Path(sys.executable).resolve() == venv_py.resolve()
+            except OSError:
+                pass
+    return False
+
+
+def _find_wboxcli_bin() -> str:
     venv_dir = os.path.join(os.path.expanduser("~"), ".jobcli", "venv")
-    candidate = os.path.join(venv_dir, "Scripts" if os.name == "nt" else "bin", "jobcli.exe" if os.name == "nt" else "jobcli")
+    candidate = os.path.join(venv_dir, "Scripts" if os.name == "nt" else "bin", "wboxcli.exe" if os.name == "nt" else "wboxcli")
     if os.path.exists(candidate):
         return candidate
-    return shutil.which("jobcli") or "jobcli"
+    return shutil.which("wboxcli") or "wboxcli"
+
+
+def _subprocess_encoding() -> str:
+    """Encoding for child CLI stdout (Windows consoles often use cp1252, not UTF-8)."""
+    return (
+        getattr(sys.stdout, "encoding", None)
+        or locale.getpreferredencoding(False)
+        or "utf-8"
+    )
+
+
+def _wboxcli_command(args: list[str]) -> list[str]:
+    """Build argv for a wboxcli subcommand (same Python as the TUI when in dev tree)."""
+    # build.bat sets PYTHONPATH=src — use that interpreter so Playwright/browsers match.
+    if _running_from_dev_tree():
+        return [sys.executable, "-m", "jobcli.cli.main"] + args
+    wboxcli = _find_wboxcli_bin()
+    if wboxcli != "wboxcli" and os.path.isfile(wboxcli):
+        return [wboxcli] + args
+    return [sys.executable, "-m", "jobcli.cli.main"] + args
 
 
 def _exec(args: list[str]):
-    """Run a jobcli subcommand, streaming output."""
-    jobcli = _find_jobcli_bin()
+    """Run a wboxcli subcommand, streaming output."""
+    cmd = _wboxcli_command(args)
 
-    console.print(f"\n  [{D}]$ jobcli {' '.join(args)}[/]")
+    console.print(f"\n  [{D}]$ wboxcli {' '.join(args)}[/]")
     console.print()
 
+    env = os.environ.copy()
+    if _running_from_dev_tree():
+        src = str(_project_root() / "src")
+        existing = env.get("PYTHONPATH", "")
+        if src not in existing.replace("\\", "/").split(os.pathsep):
+            env["PYTHONPATH"] = src if not existing else f"{src}{os.pathsep}{existing}"
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    if os.name == "nt":
+        env.setdefault("PYTHONUTF8", "1")
+
+    proc = None
     try:
         proc = subprocess.Popen(
-            [jobcli] + args,
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             cwd=os.getcwd(),
             text=True,
-            encoding="utf-8",
+            encoding=_subprocess_encoding(),
+            errors="replace",
+            env=env,
             bufsize=1,
         )
+        assert proc.stdout is not None
         for line in iter(proc.stdout.readline, ""):
             sys.stdout.write(line)
             sys.stdout.flush()
         proc.wait()
         console.print()
     except KeyboardInterrupt:
-        proc.terminate()
-        proc.wait()
+        if proc is not None:
+            proc.terminate()
+            proc.wait()
         console.print(f"\n  [{D}]cancelled[/]\n")
     except FileNotFoundError:
         try:
-            subprocess.run([sys.executable, "-m", "jobcli"] + args, cwd=os.getcwd())
+            subprocess.run(
+                _wboxcli_command(args),
+                cwd=os.getcwd(),
+                env=env,
+            )
         except KeyboardInterrupt:
             console.print(f"\n  [{D}]cancelled[/]\n")
 
@@ -462,6 +604,7 @@ def _cmd_help():
         ("Running", [
             ("apply",          "Apply to all pending jobs (after discover)"),
             ("apply --url URL","Apply to a specific URL"),
+            ("continue",       "Resume last apply stopped with Ctrl+C"),
             ("discover",       "Discover jobs from WBL API (cli_window, paginated)"),
             ("scan",           "Scan ATS portals for openings"),
         ]),
@@ -474,6 +617,10 @@ def _cmd_help():
         ("Other", [
             ("server",    "Start web UI dashboard"),
             ("dashboard", "Open Whitebox dashboard in browser"),
+            ("reset",     "Clear login, API keys, resume (keep jobs)"),
+            ("db reset",  "Wipe entire database (via wboxcli db reset)"),
+            ("update",    "Update WboxCLI code and dependencies"),
+            ("uninstall", "Full uninstallation"),
             ("clear",     "Clear the screen"),
             ("exit",      "Exit"),
         ]),
@@ -549,6 +696,13 @@ def _dispatch(raw: str):
     if not parts:
         return
 
+    # Accept pasted README-style commands: `wboxcli apply`, `wboxcli discover`, …
+    if parts[0].lower() in ("jobcli", "wboxcli"):
+        parts = parts[1:]
+        if not parts:
+            console.print(f"\n  [{D}]type a subcommand after[/] [{K}]wboxcli[/] [{D}](e.g. apply, discover)[/]\n")
+            return
+
     cmd = parts[0].lower()
     args = parts[1:]
 
@@ -576,6 +730,9 @@ def _dispatch(raw: str):
     if cmd == "apply":
         _exec(["apply"] + args)
         return
+    if cmd == "continue":
+        _exec(["continue"])
+        return
 
     # Resume aliases — accept the short form ``resume`` *and* the full
     # underlying CLI command ``resume-upload`` so users who copy a command
@@ -587,6 +744,47 @@ def _dispatch(raw: str):
     # Login / Setup mapping
     if cmd in ("login", "setup"):
         _run_onboarding(force=True)
+        return
+
+    if cmd == "reset":
+        from jobcli.cli.main import _run_reset
+
+        try:
+            _run_reset(force=False)
+            _run_onboarding(force=True)
+        except Exception as e:
+            console.print(f"[red]Error during reset: {e}[/red]")
+        return
+
+    # Uninstall mapping (deletes all CLI data and shims, then exits cleanly)
+    if cmd == "uninstall":
+        from jobcli.cli.main import uninstall
+        try:
+            uninstall(force=False)
+            sys.exit(0)
+        except SystemExit:
+            sys.exit(0)
+        except Exception as e:
+            console.print(f"[red]Error during uninstall: {e}[/red]")
+        return
+
+    # Update mapping (runs update script and exits cleanly so new code is loaded)
+    if cmd == "update":
+        import subprocess
+        console.print(f"\n  [{D}]Running WboxCLI Update...[/]")
+        try:
+            script_path = _project_root() / "scripts" / "wboxcli.sh"
+            powershell_path = _project_root() / "scripts" / "install.ps1"
+            if os.name != "nt":
+                subprocess.run(["bash", str(script_path), "update"], check=True)
+            else:
+                subprocess.run(["powershell.exe", "-File", str(powershell_path)], check=True)
+            console.print(f"\n  [green]Update complete! Please restart WboxCLI to run the newly updated version.[/green]\n")
+            sys.exit(0)
+        except SystemExit:
+            sys.exit(0)
+        except Exception as e:
+            console.print(f"[red]Error during update: {e}[/red]")
         return
 
     # Standard

@@ -1,30 +1,36 @@
-# JobCLI
+# WboxCLI
 
 Production-grade CLI for automated job applications across multiple ATS platforms, powered by a self-learning local intelligence engine.
+
+> **Naming:** Python package is `jobcli`; the installed command is **`wboxcli`**. Dev runs use `PYTHONPATH=src` and `python -m jobcli.cli.main` (or `python -m jobcli.cli.entry` for the TUI).
+
+> **Windows & macOS command guide (extension ZIP, unzip, onboarding, `apply`):**  
+> See **[docs/SETUP_WINDOWS_MAC.md](docs/SETUP_WINDOWS_MAC.md)** — full copy-paste commands for CMD, PowerShell, and bash.
 
 ---
 
 ## Features
 
 ### Core Automation
-- **No `.env` files** — credentials, LLM keys, resume paths, and the API base URL all live in `~/.jobcli/jobcli.db`, written by `jobcli login`, `jobcli resume-upload`, and `jobcli config`. The CLI never reads a `.env` file.
-- **Guided interactive TUI** — running `wboxcli` walks you through onboarding in a fixed order (WBL login → visible browser + extension smoke test → LLM key → resume → discover), and at every step shows a `▶ Next step` panel telling you exactly which command to type next. Non-technical users never have to guess what to run.
-- **Auto-download Extension** — `jobcli setup` downloads the TalentScreen extension into `~/.jobcli/extension_unpacked/` and `apply` loads it automatically — no manual paths required.
-- **Always-visible browser** — `jobcli apply` forces `headless=False`; Chrome is always on screen so you can watch and intervene.
-- **Don't-refill guard** — the extension autofills first; a three-layer guard (engine snapshot → LLM action filter → executor live-read) prevents the LLM or rules from overwriting any field the extension already populated. Placeholder values like `"Select..."` are correctly treated as empty, so real values still flow through.
-- **Required-first human prompt** — when fields stay empty after extension + LLM + rules, the terminal asks for `[red]*required[/red]` fields first (must answer) and `[dim](optional, Enter to skip)[/dim]` fields second (press Enter to skip). The `required` flag is propagated from the page's Accessibility Tree.
-- **Source-filtered discover** — `jobcli discover` only ingests links whose WBL `Source` value is one of `trueup.io`, `hiring.cafe`, `jobright`, `linkedin`. Other listings (Indeed, Workday, …) are dropped at ingest time and never touch the local DB, so `apply` simply iterates whatever is in the queue. To change the allow-list, edit `DEFAULT_SOURCES` in [`jobcli/core/source_filter.py`](jobcli/core/source_filter.py).
-- **WBL job listings API** — `jobcli discover` calls `GET /api/positions/cli_window` (Bearer auth), pages with `offset` until every listing row is fetched (same filters as the dashboard Jobs grid by default: all time, `open` only). Tune with `JOBCLI_DISCOVER_DAYS`, `JOBCLI_DISCOVER_PAGE_SIZE`, `JOBCLI_DISCOVER_STATUS`. Legacy Playwright dashboard scrape: `WBOX_DISCOVER_MODE=browser` or `jobcli discover --legacy-ui`.
+- **No `.env` files** — credentials, LLM keys, resume paths, and the API base URL all live in `~/.jobcli/jobcli.db`, written by `wboxcli login`, `wboxcli resume-upload`, and `wboxcli config`. The CLI never reads a `.env` file.
+- **Guided interactive TUI** — `wboxcli` onboarding: WBL login (visible Chrome + extension check) → LLM key → resume paths → **profile summary + Confirm (Y/N)** → auto `discover`. Each step shows a `▶ Next step` panel; `apply` is manual when you are ready.
+- **TalentScreen extension** — copy any built `*.zip` into `extension/` (e.g. `talentscreen-autofill-v2.0.0.zip`); the CLI picks the newest match and unpacks to `~/.jobcli/extension_unpacked/` for `apply`.
+- **Always-visible browser** — `wboxcli apply` forces `headless=False`; Chrome is always on screen so you can watch and intervene.
+- **Fill order** — Chrome **extension autofill** first, then **rules-based** ATS handlers, then **LLM** for remaining fields. Don't-refill guards prevent later passes from overwriting populated fields.
+- **Required-first human prompt** — when fields stay empty after extension + rules + LLM, the terminal asks for `[red]*required[/red]` fields first (must answer) and `[dim](optional, Enter to skip)[/dim]` fields second (press Enter to skip). The `required` flag is propagated from the page's Accessibility Tree.
+- **Source-filtered discover** — `wboxcli discover` only ingests links whose WBL `Source` value is one of `trueup.io`, `hiring.cafe`, `jobright`, `linkedin`. Other listings (Indeed, Workday, …) are dropped at ingest time and never touch the local DB, so `apply` simply iterates whatever is in the queue. To change the allow-list, edit `DEFAULT_SOURCES` in [`src/jobcli/orchestration/source_filter.py`](src/jobcli/orchestration/source_filter.py).
+- **WBL job listings API** — `wboxcli discover` calls `GET {sync_server_url}/positions/cli_window` (default base `https://api.whitebox-learning.com/api`, Bearer auth), pages until every row is fetched (default: all time, `open` only). Tune with `JOBCLI_DISCOVER_DAYS`, `JOBCLI_DISCOVER_PAGE_SIZE`, `JOBCLI_DISCOVER_STATUS`. Legacy Playwright scrape: `WBOX_DISCOVER_MODE=browser` or `wboxcli discover --legacy-ui`.
 - **Advanced AI Reasoning** — AXTree (Accessibility Tree) analysis for high-accuracy form field mapping
 - **Universal Iframe Support** — Reach-through for Greenhouse, Lever, Paylocity, and nested iframes
 - **JS Force-Fill Fallback** — Bypasses stubborn React/Angular event listeners for 100% input reliability
-- **Three-Phase Strategy** — Autonomous AI → Heuristic Rules → Human-in-the-loop
+- **Four-step fill pipeline** — Extension → Rules → LLM → Human (only when needed). See [Apply fill pipeline](#apply-fill-pipeline).
 - **Interactive Terminal Help** — If the agent fails to find a field, it pauses and asks you in the terminal. You can pick options (Yes/No) or enter values directly without switching to the browser.
 - **Robust Manual Skip** — Typer-friendly skip command handles common typos (`skipp`, `skp`, `s`) during high-speed application loops.
+- **Stop and resume apply** — Press **Ctrl+C** (or type `q` / `quit` / `exit` at any prompt) to stop a batch cleanly. The CLI saves your place, recommends resuming, and asks **yes/no** (default **yes**). Answer **yes** to continue immediately, **no** to stop and use `wboxcli continue` later. See [Stop and resume (Ctrl+C)](#stop-and-resume-ctrlc).
 - **Resume Path Validation** — Automatically detects missing resume files and warns you instead of crashing, ensuring batch continuity.
 - **Multi-Provider LLM** — Native support for OpenAI, Anthropic, and Google Gemini
-- **LinkedIn Manual Loop** — LinkedIn jobs are opened in the browser with a 60-second window for manual application before auto-skipping
-- **Job Activity Dashboard Sync** — Automatically pushes `SUBMITTED` and `FAILED` application statuses to your central dashboard for real-time tracking
+- **LinkedIn handling** — LinkedIn URLs prompt to skip (default: yes). If you continue, the CLI hands off the browser until you press ENTER (600s wait in supervised/manual; 60s in `auto`, then the job is skipped).
+- **Job Activity Dashboard Sync** — After `wboxcli apply` (auto-sync at end of batch) or `wboxcli sync`, pushes recent `SUBMITTED` and `FAILED` jobs (title, company, status, timestamp) to the central dashboard
 
 ### Phase 1 — Local Learning & Memory Engine
 - **Confidence-Based Memory** — Answers are only trusted after ≥ 3 successful uses at ≥ 60% confidence
@@ -81,18 +87,21 @@ This installs `wboxcli` globally — available from any terminal, just like `nvm
 | Command | What it does |
 |---|---|
 | `wboxcli` | Opens the interactive TUI |
-| `wboxcli setup` | Runs a subcommand directly (any `jobcli` subcommand works under `wboxcli`) |
-| `jobcli apply` | Direct CLI — apply to all pending jobs after `discover` |
+| `wboxcli setup` | CLI 5-step setup: config check → resume → **discover** → extension unpack + browser test (not the same as TUI `setup`; see below) |
+| `wboxcli apply` | Direct CLI — apply to all pending jobs after `discover` |
 
 **What the installer does:**
 1. Clones the repo to `~/.jobcli/src`
 2. Creates an isolated Python venv at `~/.jobcli/venv`
 3. Installs all dependencies + Playwright Chromium
-4. Drops `wboxcli` + `jobcli` shims at `~/.local/bin/` (Windows: `wboxcli.cmd` + `jobcli.cmd`)
-5. Adds `~/.local/bin` to your PATH (if not already there)
-6. Auto-launches the interactive TUI
+4. Drops `wboxcli` at `~/.local/bin/` (Windows: `wboxcli.cmd`)
+5. Clones the TalentScreen extension repo into `~/.jobcli/src/bin/project-talentscreen-autofill-extension`
+6. Adds `~/.local/bin` to your PATH (if not already there)
+7. Auto-launches the interactive TUI
 
-**To update** (just re-run the installer — same one-liner as above):
+> **Re-running the one-line installer** deletes `~/.jobcli/jobcli.db*` if `~/.jobcli/` already exists (fresh DB). Use `wboxcli uninstall` to remove the whole install tree without reinstalling.
+
+**To update** (you can also use the local `./scripts/wboxcli.sh update` command):
 
 ```bash
 # macOS / Linux (Main)
@@ -109,7 +118,7 @@ irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/install.
 $env:JOBCLI_BRANCH="dev"; irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.ps1 | iex
 ```
 
-**To uninstall** (see also [Cleanup, DB Reset, and Uninstall](#cleanup-db-reset-and-uninstall) for finer-grained options):
+**To uninstall** (you can also use the local `./scripts/wboxcli.sh uninstall` command):
 
 ```bash
 # macOS / Linux (Main)
@@ -128,71 +137,86 @@ irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall
 
 ### Manual Install (For Development)
 
-```bash
-python -m venv venv
-.\venv\Scripts\Activate.ps1   # Windows
-# source venv/bin/activate    # macOS / Linux
+**Full step-by-step (extension build → ZIP → unzip → commands):** [docs/SETUP_WINDOWS_MAC.md](docs/SETUP_WINDOWS_MAC.md)
 
-pip install --upgrade pip setuptools
-pip install -e .
-playwright install chromium
-```
+| OS | First-time dev setup | Daily run |
+|----|----------------------|-----------|
+| **macOS / Linux** | `./build.sh` then `source .venv/bin/activate` | `export PYTHONPATH=src` → `python -m jobcli.cli.main apply --limit 1` or `wboxcli` |
+| **Windows (CMD)** | `build.bat` | `set PYTHONPATH=src` → `.\.venv\Scripts\python.exe -m jobcli.cli.main apply --limit 1` |
+| **Windows (PowerShell)** | `.\build.bat` | `$env:PYTHONPATH="src"` → `.\.venv\Scripts\python.exe -m jobcli.cli.main apply --limit 1` |
 
-> **Windows Note:** If a `pip install -e .` step fails with `[WinError 5] Access is denied` on `jobcli.exe`, close any open terminal that still has `jobcli` running and retry. The installer-managed venv at `~/.jobcli/venv` avoids this entirely.
+`build.sh` / `build.bat` create `.venv`, install Playwright, and unpack the newest `extension/*.zip` into `~/.jobcli/extension_unpacked/` (Chrome loads the **folder**, not the ZIP). Force refresh: `FORCE_REINSTALL_EXTENSION=1`.
+
+> **Windows:** Use `set PYTHONPATH=src` in **CMD**, not `$env:PYTHONPATH` (PowerShell only).  
+> **Windows extension build:** use `build.ps1` in the extension repo if Git Bash lacks `zip`.
 
 ---
 
 ## Quick Start — Interactive TUI (recommended for first-time users)
 
-Just run:
+**First-time users** need an empty or reset DB — credentials and resume are saved to `~/.jobcli/jobcli.db` and are **not** asked again on later `apply` runs. See [Starting fresh](#starting-fresh-re-trigger-onboarding) below.
+
+| OS | Launch TUI |
+|----|------------|
+| Global install | `wboxcli` |
+| Windows dev | `build.bat` |
+| macOS / Linux dev | `./build.sh` then `wboxcli` or `python src/jobcli/cli/entry.py` with `PYTHONPATH=src` |
+
+Just run (global install):
 
 ```powershell
 wboxcli
 ```
 
-If `~/.jobcli/` does not exist yet, the CLI walks you through onboarding in this exact order:
+If `~/.jobcli/` is new (or you cleared settings), onboarding runs in this order:
 
 | # | Step | What happens |
 |---|---|---|
-| 1 | **WBL Login + Browser test** | Enter your Whitebox email and password. Chrome opens visibly, the **TalentScreen** extension loads, the dashboard renders, and you see `✓ Open browser`, `✓ Plugin load`, `✓ Test successful`. Credentials are saved to `~/.jobcli/jobcli.db`. |
-| 2 | **LLM provider + API key** | Pick `openai` / `anthropic` / `gemini`, paste your key. Validation is done in-process. |
-| 3 | **Resume upload** | Enter the full path to your PDF (and JSON if you have one). |
-| 4 | **Discover jobs** | The CLI calls the WBL listings API and tells you how many pending jobs are in the queue. |
+| 1 | **WBL login + browser test** | Email/password → visible Chrome → progress lines (`… Launching Chrome`, `… Loading extension`, etc.) → `✓ Open browser`, `✓ Plugin load`, `✓ Test successful`. Saved to `~/.jobcli/jobcli.db`. |
+| 2 | **LLM + API key** | Pick OpenAI / Anthropic / Gemini; key validated in-process. |
+| 3 | **Resume** | PDF + JSON paths → validate → **Profile Summary** → `Confirm? (Y/N)`. On **Y**: save resume, run **`discover`** (not `apply`). |
+| — | **After setup** | Type `apply` when you want to start applying. |
 
-After every step a `▶ Next step` panel appears at the bottom of the terminal showing the exact next command (`apply`, `discover`, etc.) — you never have to remember anything.
+A `▶ Next step` panel after each phase shows the next command.
 
 Returning users (where `~/.jobcli/jobcli.db` already exists) skip straight to the welcome banner and the `▶ Next step: apply` panel.
 
-### Starting fresh (re-trigger onboarding)
+### TUI vs CLI `setup` (important)
 
-`quit` only closes the session — it does not delete saved state. If you have already completed the setup but want to change your API keys, credentials, or resume, the CLI will skip the wizard because your database is preserved. 
+| How you run it | What happens |
+|----------------|--------------|
+| `wboxcli` → type **`login`** | Interactive onboarding (WBL + extension test → LLM → resume + confirm → `discover`) |
+| `wboxcli` → type **`setup`** | Same as **`login`** — re-runs interactive onboarding (`_run_onboarding`) |
+| **`wboxcli setup`** (subcommand) | CLI 5-step setup: verify config → resume → **`discover`** → unpack extension + browser test |
+| `./scripts/wboxcli.sh setup` | Runs **`wboxcli setup`** (CLI 5-step), not TUI onboarding |
 
-To re-trigger the onboarding wizard, use one of the following methods:
+### Starting fresh (change login, keys, or resume)
 
-**Option 1: Run the setup command directly (Preserves History)**
+`quit` does not clear saved state. To re-enter credentials, API keys, or resume:
+
+| Goal | Command |
+|------|---------|
+| Clear login, LLM keys, resume (keep jobs) | `wboxcli reset` then `wboxcli` or `wboxcli setup` |
+| Wipe **everything** (jobs, memory, credentials) | `wboxcli db reset` |
+
 ```bash
-wboxcli setup
+wboxcli reset          # confirm prompt
+wboxcli reset --force  # no prompt
 ```
 
-**Option 2: Wipe the database completely to start fresh**
-```bash
-jobcli db reset --force
-wboxcli
-```
-
-*(Note: Uninstalling and reinstalling the app does not wipe your credentials unless you use the official uninstallation scripts)*
+Re-running the **one-line installer** resets `jobcli.db` (see Installation). **`wboxcli uninstall`** removes all of `~/.jobcli/`. Updating code via `./scripts/wboxcli.sh update` does not wipe the DB.
 
 ---
 
 ## Quick Start — Direct CLI subcommands
 
-JobCLI is fully **interactive** — there is no `.env` file. All configuration is stored in
+WboxCLI is fully **interactive** — there is no `.env` file. All configuration is stored in
 `~/.jobcli/jobcli.db` by the commands below. The same four steps work on PowerShell, zsh, and bash.
 
 ### Step 1 — Save credentials and LLM keys
 
 ```bash
-jobcli login
+wboxcli login
 ```
 
 You'll be prompted for:
@@ -200,93 +224,126 @@ You'll be prompted for:
 - LLM API keys (at least one of OpenAI, Anthropic, Gemini)
 - Default LLM provider (`openai` / `anthropic` / `gemini`)
 
-You are **never asked for the WBL API base URL**. The CLI silently probes the hardcoded production endpoint — `https://api.whitebox-learning.com/api` — with the credentials you just entered, and saves it if authentication succeeds. If it's unreachable at login time, the next `jobcli discover` re-probes automatically. Developers running a local backend can override the saved URL with `jobcli config --key sync_server_url --set <url>`.
+You are **never asked for the WBL API base URL**. The CLI silently probes the hardcoded production endpoint — `https://api.whitebox-learning.com/api` — with the credentials you just entered, and saves it if authentication succeeds. If it's unreachable at login time, the next `wboxcli discover` re-probes automatically. Developers running a local backend can override the saved URL with `wboxcli config --key sync_server_url --set <url>`.
 
-Re-running `jobcli login` updates the saved values. `jobcli login --auto` skips prompts entirely if credentials are already saved.
+Re-running `wboxcli login` updates the saved values. `wboxcli login --auto` skips prompts only if **both** WBL credentials **and** at least one LLM API key are already saved.
 
 ### Step 2 — Load your resume
 
 ```bash
 # Windows (PowerShell)
-jobcli resume-upload --pdf "C:\Users\you\resume.pdf" --json "C:\Users\you\resume.json"
+wboxcli resume-upload --pdf "C:\Users\you\resume.pdf"
+# optional: --json "C:\Users\you\resume.json"
 
 # macOS / Linux
-jobcli resume-upload --pdf "/Users/you/resume.pdf" --json "/Users/you/resume.json"
+wboxcli resume-upload --pdf "/Users/you/resume.pdf"
 ```
 
-Both files are parsed and the absolute paths are saved into `~/.jobcli/jobcli.db`. The PDF is uploaded to the application engine at apply time; the JSON drives every form field.
+`--json` is optional: defaults to `<pdf>.json` beside the PDF, or generates a minimal profile from your WBL login email if no JSON exists. Paths are saved to `~/.jobcli/jobcli.db`. The PDF is attached at apply time; JSON drives form fields.
 
-### Step 3 — One-shot validation (downloads extension, runs browser test)
+### Step 3 — CLI setup (config, discover, extension, browser test)
 
 ```bash
-jobcli setup
+wboxcli setup
 ```
 
-This validates your saved config, downloads the **TalentScreen** Chrome extension into
-`~/.jobcli/extension_unpacked/`, and runs a 15-second visible-browser smoke test.
+Runs **5 steps**: (1) verify config in DB, (2) reload resume from saved paths, (3) **`discover`** if WBL credentials exist, (4) unpack `extension/*.zip` + visible browser smoke test, (5) summary. Requires `login` first. Build/copy the ZIP first — see [Local extension dev loop](#local-extension-dev-loop).
+
+> First-time users can skip this if they completed interactive onboarding (`wboxcli` → login flow), which already runs `discover` after resume confirm.
 
 ### Step 4 — Discover, then apply
 
 ```bash
-jobcli discover
-jobcli apply
+wboxcli discover
+wboxcli apply
 ```
 
 Apply to a single URL (optional):
 
 ```bash
-jobcli apply --url "https://boards.greenhouse.io/company/jobs/123"
+wboxcli apply --url "https://boards.greenhouse.io/company/jobs/123"
 ```
 
-`jobcli apply` with no arguments applies to **all pending jobs** in your local DB. Chrome always opens visibly — `apply` is a human-in-the-loop flow by design.
+`wboxcli apply` with no arguments applies to **all pending jobs** in your local DB. Chrome always opens visibly — `apply` is a human-in-the-loop flow by design.
+
+You can **stop anytime** with Ctrl+C and **resume where you left off** — see [Stop and resume (Ctrl+C)](#stop-and-resume-ctrlc).
+
+## WboxCLI Management Script (`wboxcli.sh`)
+
+A comprehensive local management script is provided at `scripts/wboxcli.sh` to handle installation, updates, database operations, and setups cleanly.
+
+### Usage
+```bash
+./scripts/wboxcli.sh <command> [options]
+```
+
+### Commands Reference
+
+| Command | Action |
+|---|---|
+| `./scripts/wboxcli.sh install` | Clones the repo, sets up Python venv, installs dependencies and Playwright Chromium, drops the wrapper at `~/.local/bin/wboxcli`. |
+| `./scripts/wboxcli.sh setup` | Runs **`wboxcli setup`** (CLI 5-step; not TUI onboarding). |
+| `wboxcli reset` | Clear login, API keys, resume; **jobs kept**; re-onboard. |
+| `wboxcli db reset` | Delete entire `jobcli.db`. |
+| `./scripts/wboxcli.sh update` | Pulls the latest code from the branch and reinstalls the application and its dependencies. |
+| `./scripts/wboxcli.sh uninstall` | Completely removes WboxCLI, deleting the `~/.jobcli` install directory and the global wrapper shims. |
+| `./scripts/wboxcli.sh clear-jobs` | Deletes discovered jobs and per-job application logs only (retains credentials, LLM keys, resume, and learned memory). |
+| `./scripts/wboxcli.sh doctor` | Runs local environment health checks. |
+| `./scripts/wboxcli.sh status` | Displays a detailed installation status. |
 
 ---
 
 ## Cleanup, DB Reset, and Uninstall
 
-> **Heads-up — `quit` does NOT wipe state.** Typing `quit` inside the TUI only closes the session; credentials, LLM keys, resume, and discovered jobs all stay in `~/.jobcli/jobcli.db`, so the next `wboxcli` run skips onboarding and shows the welcome banner. To force the onboarding flow again, use one of the cleanup commands below (or `Remove-Item -Recurse -Force "$env:USERPROFILE\.jobcli"` on Windows / `rm -rf ~/.jobcli` on macOS-Linux).
+> **`quit` does not wipe state.** Use `wboxcli reset` to clear login/keys/resume (jobs kept). Use `wboxcli db reset` for a full DB wipe. See [Cleanup](#cleanup-db-reset-and-uninstall) below.
 
-JobCLI gives you **three levels of cleanup**, smallest to largest. Pick the one that matches what you actually want to wipe.
+WboxCLI gives you **four levels of cleanup**, smallest to largest:
 
 | Command | Removes | Keeps |
 |---|---|---|
-| `jobcli db clear-jobs` | Discovered jobs + per-job application logs | Resume, credentials, LLM keys, field-answer memory, learned locators, sync state |
-| `jobcli db reset` (alias: `jobcli reset`) | Entire local SQLite DB file (`jobcli.db` + `-wal` / `-shm` / `-journal` sidecars) | Log directory (`~/.jobcli/logs/`), downloaded extension, venv, shims |
-| `jobcli uninstall` | Everything under `~/.jobcli/` **plus** the `wboxcli` / `jobcli` shims in `~/.local/bin/` | Nothing inside `~/.jobcli`; PATH entry is left alone (remove it manually if you like) |
+| `wboxcli db clear-jobs` | Discovered jobs + per-job logs | Credentials, resume, LLM keys, field memory |
+| **`wboxcli reset`** | Login, LLM keys, resume paths, stored resume JSON, **`sync_server_url`**, **`extension_path`** | **Jobs**, field memory, `~/.jobcli/logs/` on disk, unpacked extension **folder** may remain |
+| `wboxcli db reset` | All SQLite data (jobs, memory, config in DB) | `~/.jobcli/logs/` files on disk, `extension_unpacked/`, venv, shims |
+| `wboxcli uninstall` | All of `~/.jobcli/` + global shims | PATH entry (remove manually if needed) |
 
 ### 1. Just forget the discovered jobs
 
 ```bash
-jobcli db clear-jobs            # confirms first
-jobcli db clear-jobs --force    # skip the prompt
+./scripts/wboxcli.sh clear-jobs          # confirms first
+./scripts/wboxcli.sh clear-jobs --force  # skip the prompt
 ```
 
-Resets the `jobs` and `application_logs` tables only. Your resume, login, LLM keys, field answers, and learned locators stay put. Use this between dashboard refreshes.
+Resets the `jobs` and `application_logs` tables only.
 
-### 2. Wipe the whole local database, keep the install
+### 2. Reset login, API keys, and resume (jobs kept)
 
 ```bash
-jobcli db reset                 # confirms first
-jobcli db reset --force         # skip the prompt
-jobcli reset --force            # short alias
+wboxcli reset
 ```
 
-Deletes `~/.jobcli/jobcli.db` (and any `.wal` / `.shm` / `.journal` sidecars) and recreates an empty schema. The TalentScreen extension, log files, venv, and global shims all remain — so the next `jobcli login` + `jobcli resume-upload` puts you straight back in business.
+Clears Whitebox email/password, LLM API keys, resume, saved API URL, and extension path in DB. Run `wboxcli` (TUI `login`) to re-onboard, or `wboxcli login` + `resume-upload`. Optional: `--keep-credentials`, `--keep-extension`, `--force`.
 
-### 3. Full uninstall (works on Windows + macOS + Linux)
+### 3. Wipe the entire local database
 
 ```bash
-jobcli uninstall                # confirms first
-jobcli uninstall --force        # skip the prompt
+wboxcli db reset --force
+```
+
+Deletes `~/.jobcli/jobcli.db` (+ WAL/SHM/journal) and recreates empty tables. Does **not** delete `~/.jobcli/logs/` files on disk, `extension_unpacked/`, venv, or shims.
+
+### 4. Full uninstall (Windows + macOS + Linux)
+
+```bash
+./scripts/wboxcli.sh uninstall           # confirms first
 ```
 
 What it does:
 - Releases all SQLite/log file handles so Windows doesn't block deletion.
 - Deletes everything under `~/.jobcli/` (config, DB, extension, logs).
-- Deletes the global shims: `wboxcli.cmd` / `jobcli.cmd` on Windows, `wboxcli` / `jobcli` elsewhere.
-- **On Windows, if `jobcli` is the running process**, the venv subtree under `~/.jobcli/venv/` is *intentionally* skipped (Python can't delete its own executable). The command prints a one-liner to finish the job from a fresh terminal — usually the bundled `scripts/uninstall.ps1` one-liner from the [Installation](#installation) section.
+- Deletes the global shims: `wboxcli.cmd` on Windows, `wboxcli` / `wboxcli` elsewhere.
+- **On Windows, if `wboxcli` is the running process**, the venv subtree under `~/.jobcli/venv/` is *intentionally* skipped (Python can't delete its own executable). The command prints a one-liner to finish the job from a fresh terminal — usually the bundled `scripts/uninstall.ps1` one-liner from the [Installation](#installation) section.
 
-If `jobcli uninstall` ever leaves files behind, the **bundled shell uninstaller** is the always-clean fallback because it doesn't run from inside the venv:
+If `wboxcli uninstall` ever leaves files behind, the **bundled shell uninstaller** is the always-clean fallback because it doesn't run from inside the venv:
 
 ```bash
 # macOS / Linux (Main)
@@ -312,30 +369,32 @@ irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall
 Control how much the agent pauses for your input:
 
 ```bash
-# supervised (default) — AI drives, pauses for missing fields and submission
-jobcli apply --mode supervised
+# supervised (default) — AI drives; terminal prompts for missing fields; timed pauses on some steps
+wboxcli apply --mode supervised
 # single URL
-jobcli apply --url <url> --mode supervised
-# auto — fully autonomous, only stops for CAPTCHA or fatal errors
-jobcli apply --mode auto
-# manual — pauses before every action batch for explicit approval
-jobcli apply --mode manual
+wboxcli apply --url <url> --mode supervised
+# auto — no terminal field prompts; browser handoff on CAPTCHA / auth / unfilled required fields (60s handoff timeout)
+wboxcli apply --mode auto
+# manual — confirm each planned LLM action batch before execution
+wboxcli apply --mode manual
 ```
+
+During a batch run you can press **Ctrl+C** (or type `q` / `quit` / `exit` at a prompt) to stop cleanly and resume later — see [Stop and resume (Ctrl+C)](#stop-and-resume-ctrlc).
 
 ### Two-tier human prompt (Supervised / Manual)
 
 When the extension + rules + LLM still leave fields empty, the terminal pauses with a yellow panel summarising the gap, then asks for the missing fields in two passes:
 
-1. **Required fields** — labelled `[red]*required[/red]`. You must type a value; pressing Enter loops the question.
+1. **Required fields** — labelled `[red]*required[/red]`. Enter a non-empty value; **empty Enter skips** that field (may trigger browser handoff later).
 2. **Optional fields** — labelled `[dim](optional, Enter to skip)[/dim]`. Press Enter to skip; any text you type is filled.
 
 The `required` flag is read directly from the page's Accessibility Tree (`aria-required`, the HTML `required` attribute, or a visible `*` next to the label), so it matches what the form itself considers mandatory.
 
-In `--mode auto`, the optional pass is suppressed entirely and required-but-empty fields fail-fast instead of blocking the loop.
+In **`--mode auto`**, the terminal required/optional passes are **skipped**; unresolved fields route to **browser handoff** (`handoff_to_human`, 60s timeout in auto, then job skipped).
 
 ### Filtering by Source
 
-Every job listing carries a `Source` value in the WBL dashboard (visible as the **Source** column — values like `Linkedin`, `Jobright`, `Hiring.Cafe`, `Trueup.Io`, `Indeed`, …). The filter is **unconditional and applied at discover time**: `jobcli discover` only ingests rows whose `Source` matches the allow-list — every other row is dropped before it touches the local SQLite database.
+Every job listing carries a `Source` value in the WBL dashboard (visible as the **Source** column — values like `Linkedin`, `Jobright`, `Hiring.Cafe`, `Trueup.Io`, `Indeed`, …). The filter is **unconditional and applied at discover time**: `wboxcli discover` only ingests rows whose `Source` matches the allow-list — every other row is dropped before it touches the local SQLite database.
 
 The default allow-list is the four CLI-friendly sources:
 
@@ -347,28 +406,83 @@ The default allow-list is the four CLI-friendly sources:
 ```bash
 # Pull only allow-listed listings into the local queue.
 # No flag, no env var — the filter is always on.
-jobcli discover
+wboxcli discover
 
 # Apply iterates whatever discover persisted; no source filter needed here.
-jobcli apply
+wboxcli apply
 ```
+
+> **Each `discover` replaces the local job queue** — it clears existing jobs/logs in SQLite, then re-imports from WBL (not an incremental merge).
 
 Notes:
 - Comparison is **case- and punctuation-insensitive**: `LinkedIn`, `linkedin`, `LINKEDIN` and `Linked-In` all normalise to the same token.
 - Rows with a missing/empty `source` value are rejected too, so legacy listings predating the column can't sneak through.
-- To change the allow-list, edit the `DEFAULT_SOURCES` tuple in [`jobcli/core/source_filter.py`](jobcli/core/source_filter.py). There is intentionally **no** `--sources` flag or env var — the only change path is the source tuple.
-- **Upgrading?** If you ran `jobcli discover` on a build that pre-dates this filter, your local DB may still contain rows from disallowed sources. Run `jobcli reset --force` then `jobcli discover` to start with a clean, filter-compliant queue.
+- To change the allow-list, edit the `DEFAULT_SOURCES` tuple in [`src/jobcli/orchestration/source_filter.py`](src/jobcli/orchestration/source_filter.py). There is intentionally **no** `--sources` flag or env var — the only change path is the source tuple.
+- **Upgrading?** If you ran `wboxcli discover` on a build that pre-dates this filter, your local DB may still contain rows from disallowed sources. Run `wboxcli db clear-jobs --force` or `wboxcli db reset --force`, then `wboxcli discover`.
+
+---
+
+## Stop and resume (Ctrl+C)
+
+During a **batch** `wboxcli apply` (no `--url`), you can stop at any time without losing your queue position.
+
+### How to stop
+
+| Action | Result |
+|--------|--------|
+| **Ctrl+C** once | Finishes the current step, closes the browser, saves a checkpoint, shows a summary |
+| **Ctrl+C** twice within 2s | Force quit (emergency) |
+| Type **`q`**, **`quit`**, **`exit`**, or **`:q`** at any terminal prompt | Same clean stop as Ctrl+C |
+
+`quit` in the interactive TUI still only exits the menu — it does **not** clear saved login, resume, or checkpoints.
+
+### What happens after you stop
+
+1. A yellow summary panel shows how many jobs were processed.
+2. The CLI **recommends** resuming and asks:
+
+   **`Resume applications where you left off? [Y/n]`** (default **yes**)
+
+3. **Yes** → the same batch continues immediately (remaining jobs only).
+4. **No** → you exit; resume later with the commands below.
+
+The checkpoint is stored in `~/.jobcli/jobcli.db` under the key `apply_run_checkpoint` (job IDs, next index, mode, sort, limit).
+
+### How to resume later
+
+```bash
+wboxcli continue
+# same as:
+wboxcli apply --continue
+# or in the interactive TUI, type:
+continue
+```
+
+### What “resume” means
+
+| Situation | On resume |
+|-----------|-----------|
+| You stopped **between** jobs | Next pending job in the saved queue runs |
+| You stopped **during** a job | That job is reset to **pending** and **restarted from the beginning** (not mid-form) |
+| Jobs already **submitted**, **skipped**, or **failed** | Unchanged — not re-run |
+| Batch **finishes normally** | Checkpoint is cleared automatically |
+
+Single-URL runs (`wboxcli apply --url …`) do not create a batch checkpoint.
+
+Implementation: [`src/jobcli/utils/apply_checkpoint.py`](src/jobcli/utils/apply_checkpoint.py), wired from [`src/jobcli/cli/main.py`](src/jobcli/cli/main.py) (`_run_apply`).
 
 ---
 
 ## LinkedIn Jobs
 
-LinkedIn does not allow bot automation. When the batch encounters a LinkedIn job:
+LinkedIn does not allow reliable bot automation. When `apply` hits a `linkedin.com` URL:
 
-1. The browser navigates to the LinkedIn job page
-2. A **60-second countdown** is displayed in the terminal
-3. You apply manually in the browser during that window
-4. After 60 seconds, the engine automatically moves to the next job
+1. The browser opens the job page.
+2. The CLI asks: **“This is a LinkedIn job. Should I skip it?”** (default: **Yes** → job marked `SKIPPED`, next job).
+3. If you answer **No**, the CLI **hands off the browser** — apply manually, then press **ENTER** in the terminal when done.
+4. Handoff timeout: **600s** in supervised/manual; **60s** in `auto` (then the job is skipped). There is **no** terminal countdown timer.
+
+Job-board landing pages (LinkedIn, Indeed, etc.) may also trigger an earlier handoff before the ATS form opens.
 
 ---
 
@@ -378,124 +492,188 @@ LinkedIn does not allow bot automation. When the batch encounters a LinkedIn job
 
 | Command | Description |
 |---|---|
-| `jobcli login` | **Required first** — save Whitebox credentials, API base URL, and LLM keys to local config |
-| `jobcli login --auto` | Skip prompts if credentials are already saved in local config |
-| `jobcli resume-upload --pdf <file.pdf> --json <file.json>` | Load resume into local config |
-| `jobcli setup` | One-shot validation: checks config, downloads extension, runs browser smoke test |
-| `jobcli discover` | Pull job listings from WBL API (`/positions/cli_window`, fully paginated) |
-| `jobcli apply` | Apply to all **pending** jobs (typical flow after `discover`) — Chrome opens visibly |
-| `jobcli apply --url <url>` | Apply to a single specific job URL |
-| `jobcli apply --mode auto / supervised / manual` | Set interaction level (see [Interaction Modes](#interaction-modes)) |
-| `jobcli questions` | Pre-fill answers to common application questions |
-| `jobcli open-dashboard` | Launch an interactive browser window logged into Wbox |
-| `jobcli scan` | Scan configured ATS portals for open jobs |
-| `jobcli sync` | Push learned patterns / activity to the server and pull global updates |
+| `wboxcli login` | **Required first** — save Whitebox credentials, API base URL, and LLM keys to local config |
+| `wboxcli login --auto` | Skip prompts if credentials are already saved in local config |
+| `wboxcli resume-upload --pdf <file.pdf> --json <file.json>` | Load resume into local config |
+| `wboxcli setup` | CLI 5-step: config → resume → **discover** → extension unpack + browser test |
+| `wboxcli discover` | Replace local jobs from WBL API (`GET …/positions/cli_window`, paginated). `--headless` only affects `--legacy-ui` |
+| `wboxcli discover --legacy-ui` | Playwright dashboard scrape instead of API (`WBOX_DISCOVER_MODE=browser`) |
+| `wboxcli apply` | Apply to all **pending** jobs (typical flow after `discover`) — Chrome opens visibly |
+| `wboxcli apply --url <url>` | Apply to a single specific job URL |
+| `wboxcli apply --continue` / `-c` | Resume the last batch stopped with Ctrl+C (no yes/no prompt) |
+| `wboxcli continue` | Same as `wboxcli apply --continue` |
+| `wboxcli apply --mode auto / supervised / manual` | Set interaction level (see [Interaction Modes](#interaction-modes)) |
+| `wboxcli questions` | Pre-fill answers to common application questions |
+| `wboxcli open-dashboard` | Launch an interactive browser window logged into Wbox |
+| `wboxcli scan` | Scan configured ATS portals for open jobs |
+| `wboxcli sync` | Push learned patterns / activity to the server and pull global updates |
+| `wboxcli agent <prompt>` | Autonomous coding agent (dev/experimental; requires LLM key) |
+
+### Interactive TUI-only (type at `wboxcli` prompt)
+
+| Command | Maps to |
+|---------|---------|
+| `jobs`, `status`, `help`, `clear`, `update` | Built-in TUI actions |
+| `continue` | `wboxcli continue` — resume last interrupted apply batch |
+| `login`, `setup` | Interactive onboarding (not CLI `wboxcli setup`) |
+| `resume` | `resume-upload` |
+| `dashboard` | `open-dashboard` |
+| `config` | `wboxcli config` |
 
 ### Config inspection
 
 | Command | Description |
 |---|---|
-| `jobcli config` | Show the full saved config table |
-| `jobcli config --key <name>` | Show a single saved value |
-| `jobcli config --key <name> --set <value>` | Update a single value (e.g. `sync_server_url`) |
+| `wboxcli config` | Show the full saved config table |
+| `wboxcli config --key <name>` | Show a single saved value |
+| `wboxcli config --key <name> --set <value>` | Update a single value (e.g. `sync_server_url`) |
 
-### Cleanup commands (see [Cleanup, DB Reset, and Uninstall](#cleanup-db-reset-and-uninstall) for details)
+### Cleanup commands (see [Cleanup, DB Reset, and Uninstall](#cleanup-db-reset-and-uninstall))
 
 | Command | Scope |
 |---|---|
-| `jobcli db clear-jobs [--force]` | Discovered jobs + per-job logs only |
-| `jobcli db reset [--force]` (alias: `jobcli reset`) | Entire SQLite DB; keeps logs / extension / venv |
-| `jobcli uninstall [--force]` | Everything under `~/.jobcli/` + global shims |
+| `wboxcli db clear-jobs [--force]` | Jobs + per-job logs only |
+| **`wboxcli reset`** `[--force]` `[--keep-credentials]` `[--keep-extension]` | Login, API keys, resume — **jobs kept** |
+| `wboxcli db reset [--force]` | Entire SQLite DB |
+| `wboxcli uninstall [--force]` | All of `~/.jobcli/` + shims |
 
 ### Diagnostics & extras
 
 | Command | Description |
 |---|---|
-| `jobcli doctor` | Validate Playwright, SQLite, config, and resume JSON |
-| `jobcli server` | Start the FastAPI bridge server for Chrome Extension integration |
+| `wboxcli doctor` | Validate Playwright, SQLite, config, and resume JSON |
+| `wboxcli server` | Start FastAPI control center (`jobcli.api.main`, default port **8000**; optional `ui/` on port **3000**) |
 
 ---
 
 ## Architecture
 
+Source lives under `src/jobcli/` (installed as the `jobcli` package):
+
 ```
-jobcli/
-├── cli/              # Typer CLI commands
-├── core/             # Core execution engine
-│   ├── engine.py     # 4-phase application loop + LinkedIn 60s manual loop
-│   ├── memory.py     # AgentMemory — confidence-gated 3-layer memory
-│   ├── wbox_discoverer.py  # WBL API discovery (default); optional Playwright dashboard fallback
-│   └── tool_executor.py
-├── locators/         # Rule-based locator system
-│   └── ats/          # ATS-specific handlers (Greenhouse, Lever, Rippling…)
-├── llm/              # LLM reasoning layer (OpenAI / Anthropic / Gemini)
-├── human/            # Human-in-the-loop interface
-├── storage/          # SQLite persistence (SQLAlchemy)
-│   ├── models.py     # ORM models incl. SyncMetadataModel
-│   └── repositories.py
-├── sync/             # Phase 1 local learning + Phase 2 server sync
-│   ├── constants.py  # CONFIDENCE_THRESHOLD, MIN_SUCCESS_COUNT, PERSONAL_FIELDS
-│   ├── extractor.py  # Exports high-confidence non-PII data for sync
-│   ├── client.py     # HTTP bridge to /api/sync_cli endpoints
-│   └── sqlite_merger.py  # Merges server knowledge back into local SQLite
-├── bridge/           # Phase 3 Chrome Extension Integration
-│   └── server.py     # FastAPI bridge server exposing /api/v1/context
-└── tests/            # pytest suite
+src/jobcli/
+├── cli/                    # main.py (Typer), interactive.py (TUI), doctor.py
+├── orchestration/          # Application engine & discovery
+│   ├── engine.py           # Apply loop: extension → rules → LLM → human
+│   ├── tool_executor.py    # Playwright actions + don't-refill guard
+│   ├── wbox_discoverer.py  # WBL API discover (default)
+│   └── source_filter.py    # Discover allow-list (trueup, hiring.cafe, …)
+├── ats/
+│   ├── handlers/           # 20 dedicated ATS handlers + GenericATSHandler fallback
+│   ├── locators/           # Form fillers, apply buttons, overlays
+│   └── detector/           # ATS platform detection
+├── llm/                    # AX tree + multi-provider client
+├── utils/
+│   ├── extension_helpers.py  # ZIP pick/unpack, Chrome + MV3 worker test
+│   ├── apply_checkpoint.py     # Save/load interrupted apply batch (Ctrl+C resume)
+│   ├── exit_signal.py          # Ctrl+C / quit keywords → clean stop
+│   ├── fill_guard.py           # Skip refill on already-populated fields
+│   └── resume_helpers.py       # Resume paths, profile summary, confirm
+├── storage/                # SQLite models + repositories (~/.jobcli/jobcli.db)
+├── sync/                   # Crowd knowledge upload/download
+├── memory/                 # Application memory store
+├── intelligence/           # Synonym resolver, agent helpers
+├── semantic/               # Field classification
+├── healing/                # Selector self-healing
+├── human/                  # Handoff / agent interface
+├── profile/                # Resume schemas + normalization
+├── api/                    # FastAPI control center (`wboxcli server`)
+└── observability/          # Structured logs, traces
+
+extension/                  # Local TalentScreen *.zip (not in package)
+tests/                      # pytest suite (repo root)
 ```
+
+Key files for common edits:
+
+| Task | File |
+|------|------|
+| Fill order / LinkedIn loop | `src/jobcli/orchestration/engine.py` |
+| Don't-refill logic | `src/jobcli/utils/fill_guard.py`, `src/jobcli/orchestration/tool_executor.py` |
+| Extension ZIP / browser test | `src/jobcli/utils/extension_helpers.py` |
+| Discover source filter | `src/jobcli/orchestration/source_filter.py` |
+| Onboarding TUI | `src/jobcli/cli/interactive.py` |
+| Reset login/keys/resume | `src/jobcli/cli/main.py` (`reset` command) |
 
 ---
 
 ### Dashboard UI (Advanced mode)
-The JobCLI Dashboard provides a high-fidelity, interactive terminal experience for monitoring and controlling your job applications in real-time.
+The WboxCLI Dashboard provides a high-fidelity, interactive terminal experience for monitoring and controlling your job applications in real-time.
 
 - **Real-time Streaming**: WebSocket integration for live status updates and AI thought process visibility.
 - **Interactive Terminal**: Full keyboard control, supporting manual intervention pauses and resume-on-ENTER.
 - **Premium Dark Aesthetics**: A modern, Claude-style interface designed for productivity.
 
-To start the dashboard:
-1. Ensure the engine bridge is running: `jobcli server`
-2. Start the UI: `cd ui && npm install && npm run dev`
+To start the dashboard (optional dev UI):
+1. `wboxcli server` — API on port **8000** (env: `JOBCLI_API_PORT`)
+2. `cd ui && npm install && npm run dev` — Vite UI on **3000** (proxies to API)
 3. Open `http://localhost:3000`
 
 ---
 
-## 5-Phase Interaction Strategy
-JobCLI follows a 5-phase strategy to ensure application success:
+## Apply fill pipeline
 
-1. **Phase 1: Discovery** — URL normalization and ATS platform detection.
-2. **Phase 2: Extension Autofill** — High-speed DOM-native filling of standard fields. The engine then waits 1.5 s for the extension to settle and snapshots every populated field.
-3. **Phase 3: AI Reasoning (LLM)** — Accessibility Tree analysis for complex/custom fields and questionnaires. Any LLM action whose target is already in the snapshot is dropped before it reaches the executor (the **don't-refill guard**). A second live-value check at the executor layer guarantees no field is ever filled twice.
-4. **Phase 4: Human-in-the-Loop** — Two-tier prompt: required fields first, optional fields second (press Enter to skip). See [Two-tier human prompt](#two-tier-human-prompt-supervised--manual).
-5. **Phase 5: Submission & Verification** — Final checks and behavioral outcome detection.
+Each `wboxcli apply` run fills forms in a **fixed four-step order** (implemented in `orchestration/engine.py`). Discovery and submit happen outside this pipeline.
+
+```mermaid
+flowchart LR
+  D[discover / navigate] --> E[① Extension]
+  E --> R[② Rules]
+  R --> L[③ LLM]
+  L --> H[④ Human if needed]
+  H --> S[submit + verify]
+```
+
+| Step | What runs | Don't-refill |
+|------|-----------|--------------|
+| **① Extension** | TalentScreen Chrome extension injects resume and fills standard fields; engine waits **2.5s** settle, then snapshots populated fields. | Later steps skip snapshot keys. |
+| **② Rules** | ATS handler + generic `FormFiller` for canonical fields (`first_name`, `email`, …). | `fill_guard` + handler checks skip non-empty inputs. |
+| **③ LLM** | Accessibility Tree loop for custom/questionnaire fields. | Actions targeting filled fields dropped in engine + `tool_executor`. |
+| **④ Human** | Terminal prompts or browser handoff when 1–3 leave gaps (or no LLM key). Required fields first, optional second. | You type only what's still empty. |
+
+**Outside the fill pipeline:** `wboxcli discover` (WBL API + source filter), ATS detection, Apply-button click, LinkedIn 60s manual window, post-submit status sync, and [batch stop/resume](#stop-and-resume-ctrlc) (Ctrl+C checkpoint).
 
 ---
 
 ## Supported ATS Platforms
 
-| Platform | Status |
-|---|---|
-| Greenhouse | ✅ Full support |
-| Lever | ✅ Full support |
-| Workday | ⚠️ Filtered out (requires account login) |
-| Ashby | ✅ Full support |
-| Rippling | ✅ Full support |
-| iCIMS | ✅ Supported |
-| BambooHR | ✅ Supported |
-| Breezy HR | ✅ Supported |
-| Jobvite | ✅ Supported |
-| SmartRecruiters | ✅ Supported |
-| Workable | ✅ Supported |
-| Recruitee | ✅ Supported |
-| LinkedIn | ⏱️ 60-second manual loop |
-| Generic / Unknown | ✅ Heuristic fallback |
+**20 dedicated handlers** (see `ATSHandlerFactory` in `src/jobcli/ats/handlers/handler_factory.py`). **`ATSType.UNKNOWN`** and **`rippling`** use `GenericATSHandler`.
+
+| Platform | Handler | Apply behavior |
+|---|---|---|
+| Greenhouse | Dedicated | Full automation |
+| Lever | Dedicated | Full automation |
+| Ashby | Dedicated | Full automation |
+| iCIMS | Dedicated | Full automation |
+| Taleo | Dedicated | Full automation |
+| SAP SuccessFactors | Dedicated | Full automation |
+| SmartRecruiters | Dedicated | Full automation |
+| Jobvite | Dedicated | Full automation |
+| Breezy HR | Dedicated | Full automation |
+| Recruitee | Dedicated | Full automation |
+| JazzHR | Dedicated | Full automation |
+| BambooHR | Dedicated | Full automation |
+| Workable | Dedicated | Full automation |
+| ADP Recruiting | Dedicated | Full automation |
+| Paylocity | Dedicated | Full automation |
+| UKG Pro | Dedicated | Full automation |
+| Cornerstone | Dedicated | Full automation |
+| Avature | Dedicated | Full automation |
+| Phenom People | Dedicated | Full automation |
+| Workday | Dedicated handler | **`myworkdayjobs.com` URLs auto-skipped** at apply (login wall) |
+| Rippling | Generic fallback | Detected; no dedicated handler yet |
+| Unknown ATS | Generic fallback | Heuristic confidence fill + LLM |
+| LinkedIn | N/A | Skip prompt (default yes) or browser handoff — see [LinkedIn Jobs](#linkedin-jobs) |
 
 > **Best for first-time testing**: Greenhouse (`boards.greenhouse.io`) and Lever (`jobs.lever.co`) — no account login required.
+
+> **Discover source filter** (trueup.io, hiring.cafe, jobright, linkedin) is separate from ATS detection — it filters WBL listing rows, not ATS platform.
 
 ---
 
 ## Knowledge Sync (Phase 2)
 
-JobCLI can contribute learned patterns to a central server and pull back aggregated improvements from all contributors. No personal data is ever shared.
+WboxCLI can contribute learned patterns to a central server and pull back aggregated improvements from all contributors. No personal data is ever shared.
 
 ### How it works
 
@@ -512,28 +690,30 @@ POST /api/job_activity_logs/bulk     ──► Pushes application logs to dashbo
 GET  /api/sync_cli/knowledge_updates ◄── Top-ranked patterns per ATS
     │
     ▼
-sqlite_merger.py ──► only overwrites local if server_confidence > local_confidence
+sqlite_merger.py ──► overwrites local value only if server confidence > local confidence (no human-source guard on download)
 ```
 
 ### Running a sync
 
 ```bash
-jobcli sync
+wboxcli sync
 ```
 
 ### Privacy guarantees
 
-| What is shared | What is NEVER shared |
+| What is shared (knowledge sync) | What is NEVER shared (knowledge sync) |
 |---|---|
 | Field label → value mappings (e.g. `years_of_experience → 4`) | Email, phone, name, address |
 | UI locators (CSS selectors ranked by success rate) | Resume content, salary, SSN |
-| ATS type + confidence scores | Job URLs, company names, candidate identity |
+| ATS type + confidence scores | Raw resume PDF |
+
+**Activity sync** (`POST …/job_activity_logs/bulk`) sends **job title, company name, status, and timestamp** for recent `SUBMITTED` / `FAILED` applications — not full resume or application URLs.
 
 ---
 
 ## Local Learning & Memory System
 
-JobCLI learns from every application it runs. Field answers and UI locators accumulate confidence scores based on real execution outcomes.
+WboxCLI learns from every application it runs. Field answers and UI locators accumulate confidence scores based on real execution outcomes.
 
 ### How confidence works
 
@@ -548,13 +728,15 @@ A record is only returned from memory (instead of calling the LLM) when **both**
 | `confidence >= CONFIDENCE_THRESHOLD` | 0.6 | At least 60% success rate |
 | `success_count >= MIN_SUCCESS_COUNT` | 3 | Confirmed correct at least 3 times |
 
-### Merge protection rules
+### Merge protection rules (local memory)
 
 | Incoming source | Existing source | Value updated? |
 |---|---|---|
 | `human` / `user` | anything | ✅ Yes — higher trust wins |
 | `auto` / `local` | `auto` / `local` | ✅ Yes |
 | `auto` / `local` | `human` / `user` | ❌ No — human answer preserved |
+
+**Server download merge** (`sqlite_merger.py`) uses **confidence only** — a higher-confidence server row can overwrite a local value even if the local answer came from a human.
 
 ---
 
@@ -564,12 +746,12 @@ All config lives in `~/.jobcli/` and is written by the interactive commands. **N
 
 | Path | Purpose | Owned by |
 |---|---|---|
-| `~/.jobcli/jobcli.db` | SQLite — credentials, LLM keys, resume paths, API base URL, jobs, learned memory | `jobcli login`, `jobcli resume-upload`, `jobcli config`, `jobcli discover` |
-| `~/.jobcli/extension_unpacked/` | TalentScreen Chrome extension (auto-loaded during `apply`) | `jobcli setup` |
-| `~/.jobcli/logs/` | Per-job JSON logs, screenshots, DOM snapshots | `jobcli apply` |
+| `~/.jobcli/jobcli.db` | SQLite — credentials, LLM keys, resume paths, API base URL, jobs, learned memory, **apply checkpoint** (after Ctrl+C) | `wboxcli login`, `wboxcli resume-upload`, `wboxcli config`, `wboxcli discover`, `wboxcli apply` |
+| `~/.jobcli/extension_unpacked/` | TalentScreen Chrome extension (loaded during `apply`) | `setup`, `doctor`, `apply` (via `resolve_extension_dir`), ZIP in `extension/` |
+| `~/.jobcli/logs/` | Per-job JSON logs, screenshots, DOM snapshots | `wboxcli apply` |
 | `~/.jobcli/venv/` | Managed Python venv (only present from the one-line installer) | `scripts/install.sh` / `scripts/install.ps1` |
 | `~/.jobcli/src/` | Cloned repo (one-line installer only) | `scripts/install.sh` / `scripts/install.ps1` |
-| `~/.local/bin/wboxcli` (+ `jobcli`) | Global command shims; `.cmd` on Windows | One-line installer |
+| `~/.local/bin/wboxcli` (+ `wboxcli`) | Global command shims; `.cmd` on Windows | One-line installer |
 
 ### Saving / updating settings
 
@@ -577,15 +759,15 @@ Use the matching interactive command:
 
 | Setting | Command |
 |---|---|
-| Whitebox username/password, API base URL, LLM keys, default LLM provider | `jobcli login` |
-| Resume PDF + JSON | `jobcli resume-upload --pdf <pdf> --json <json>` |
-| Anything else | `jobcli config --key <name> --set <value>` |
+| Whitebox username/password, API base URL, LLM keys, default LLM provider | `wboxcli login` |
+| Resume PDF + JSON | `wboxcli resume-upload --pdf <pdf> --json <json>` |
+| Anything else | `wboxcli config --key <name> --set <value>` |
 
 To inspect what is currently saved:
 
 ```bash
-jobcli config                       # full table
-jobcli config --key sync_server_url # single value
+wboxcli config                       # full table
+wboxcli config --key sync_server_url # single value
 ```
 
 ### Optional advanced overrides (shell environment only — no `.env`)
@@ -611,7 +793,7 @@ wraps the same TLS failure), the cause is almost always a Windows machine
 behind a corporate MITM proxy / AV that re-signs HTTPS with a private root
 CA that Python's bundled `certifi` store doesn't know about.
 
-JobCLI handles this transparently by injecting the **OS native trust store**
+WboxCLI handles this transparently by injecting the **OS native trust store**
 into Python's `ssl` module at startup (via the [`truststore`](https://pypi.org/project/truststore/)
 package). On Python 3.10+ this Just Works for ~99% of users — no env var
 required. If you still see TLS errors after upgrading, escalate in this order:
@@ -631,7 +813,7 @@ required. If you still see TLS errors after upgrading, escalate in this order:
    export JOBCLI_INSECURE_TLS=1
    ```
 
-When an LLM call hits a TLS error, JobCLI now **fails fast** (no 3-retry
+When an LLM call hits a TLS error, WboxCLI now **fails fast** (no 3-retry
 delay) and hands you the browser with a remediation panel telling you
 exactly which knob to flip — instead of the misleading "API quota exhausted"
 message.
@@ -670,6 +852,49 @@ message.
 
 ---
 
+## Repository layout
+
+The project root keeps a minimal set of files. **Only one Markdown file belongs at the top level** (`README.md`). Dependency manifests at the root:
+
+| File | Purpose |
+|------|---------|
+| `README.md` | Setup, usage, and architecture (this file) |
+| `docs/SETUP_WINDOWS_MAC.md` | **Windows & macOS commands** — extension ZIP, unzip, onboarding, `apply`, troubleshooting |
+| `requirements.txt` | Python dependencies |
+| `package.json` | Node dev tooling (Jest for extension/UI tests) |
+
+Other documentation (architecture guides, summaries, etc.) lives under `docs/` — not in the repo root.
+
+### Local extension dev loop
+
+1. Build in `project-talentscreen-autofill-extension` (`./build.sh` or `.\build.ps1`).
+2. Copy `dist/talentscreen-autofill-v*.zip` → `project-talentscreen-wbox-cli/extension/` (any `.zip` name works; newest `talentscreen-autofill*.zip` is used).
+3. CLI unpacks to **`~/.jobcli/extension_unpacked/`** on `wboxcli setup`, `wboxcli doctor`, and when `apply` resolves the extension directory (onboarding browser test uses the unpacked dir if present).
+
+Full commands: [docs/SETUP_WINDOWS_MAC.md](docs/SETUP_WINDOWS_MAC.md).
+
+```bash
+# macOS / Linux — after copy ZIP into extension/
+cd project-talentscreen-wbox-cli && ./build.sh
+export PYTHONPATH=src && python -m jobcli.cli.main doctor
+```
+
+```powershell
+# Windows — after copy ZIP into extension\
+cd project-talentscreen-wbox-cli; .\build.bat
+$env:PYTHONPATH="src"; python -m jobcli.cli.main doctor
+```
+
+```cmd
+set PYTHONPATH=src
+.\.venv\Scripts\python.exe -m jobcli.cli.main doctor
+.\.venv\Scripts\python.exe -m jobcli.cli.main apply --limit 1
+```
+
+Refresh after rebuilding extension: new ZIP + `FORCE_REINSTALL_EXTENSION=1 ./build.sh` or `set FORCE_REINSTALL_EXTENSION=1` then `doctor` / `setup` on Windows.
+
+---
+
 ## Development
 
 ```bash
@@ -679,7 +904,7 @@ pytest
 
 ## Testing
 
-JobCLI ships with four test strata. Run them before any change that
+WboxCLI ships with four test strata. Run them before any change that
 touches browser automation or ATS handlers.
 
 ### 1. Full test suite
@@ -690,7 +915,7 @@ pytest
 
 ### 2. Don't-refill guard + required-first human prompt
 
-Covers `BrowserAction.required`, the engine's `_snapshot_filled` / `_action_target_already_filled`, the executor's `_read_live_value` + skip-refill guard, `LLMClient._propagate_required_flag`, the two-tier `AgentInterface.show_failed_fields`, and the TUI next-step helpers — 58 tests across 7 groups.
+Covers `BrowserAction.required`, the engine's `_snapshot_filled` / `_action_target_already_filled`, the executor's skip-refill guard, `LLMClient._propagate_required_flag`, the two-tier `AgentInterface.show_failed_fields`, and TUI helpers — **55 tests** in that file (full suite: `pytest`; some legacy tests may fail to collect until imports are updated).
 
 ```bash
 pytest tests/test_refill_and_required.py -v

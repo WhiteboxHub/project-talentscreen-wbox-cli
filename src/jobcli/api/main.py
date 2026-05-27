@@ -67,6 +67,54 @@ def get_engine_callback(data: Any):
             lambda: asyncio.create_task(manager.broadcast(data))
         )
 
+def _parse_log_command(cmd_text: str) -> tuple[Optional[int], int]:
+    """Parse ``log``, ``log 12``, ``log --tail 100``."""
+    parts = cmd_text.strip().split()
+    if not parts or parts[0].lower() != "log":
+        return None, 60
+    job_id: Optional[int] = None
+    tail = 60
+    i = 1
+    while i < len(parts):
+        if parts[i] in ("--tail", "-n") and i + 1 < len(parts):
+            try:
+                tail = int(parts[i + 1])
+            except ValueError:
+                tail = 60
+            i += 2
+            continue
+        if parts[i].isdigit():
+            job_id = int(parts[i])
+            i += 1
+            continue
+        i += 1
+    return job_id, max(1, min(tail, 500))
+
+
+def _render_logs_for_ui(cmd_text: str) -> str:
+    from jobcli.utils.log_viewer import collect_log_lines, format_log_lines_ansi
+
+    job_id, tail = _parse_log_command(cmd_text)
+    db_path = os.getenv("DATABASE_PATH", "~/.jobcli/jobcli.db")
+    db_path = os.path.expandvars(os.path.expanduser(db_path))
+    db = Database(f"sqlite:///{Path(db_path).as_posix()}")
+    session = db.get_session()
+    try:
+        lines = collect_log_lines(session, job_id=job_id, tail=tail)
+        return format_log_lines_ansi(lines)
+    finally:
+        session.close()
+
+
+async def broadcast_application_logs(cmd_text: str) -> None:
+    """Send formatted logs to all connected web UI terminals."""
+    try:
+        msg = _render_logs_for_ui(cmd_text)
+    except Exception as e:
+        msg = f"\r\n\x1b[31m[ERR] Could not load logs: {e}\x1b[0m\r\n"
+    await manager.broadcast({"type": "terminal", "message": msg})
+
+
 def get_engine() -> ApplicationEngine:
     """Initialize or return the global engine instance."""
     global engine_instance
@@ -129,6 +177,9 @@ async def websocket_endpoint(websocket: WebSocket):
                             msg = f"\r\n\x1b[36mJobCLI Status:\x1b[0m\r\nMode: {config.interaction_mode.value}\r\nLLM: {'Configured' if config.gemini_api_key else 'Missing'}\r\n"
                             await manager.broadcast({"type": "terminal", "message": msg})
 
+                        elif cmd_to_process == "log" or cmd_to_process.startswith("log "):
+                            await broadcast_application_logs(cmd_to_process)
+
                         elif cmd_to_process in ["cancel", "c", "/cancel", "/c", "stop", "/stop"]:
                             # ── Stop signal: works whether agent is waiting or running ──
                             should_stop = True
@@ -180,9 +231,13 @@ async def handle_dashboard_command(cmd_text: str):
         msg += "  \x1b[1mapply <url>\x1b[0m - Apply to a job URL (or just paste the URL)\r\n"
         msg += "  \x1b[1mbatch\x1b[0m       - Start batch application\r\n"
         msg += "  \x1b[1mdiscover\x1b[0m    - Start job discovery\r\n"
+        msg += "  \x1b[1mlog\x1b[0m         - Show recent application logs\r\n"
+        msg += "  \x1b[1mlog <id>\x1b[0m     - Logs for a specific job id\r\n"
         msg += "  \x1b[1mstop / cancel\x1b[0m - Stop ongoing tasks\r\n"
         msg += "  \x1b[1mhelp\x1b[0m        - Show this help\r\n"
         await manager.broadcast({"type": "terminal", "message": msg})
+    elif raw == "log" or raw.startswith("log "):
+        await broadcast_application_logs(cmd_text)
     elif raw.startswith("apply "):
         url = cmd_text[6:].strip()  # everything after "apply "
         await manager.broadcast({"type": "log", "message": f"\x1b[33m[SYSTEM] Executing: apply {url}\x1b[0m"})

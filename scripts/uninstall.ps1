@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────
-#  JobCLI Global Uninstaller — Windows (PowerShell)
+#  WboxCLI Global Uninstaller — Windows (PowerShell)
 #
 #  Usage:
 #    irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/uninstall.ps1 | iex
@@ -8,15 +8,14 @@
 $InstallDir = Join-Path $env:USERPROFILE ".jobcli"
 $BinDir     = Join-Path $env:USERPROFILE ".local\bin"
 $Wrappers   = @(
-    (Join-Path $BinDir "wboxcli.cmd"),
-    (Join-Path $BinDir "jobcli.cmd")
+    (Join-Path $BinDir "wboxcli.cmd")
 )
 
 Write-Host ""
-Write-Host "JobCLI - Uninstaller" -ForegroundColor Red
+Write-Host "WboxCLI - Uninstaller" -ForegroundColor Red
 Write-Host ""
 
-$confirm = Read-Host "This will delete $InstallDir and the wboxcli/jobcli shims in $BinDir. Continue? [y/N]"
+$confirm = Read-Host "This will delete $InstallDir and the wboxcli shim in $BinDir. Continue? [y/N]"
 if ($confirm -notmatch "^[Yy]$") {
     Write-Host "Cancelled." -ForegroundColor Yellow
     exit 0
@@ -48,7 +47,7 @@ if (Test-Path $InstallDir) {
             Write-Host "[OK]    Removed $InstallDir" -ForegroundColor Green
         } catch {
             Write-Host "[FAIL]  Could not delete $InstallDir : $_" -ForegroundColor Red
-            Write-Host "        Close any open terminals running wboxcli/jobcli and re-run this script." -ForegroundColor Yellow
+            Write-Host "        Close any open terminals running wboxcli and re-run this script." -ForegroundColor Yellow
         }
     }
 } else {
@@ -56,6 +55,6 @@ if (Test-Path $InstallDir) {
 }
 
 Write-Host ""
-Write-Host "JobCLI has been uninstalled." -ForegroundColor Green
+Write-Host "WboxCLI has been uninstalled." -ForegroundColor Green
 Write-Host "Note: The PATH entry was left intact - remove $BinDir manually from System Environment Variables if you wish." -ForegroundColor Yellow
 Write-Host ""

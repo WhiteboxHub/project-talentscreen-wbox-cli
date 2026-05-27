@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────
-#  JobCLI Global Uninstaller
+#  WboxCLI Global Uninstaller
 #
 #  Usage:
 #    curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/uninstall.sh | bash
@@ -19,14 +19,14 @@ NC='\033[0m'
 
 INSTALL_DIR="$HOME/.jobcli"
 BIN_DIR="$HOME/.local/bin"
-WRAPPERS=("$BIN_DIR/wboxcli" "$BIN_DIR/jobcli")
+WRAPPERS=("$BIN_DIR/wboxcli")
 
 echo ""
-echo -e "${BOLD}${RED}JobCLI — Uninstaller${NC}"
+echo -e "${BOLD}${RED}WboxCLI — Uninstaller${NC}"
 echo ""
 
 # Confirm
-read -r -p "This will delete $INSTALL_DIR and the wboxcli/jobcli shims in $BIN_DIR. Continue? [y/N] " confirm
+read -r -p "This will delete $INSTALL_DIR and the wboxcli shim in $BIN_DIR. Continue? [y/N] " confirm
 if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
     echo -e "${YELLOW}Cancelled.${NC}"
     exit 0
@@ -51,6 +51,6 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}JobCLI has been uninstalled.${NC}"
+echo -e "${GREEN}WboxCLI has been uninstalled.${NC}"
 echo -e "${YELLOW}Note:${NC} The PATH entry in your shell profile (~/.zshrc or ~/.bashrc) was left intact — remove it manually if you wish."
 echo ""

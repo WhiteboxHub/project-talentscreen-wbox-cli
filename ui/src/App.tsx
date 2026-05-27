@@ -113,7 +113,7 @@ const App = () => {
     const printWelcome = () => {
       t.write('\x1b[H\x1b[2J'); // Move to top-left and clear viewport
       t.writeln('\x1b[1;33m❖ Welcome to JobCLI!\x1b[0m');
-      t.writeln('\x1b[3m/help for help, /status for your current setup\x1b[0m');
+      t.writeln('\x1b[3m/help for help, log for application logs, /status for setup\x1b[0m');
       t.writeln(`\x1b[90mServer: ${window.location.host}\x1b[0m`);
       t.writeln('');
       if (wsRef.current?.readyState === WebSocket.OPEN) {

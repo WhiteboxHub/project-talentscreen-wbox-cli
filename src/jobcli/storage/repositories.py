@@ -232,6 +232,19 @@ class JobRepository:
         )
         return [_job_model_to_job(j) for j in jobs]
 
+    def list_by_ids(self, job_ids: list[int]) -> list[Job]:
+        """Fetch jobs by id, preserving the order of ``job_ids``."""
+        if not job_ids:
+            return []
+        rows = self.session.query(JobModel).filter(JobModel.id.in_(job_ids)).all()
+        by_id = {j.id: j for j in rows}
+        out: list[Job] = []
+        for jid in job_ids:
+            model = by_id.get(jid)
+            if model is not None:
+                out.append(_job_model_to_job(model))
+        return out
+
     def list_recent_activity(self, since: Optional[datetime] = None) -> list[Job]:
         """List all jobs with status changes since a given datetime."""
         query = self.session.query(JobModel).filter(
@@ -775,6 +788,18 @@ class UserDataRepository:
 
         return user_data.data
 
+    def clear_profile_data(self) -> int:
+        """Delete resume, common questions, and dynamic answers from the DB."""
+        deleted = (
+            self.session.query(UserDataModel)
+            .filter(
+                UserDataModel.data_type.in_(("resume", "questions", "dynamic_answers"))
+            )
+            .delete(synchronize_session=False)
+        )
+        self.session.commit()
+        return deleted
+
 
 class ConfigRepository:
     """Repository for configuration."""
@@ -827,6 +852,18 @@ class ConfigRepository:
         for key, value in config_dict.items():
             if value is not None:
                 self.set(key, str(value))
+
+    def delete_keys(self, keys: list[str]) -> int:
+        """Remove config rows by key. Returns number of rows deleted."""
+        if not keys:
+            return 0
+        deleted = (
+            self.session.query(ConfigModel)
+            .filter(ConfigModel.key.in_(keys))
+            .delete(synchronize_session=False)
+        )
+        self.session.commit()
+        return deleted
 
 
 class FieldAnswerRepository:

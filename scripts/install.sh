@@ -14,7 +14,7 @@
 #    6. Launches the interactive TUI
 #
 #  Uninstall:
-#    rm -rf ~/.jobcli ~/.local/bin/wboxcli ~/.local/bin/jobcli
+#    rm -rf ~/.jobcli ~/.local/bin/wboxcli
 # ──────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -38,7 +38,6 @@ SRC_DIR="$INSTALL_DIR/src"
 VENV_DIR="$INSTALL_DIR/venv"
 BIN_DIR="$HOME/.local/bin"
 WRAPPER="$BIN_DIR/wboxcli"
-WRAPPER_JOBCLI="$BIN_DIR/jobcli"
 REPO_URL="https://github.com/WhiteboxHub/wbox-cli.git"
 BRANCH="${JOBCLI_BRANCH:-main}"  # Override with JOBCLI_BRANCH=<branch> if needed
 
@@ -74,6 +73,12 @@ ok "git found"
 # ── Step 2: Clone or update repo ─────────────────────────────────────
 info "Setting up source at $SRC_DIR..."
 
+if [ -d "$INSTALL_DIR" ]; then
+    info "Cleaning up existing database and settings..."
+    rm -f "$INSTALL_DIR"/jobcli.db*
+    ok "Removed existing settings"
+fi
+
 mkdir -p "$INSTALL_DIR"
 
 EXT_TMP_DIR="/tmp/jobcli_ext_clone_$$"
@@ -86,8 +91,8 @@ ok "Cloned extension to temporary location"
 if [ -d "$SRC_DIR/.git" ]; then
     info "Existing installation found — pulling latest..."
     git -C "$SRC_DIR" remote set-branches origin '*' --quiet 2>/dev/null || true
-    git -C "$SRC_DIR" fetch origin --depth 1 "$BRANCH" --quiet
-    git -C "$SRC_DIR" checkout -B "$BRANCH" "origin/$BRANCH" --quiet
+    git -C "$SRC_DIR" fetch origin "$BRANCH" --depth 1 --quiet
+    git -C "$SRC_DIR" checkout -B "$BRANCH" FETCH_HEAD --quiet
     ok "Updated to latest $BRANCH"
 else
     git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$SRC_DIR" --quiet
@@ -120,7 +125,7 @@ ok "wboxcli installed"
 info "Installing Playwright Chromium browser..."
 "$VENV_DIR/bin/python" -m playwright install chromium --quiet 2>/dev/null || \
     "$VENV_DIR/bin/python" -m playwright install chromium 2>/dev/null || \
-    warn "Playwright browser install had issues — run 'jobcli doctor' to verify."
+    warn "Playwright browser install had issues — run 'wboxcli doctor' to verify."
 ok "Playwright Chromium ready"
 
 # ── Step 5: Create global wrapper scripts ────────────────────────────
@@ -144,15 +149,7 @@ exec "$JOBCLI_VENV/bin/wboxcli" "$@"
 WRAPPER_EOF
 chmod +x "$WRAPPER"
 
-# Alias: jobcli (direct Typer CLI for scripting)
-cat > "$WRAPPER_JOBCLI" << 'WRAPPER_EOF'
-#!/usr/bin/env bash
-JOBCLI_VENV="$HOME/.jobcli/venv"
-exec "$JOBCLI_VENV/bin/jobcli" "$@"
-WRAPPER_EOF
-chmod +x "$WRAPPER_JOBCLI"
-
-ok "Commands created: wboxcli (interactive) + jobcli (direct CLI)"
+ok "Command created: wboxcli"
 
 # ── Step 6: Ensure ~/.local/bin is on PATH ────────────────────────────
 _add_to_path() {
