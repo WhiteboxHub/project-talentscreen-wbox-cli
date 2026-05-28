@@ -11,7 +11,16 @@ from typing import Any, Optional
 
 from jobcli.profile.derived_profile import derived_country_for_resume, derived_pronouns_for_resume
 from jobcli.profile.resume_normalize import normalize_linkedin_url
-from jobcli.profile.schemas import ResumeData
+from jobcli.profile.schemas import ResumeData, coerce_gpa_value
+
+
+def _pick_education_gpa(low_edu: dict[str, Any]) -> Optional[float]:
+    """Use the first parseable GPA among score/gpa keys (resume builders often duplicate)."""
+    for key in ("score", "gpa", "grade point", "cumulative gpa"):
+        parsed = coerce_gpa_value(low_edu.get(key))
+        if parsed is not None:
+            return parsed
+    return None
 
 
 class SynonymResolver:
@@ -617,7 +626,7 @@ class ResumeAutoDetector:
                 "graduation_year": ResumeAutoDetector._parse_year(
                     low_edu.get("enddate", low_edu.get("graduation_year", ""))
                 ),
-                "gpa": low_edu.get("score", low_edu.get("gpa")),
+                "gpa": _pick_education_gpa(low_edu),
             })
 
         # Experience

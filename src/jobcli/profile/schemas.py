@@ -1,10 +1,36 @@
 """Core Pydantic schemas for JobCLI."""
 
+import re
 from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
+
+
+def coerce_gpa_value(value: Any) -> Optional[float]:  # noqa: ANN401
+    """Normalize GPA from resume JSON (empty strings, '3.8/4.0', etc.) → float or None."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return None
+        lowered = s.lower()
+        if lowered in ("n/a", "na", "none", "-", "null", "not applicable", "not listed"):
+            return None
+        normalized = s.replace(",", ".")
+        match = re.search(r"(\d+\.?\d*)", normalized)
+        if match:
+            try:
+                return float(match.group(1))
+            except ValueError:
+                return None
+    return None
 
 
 
@@ -152,6 +178,11 @@ class Education(BaseModel):
         None, validation_alias=AliasChoices("gpa", "grade point", "cumulative gpa", "score")
     )
 
+    @field_validator("gpa", mode="before")
+    @classmethod
+    def _normalize_gpa(cls, value: Any) -> Optional[float]:  # noqa: ANN401
+        return coerce_gpa_value(value)
+
 
 class Experience(BaseModel):
     """Work experience entry."""
@@ -273,7 +304,7 @@ class ResumeData(BaseModel):
                 "degree": edu.get("studyType", ""),
                 "field_of_study": edu.get("area", ""),
                 "graduation_year": grad_year or 0,
-                "gpa": edu.get("gpa"),
+                "gpa": coerce_gpa_value(edu.get("gpa") or edu.get("score")),
             })
         transformed["education"] = edu_list
 
