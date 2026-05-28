@@ -1308,6 +1308,8 @@ class ApplicationEngine:
             self.active_page = self.context.new_page()
             
         page = self.active_page
+        status = ApplicationStatus.IN_PROGRESS
+        state.status = ApplicationStatus.IN_PROGRESS
         try:
             if self.config.headless:
                 from jobcli.automation.stealth import apply_stealth
@@ -1593,10 +1595,13 @@ class ApplicationEngine:
                 logger.info("Application completed successfully")
                 self.job_repo.update_status(job.id or 0, ApplicationStatus.SUBMITTED)
                 status = ApplicationStatus.SUBMITTED
+                state.status = ApplicationStatus.SUBMITTED
             else:
                 agent.show_error("Application could not be verified as submitted.")
                 logger.error("Application failed")
                 self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
+                status = ApplicationStatus.FAILED
+                state.status = ApplicationStatus.FAILED
                 # Increment apps_since_sync for central DB sync
                 from jobcli.storage.repositories import SyncMetadataRepository
                 sync_repo = SyncMetadataRepository(self.session)

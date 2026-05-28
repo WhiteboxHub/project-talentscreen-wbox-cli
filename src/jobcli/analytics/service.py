@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, List, Optional
@@ -213,3 +214,53 @@ def resolve_user_id(username: Optional[str]) -> str:
     """Resolve analytics identity from Whitebox username."""
     text = (username or "").strip()
     return text or "unknown_user"
+
+
+def track_apply_analytics(
+    db: Database,
+    config: "Config",
+    *,
+    result: str,
+    run_started_at: float,
+    jobs_attempted_count: int,
+    jobs_submitted_count: int,
+    jobs_failed_count: int,
+    processed_job_ids: list[int],
+    exit_reason: Optional[str] = None,
+    extra_metadata: Optional[dict[str, Any]] = None,
+) -> dict:
+    """Queue and flush one apply-run analytics event (same payload as ``wboxcli apply`` end)."""
+    if not config.tracking_enabled:
+        return {"status": "skipped", "reason": "tracking_disabled", "count": 0}
+
+    user_id = resolve_user_id(config.job_board_username)
+    md: dict[str, Any] = dict(extra_metadata or {})
+    run_log = build_apply_run_log(
+        db,
+        config=config,
+        user_id=user_id,
+        result=result,
+        run_started_at=run_started_at,
+        jobs_attempted_count=jobs_attempted_count,
+        jobs_submitted_count=jobs_submitted_count,
+        jobs_failed_count=jobs_failed_count,
+        processed_job_ids=processed_job_ids,
+        exit_reason=exit_reason,
+    )
+    md["apply_run_log"] = run_log
+    md["apply_summary"] = run_log.get("summary", {})
+
+    duration_ms = int(max(0, (time.time() - run_started_at) * 1000))
+    track_usage_event(
+        db,
+        user_id=user_id,
+        event_name="cli_command_completed",
+        command="apply",
+        result=result,
+        duration_ms=duration_ms,
+        jobs_attempted_count=jobs_attempted_count,
+        jobs_submitted_count=jobs_submitted_count,
+        jobs_failed_count=jobs_failed_count,
+        metadata=md,
+    )
+    return flush_usage_events(db, batch_size=50)

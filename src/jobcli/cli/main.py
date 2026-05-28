@@ -176,14 +176,12 @@ def _track_command_event(
     if not config.tracking_enabled:
         return None
     try:
-        duration_ms = int((time.time() - started_at) * 1000)
-        user_id = resolve_user_id(config.job_board_username)
-        md = dict(metadata or {})
         if command == "apply":
-            run_log = build_apply_run_log(
+            from jobcli.analytics.service import track_apply_analytics
+
+            return track_apply_analytics(
                 db,
-                config=config,
-                user_id=user_id,
+                config,
                 result=result,
                 run_started_at=started_at,
                 jobs_attempted_count=int(jobs_attempted_count or 0),
@@ -191,9 +189,10 @@ def _track_command_event(
                 jobs_failed_count=int(jobs_failed_count or 0),
                 processed_job_ids=processed_job_ids or [],
                 exit_reason=exit_reason,
+                extra_metadata=metadata,
             )
-            md["apply_run_log"] = run_log
-            md["apply_summary"] = run_log.get("summary", {})
+        duration_ms = int((time.time() - started_at) * 1000)
+        user_id = resolve_user_id(config.job_board_username)
         track_usage_event(
             db,
             user_id=user_id,
@@ -204,10 +203,8 @@ def _track_command_event(
             jobs_attempted_count=jobs_attempted_count,
             jobs_submitted_count=jobs_submitted_count,
             jobs_failed_count=jobs_failed_count,
-            metadata=md,
+            metadata=metadata or {},
         )
-        # Best-effort immediate upload so analytics reaches backend even if the
-        # user closes the terminal before running an explicit "wboxcli sync".
         return flush_usage_events(db, batch_size=50)
     except Exception:
         return {"status": "error", "count": 0}
@@ -1700,6 +1697,73 @@ def doctor_cmd(
     from jobcli.cli.doctor import run_doctor
 
     raise typer.Exit(run_doctor(console, wbox_smoke=wbox_smoke))
+
+
+@app.command("analytics-backfill")
+def analytics_backfill(
+    since_hours: int = typer.Option(
+        48,
+        "--since-hours",
+        help="Include jobs updated in the last N hours (with application logs)",
+    ),
+    reconcile_logs: bool = typer.Option(
+        True,
+        "--reconcile/--no-reconcile",
+        help="Mark jobs SUBMITTED when application.jsonl shows success",
+    ),
+    skip_e2e: bool = typer.Option(
+        True,
+        "--skip-e2e/--include-e2e",
+        help="Exclude the greenhouse example/999 E2E test job",
+    ),
+    clear_queue: bool = typer.Option(
+        False,
+        "--clear-queue",
+        help="Delete unsent local analytics queue rows before uploading (avoids stale E2E payloads)",
+    ),
+) -> None:
+    """Upload apply analytics from local DB + logs (after apply runs that did not sync)."""
+    console.print("[bold cyan]WboxCLI Analytics Backfill[/bold cyan]\n")
+    config = get_config()
+    if not config.tracking_enabled:
+        console.print("[yellow]tracking_enabled is false — enable it in config first.[/yellow]")
+        raise typer.Exit(1)
+    if not (config.job_board_username or "").strip():
+        console.print("[red]Run [cyan]wboxcli login[/cyan] first.[/red]")
+        raise typer.Exit(1)
+
+    db = get_database()
+    from jobcli.analytics.backfill import backfill_apply_analytics
+
+    try:
+        result = backfill_apply_analytics(
+            db,
+            config,
+            since_hours=since_hours,
+            reconcile_logs=reconcile_logs,
+            skip_e2e=skip_e2e,
+            clear_local_queue=clear_queue,
+        )
+    except Exception as exc:
+        console.print(f"[red]Backfill failed: {exc}[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"  User: [cyan]{result.get('user_id')}[/cyan]")
+    console.print(f"  Jobs in snapshot: [bold]{result.get('jobs_attempted', 0)}[/bold]")
+    console.print(f"  Submitted: [green]{result.get('jobs_submitted', 0)}[/green]")
+    console.print(f"  Failed/other: [red]{result.get('jobs_failed', 0)}[/red]")
+    if result.get("jobs_skipped"):
+        console.print(f"  Skipped: [yellow]{result.get('jobs_skipped', 0)}[/yellow]")
+    flush = result.get("flush") or {}
+    if flush.get("status") == "success":
+        console.print(f"  [green]✓ Uploaded {flush.get('count', 0)} event(s) to {config.sync_server_url}[/green]")
+    else:
+        console.print(f"  [yellow]Upload: {flush}[/yellow]")
+        console.print("  Run [cyan]wboxcli sync[/cyan] or check sync_server_url / login.")
+    console.print(
+        "\n[dim]Note: the dashboard [bold]sums[/bold] all events per user. "
+        "Delete the old E2E row in Analytics → WboxCLI if totals look doubled.[/dim]"
+    )
 
 
 @app.command("sync")
