@@ -14,6 +14,7 @@ Key behaviours:
     engine.py for the wait-and-re-scan pattern.
 """
 
+import os
 import sys
 import time
 import threading
@@ -694,6 +695,7 @@ class AgentInterface:
         *,
         hint: Optional[str] = None,
         wait_for_navigation_seconds: int = 8,
+        force_block: bool = False,
     ) -> HandoffResult:
         """Hand full browser control to the human and **resume from wherever
         they leave it**.
@@ -713,8 +715,17 @@ class AgentInterface:
            **from the human's current page**, *not* from where the agent got
            stuck.
 
-        In ``AUTO`` mode this raises by returning ``cancelled=True`` (the agent
-        cannot proceed without human input but is forbidden from blocking).
+        In ``AUTO`` mode the default behaviour is to print a "cannot block
+        indefinitely" warning and use a short 60s timeout — appropriate for
+        unattended batches where blocking forever would deadlock CI.
+
+        Pass ``force_block=True`` for checkpoints that MUST get a human
+        decision regardless of mode (e.g. the compulsory pre-submit review).
+        When ``force_block=True`` the AUTO short-circuit is bypassed and the
+        wait uses the full 600s timeout, matching SUPERVISED/MANUAL. An
+        environment-variable escape hatch ``WBOX_BYPASS_PRE_SUBMIT_REVIEW=1``
+        restores the AUTO short-circuit even for forced calls — intended for
+        CI/headless smoke tests only.
         """
         url_before = ""
         try:
@@ -722,7 +733,17 @@ class AgentInterface:
         except Exception:
             pass
 
-        if self.mode == InteractionMode.AUTO and not self.is_server:
+        bypass_force = (
+            force_block
+            and os.environ.get("WBOX_BYPASS_PRE_SUBMIT_REVIEW", "0") == "1"
+        )
+        effective_force = force_block and not bypass_force
+
+        if (
+            self.mode == InteractionMode.AUTO
+            and not self.is_server
+            and not effective_force
+        ):
             self.show_error(
                 f"Agent stuck ({reason}) but running in AUTO mode — cannot block indefinitely."
             )

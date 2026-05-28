@@ -2190,16 +2190,22 @@ class ApplicationEngine:
                     lines.append(entry)
         return lines
 
-    # Strict application-fill order (do not reorder without updating docs):
-    #   1. Chrome extension autofill
-    #   2. Rules-based ATS handlers
-    #   3. LLM agent loop
-    #   4. Human-in-the-loop (handoff / terminal prompts) only when 1–3 leave gaps
+    # Application-fill order (do not reorder without updating docs/CLAUDE.md):
+    #   1. Chrome extension autofill — primary fill
+    #   2. Rules-based ATS handlers — FALLBACK, runs only when (1) filled 0
+    #      visible fields (covers both "extension not loaded" and "extension
+    #      ran but produced nothing"). Gated by self._last_extension_filled_count.
+    #   3. LLM agent loop — fills whatever (1)/(2) left blank.
+    #   4. Human-in-the-loop review — COMPULSORY in all modes including
+    #      AUTO. Invoked with force_block=True in _handoff_human_in_loop, so
+    #      the AUTO short-circuit in agent_interface.handoff_to_human is
+    #      bypassed. Submit click is skipped when _looks_like_confirmation
+    #      detects the human already submitted in the browser.
     FILL_PIPELINE_STEPS = (
         "① Extension",
-        "② Rules",
+        "② Rules (fallback)",
         "③ LLM",
-        "④ Human (if needed)",
+        "④ Human review (always)",
     )
 
     def _log_fill_pipeline_start(self, logger: JobLogger, agent: "AgentInterface") -> None:
@@ -2217,18 +2223,111 @@ class ApplicationEngine:
         state: ApplicationState,
         reason: str,
         hint: str,
+        *,
+        force_block: bool = False,
     ) -> "HandoffResult":
-        """Phase 4 — human takes the browser after extension, rules, and LLM."""
+        """Phase 4 — human takes the browser after extension, rules, and LLM.
+
+        Set ``force_block=True`` for the compulsory pre-submit review so the
+        handoff blocks in AUTO mode too (rules ran only if extension produced
+        no fills; the human review is non-negotiable).
+        """
         state.current_phase = ExecutionPhase.HUMAN
         logger.log_phase_start(ExecutionPhase.HUMAN)
         logger.info(
-            "Phase 4/4: Human-in-the-loop (extension, rules, and LLM already ran)",
+            "Phase 4/4: Human review before submit "
+            "(extension and LLM already ran; rules ran only if extension produced no fills)",
             phase=ExecutionPhase.HUMAN,
         )
-        agent.show_phase_banner("Human-in-the-loop (4/4)")
-        result = agent.handoff_to_human(reason=reason, hint=hint)
+        agent.show_phase_banner("Human review (4/4)")
+        result = agent.handoff_to_human(reason=reason, hint=hint, force_block=force_block)
         logger.log_phase_end(ExecutionPhase.HUMAN, not result.cancelled)
         return result
+
+    # ── Confirmation-page detection ──────────────────────────────────────
+    # The user may submit the form themselves during the compulsory
+    # pre-submit review handoff. In that case the agent must skip its own
+    # submit click — otherwise it either clicks a now-disabled button or
+    # falls into the "couldn't find submit" fallback handoff. We reuse the
+    # same four-signal detector that runs after the agent's own submit
+    # click, so behaviour is identical regardless of who pressed Submit.
+    _CONFIRMATION_TEXTS = (
+        # Generic
+        "thank you", "thanks!", "thanks for applying",
+        "application submitted", "successfully submitted",
+        "application received", "application is received",
+        "we have received your application",
+        "we've received your application",
+        "application sent", "application complete",
+        "your application has been submitted",
+        "you've applied", "you have applied",
+        # Ashby phrasing
+        "we'll be in touch", "we will be in touch",
+        # Greenhouse / Lever phrasing
+        "thank you for your interest", "thanks for your interest",
+        "application confirmed",
+    )
+    _CONFIRMATION_URL_TERMS = (
+        "success", "confirmation", "confirm",
+        "thank-you", "thank_you", "thanks",
+        "submitted", "application-confirmation",
+        "complete", "completed", "applied",
+    )
+
+    def _looks_like_confirmation(
+        self,
+        page: Page,
+        pre_submit_url: str,
+        pre_submit_had_submit_btn: bool,
+    ) -> tuple[bool, bool, dict]:
+        """Return ``(strong, soft, signals)`` indicating whether *page* looks
+        like a post-submit confirmation.
+
+        * ``strong``  — explicit confirmation text on page OR URL contains a
+          confirmation-y term (``success``, ``thanks``, ``submitted``, …).
+        * ``soft``    — URL changed since *pre_submit_url* OR the submit
+          button vanished, AND no validation errors are currently visible.
+        * ``signals`` — diagnostic dict (text_confirmed, url_confirmed,
+          url_changed, form_disappeared, has_errors) for logging.
+        """
+        try:
+            page_text = (page.evaluate(
+                "() => (document.body ? document.body.innerText : '').toLowerCase()"
+            ) or "")[:20_000]
+        except Exception:
+            page_text = ""
+        text_confirmed = any(t in page_text for t in self._CONFIRMATION_TEXTS)
+
+        try:
+            url_now = (page.url or "").lower()
+        except Exception:
+            url_now = ""
+        url_confirmed = any(term in url_now for term in self._CONFIRMATION_URL_TERMS)
+        url_changed = bool(
+            pre_submit_url and url_now and url_now != pre_submit_url.lower()
+        )
+
+        try:
+            submit_btn_still_there = bool(_submit_button_visible(page))
+        except Exception:
+            submit_btn_still_there = True
+        form_disappeared = bool(pre_submit_had_submit_btn and not submit_btn_still_there)
+
+        try:
+            has_errors = bool(_live_validation_errors(page))
+        except Exception:
+            has_errors = False
+
+        strong = bool(text_confirmed or url_confirmed)
+        soft = bool((url_changed or form_disappeared) and not has_errors)
+
+        return strong, soft, {
+            "text_confirmed": text_confirmed,
+            "url_confirmed": url_confirmed,
+            "url_changed": url_changed,
+            "form_disappeared": form_disappeared,
+            "has_errors": has_errors,
+        }
 
     def _run_extension_autofill_phase(
         self,
@@ -2236,11 +2335,11 @@ class ApplicationEngine:
         logger: JobLogger,
         agent: "AgentInterface",
     ) -> dict[str, str]:
-        """Phase 1/4 — TalentScreen Chrome extension autofill.
+        """Phase 1/4 — TalentScreen Chrome extension autofill (primary fill).
 
         Injects resume → ``fill_form`` on active tab → settle wait → snapshot.
         """
-        agent.show_phase_banner("Chrome extension autofill (1/4)")
+        agent.show_phase_banner("Chrome extension autofill (1/4: primary fill)")
         if not self.extension_dir:
             logger.warning(
                 "Extension not loaded — skipping extension autofill; LLM only.",
@@ -2358,29 +2457,47 @@ class ApplicationEngine:
             self._last_extension_filled_count = 0
             prefilled_snapshot = self._run_extension_autofill_phase(page, logger, agent)
 
-            # ── Phase 2/4: Rules-based prefill ────────────────────────────
-            agent.show_phase_banner("Rules-based fill (2/4)")
+            # ── Phase 2/4: Rules-based prefill (FALLBACK ONLY) ────────────
+            # Rules are a deterministic safety net for cases where the
+            # extension was unable to fill the form. When the extension
+            # already populated >=1 visible field we skip rules entirely
+            # and go straight to the LLM (and then to the compulsory
+            # human review). See _last_extension_filled_count in
+            # _run_extension_autofill_phase.
             rules_handler = None
             self._last_rules_filled_count = 0
             try:
                 rules_handler = ATSHandlerFactory.create_handler(
                     state.detected_ats, page, self.resume, logger
                 )
-                if rules_handler and state.detected_ats not in (ATSType.UNKNOWN,):
-                    self._set_workday_modal_resume_path(rules_handler)
-                    agent.show_status(
-                        f"Running {state.detected_ats.value} rules (after extension)…",
+                if self._last_extension_filled_count == 0:
+                    if rules_handler and state.detected_ats not in (ATSType.UNKNOWN,):
+                        agent.show_phase_banner("Rules-based fallback (2/4: extension filled nothing)")
+                        self._set_workday_modal_resume_path(rules_handler)
+                        agent.show_status(
+                            f"Extension filled nothing — running {state.detected_ats.value} rules as fallback…",
+                            phase=ExecutionPhase.RULES,
+                        )
+                        prefill_results = self._run_rules_prefill(
+                            rules_handler, page, logger, agent,
+                            AccessibilityTreeExtractor(page), state,
+                        )
+                        filled = [k for k, v in (prefill_results or {}).items() if v]
+                        self._last_rules_filled_count = len(filled)
+                        if filled:
+                            prefilled_snapshot = self._snapshot_filled(page)
+                            page.wait_for_timeout(500)
+                else:
+                    logger.info(
+                        f"Extension filled {self._last_extension_filled_count} field(s) — "
+                        "skipping rules fallback, going straight to LLM.",
                         phase=ExecutionPhase.RULES,
                     )
-                    prefill_results = self._run_rules_prefill(
-                        rules_handler, page, logger, agent,
-                        AccessibilityTreeExtractor(page), state,
+                    agent.show_status(
+                        f"Extension filled {self._last_extension_filled_count} field(s) — "
+                        "skipping rules, going straight to LLM.",
+                        phase=ExecutionPhase.RULES,
                     )
-                    filled = [k for k, v in (prefill_results or {}).items() if v]
-                    self._last_rules_filled_count = len(filled)
-                    if filled:
-                        prefilled_snapshot = self._snapshot_filled(page)
-                        page.wait_for_timeout(500)
             except Exception as e:
                 logger.debug(
                     f"Rules prefill after extension raised {e!r}",
@@ -2836,15 +2953,22 @@ class ApplicationEngine:
                     # Usually takes ~4-7 seconds for the React state to update.
                     wait_time = 8000
                     agent.show_status(
-                        f"Upload done — waiting {wait_time/1000}s, then extension + rules…",
+                        f"Upload done — waiting {wait_time/1000}s, then extension (rules only if needed)…",
                         phase=ExecutionPhase.LLM,
                     )
                     page.wait_for_timeout(wait_time)
                     prefilled_snapshot = self._run_extension_autofill_phase(
                         page, logger, agent
                     )
-                    if rules_handler is not None:
+                    # Rules post-upload pass runs ONLY if the post-upload
+                    # extension run produced zero new fills. Matches the
+                    # pre-upload fallback semantics (see Part B.1 above).
+                    if rules_handler is not None and self._last_extension_filled_count == 0:
                         try:
+                            agent.show_status(
+                                "Extension post-upload filled nothing — running rules as fallback…",
+                                phase=ExecutionPhase.RULES,
+                            )
                             post_upload_results = self._run_rules_prefill(
                                 rules_handler, page, logger, agent, extractor, state
                             )
@@ -2858,6 +2982,12 @@ class ApplicationEngine:
                                 f"Post-upload rules pass raised {e!r}",
                                 phase=ExecutionPhase.RULES,
                             )
+                    elif rules_handler is not None:
+                        logger.info(
+                            f"Post-upload extension filled {self._last_extension_filled_count} "
+                            "field(s) — skipping rules fallback.",
+                            phase=ExecutionPhase.RULES,
+                        )
                     ax_tree = extractor.extract()
                     continue
 
@@ -3609,29 +3739,20 @@ class ApplicationEngine:
                 logger.log_phase_end(ExecutionPhase.LLM, False)
                 return False
 
-            # ── Confirm submission (integrated checkpoint) ────────────────
+            # ── Compulsory pre-submit human review (Phase 4/4) ────────────
+            # The form is "ready" from the agent's perspective — every
+            # signal we have says it can submit. But the user has asked
+            # for a mandatory human review before any application leaves
+            # the browser, in EVERY interaction mode including AUTO.
+            # _handoff_human_in_loop is invoked with force_block=True so
+            # the AUTO short-circuit in handoff_to_human is bypassed.
             self._form_ready_for_submit = True
-            if not agent.confirm_submission():
-                agent.show_warning("Submission declined by user.")
-                self._submit_declined_by_user = True
-                logger.log_phase_end(ExecutionPhase.LLM, False)
-                return False
 
-            # ── Click the Submit button ───────────────────────────────────
-            # The agent fill loop never emits a "SUBMIT" action itself —
-            # the Next/Submit/Apply click detection in ``_split_off_advance_clicks``
-            # holds those back while required fields are still empty.
-            # So once the human has confirmed, we explicitly click the
-            # submit button here.  Use the ATS-specific handler first
-            # (it knows Greenhouse's ``#submit_app_button``, Ashby's
-            # ``button[type=submit]``, Workday's sequence, etc.), then
-            # fall back to a generic Submit locator if the handler
-            # couldn't find one.
-            submit_clicked = False
-            # Snapshot pre-submit state so we can compare afterwards.
-            # URL change and the submit-button disappearing are the two
-            # most reliable signals that the form was accepted, even
-            # when the confirmation copy doesn't match our phrase list.
+            # Snapshot pre-submit state BEFORE the handoff so the
+            # post-handoff confirmation detector compares against the
+            # form the agent left, not the form after the human touched
+            # it. URL change and submit-button disappearance are the two
+            # most reliable signals that the form was accepted.
             try:
                 _pre_submit_url = page.url or ""
             except Exception:
@@ -3640,8 +3761,67 @@ class ApplicationEngine:
                 _pre_submit_had_submit_btn = bool(_submit_button_visible(page))
             except Exception:
                 _pre_submit_had_submit_btn = True
+
+            review_handoff = self._handoff_human_in_loop(
+                agent, logger, state,
+                reason=(
+                    "Final review before submit. Please double-check every "
+                    "field in the browser; edit anything the agent got wrong, "
+                    "then press ENTER to submit, or 'cancel' to abort."
+                ),
+                hint=(
+                    "This is a mandatory review checkpoint. Submit will fire "
+                    "as soon as you press ENTER. If you click Submit yourself "
+                    "in the browser, the agent will detect that and skip its "
+                    "own click."
+                ),
+                force_block=True,
+            )
+            if review_handoff.cancelled:
+                agent.show_warning("Submission cancelled by user during review.")
+                self._submit_declined_by_user = True
+                logger.log_phase_end(ExecutionPhase.LLM, False)
+                return False
+            page = review_handoff.page
+            agent.page = page
+
+            # ── Detect: did the user click Submit themselves? ─────────────
+            # If the page already looks like a confirmation (URL changed
+            # to a thank-you path, text shows "Application received",
+            # submit button vanished without validation errors, …), the
+            # human already did the work. Skip our own click entirely —
+            # otherwise we'd hammer a now-disabled button or fall into
+            # the "couldn't find Submit" recovery handoff.
+            submit_clicked = False
+            manual_submit_attempted = False
+            user_submitted_during_review = False
+            _strong_pre, _soft_pre, _pre_signals = self._looks_like_confirmation(
+                page, _pre_submit_url, _pre_submit_had_submit_btn
+            )
+            if _strong_pre or _soft_pre:
+                user_submitted_during_review = True
+                manual_submit_attempted = True
+                submit_clicked = True
+                agent.show_success(
+                    "Detected manual submission — recording success."
+                )
+                logger.info(
+                    f"human_submitted_directly signals={_pre_signals} "
+                    f"strong={_strong_pre} soft={_soft_pre}",
+                    phase=ExecutionPhase.LLM,
+                )
+
+            # ── Click the Submit button ───────────────────────────────────
+            # The agent fill loop never emits a "SUBMIT" action itself —
+            # the Next/Submit/Apply click detection in ``_split_off_advance_clicks``
+            # holds those back while required fields are still empty.
+            # If the user did NOT already submit during the review, the
+            # agent clicks Submit now using the ATS-specific handler
+            # first (Greenhouse's ``#submit_app_button``, Ashby's
+            # ``button[type=submit]``, Workday's sequence, etc.), then
+            # a generic Submit locator if that fails.
             try:
-                if rules_handler is not None:
+                if not user_submitted_during_review and rules_handler is not None:
                     agent.show_status(
                         "Clicking submit…", phase=ExecutionPhase.LLM
                     )
@@ -3709,6 +3889,7 @@ class ApplicationEngine:
                 if handoff.cancelled:
                     logger.log_phase_end(ExecutionPhase.LLM, False)
                     return False
+                manual_submit_attempted = True
                 page = handoff.page
                 agent.page = page
 
@@ -3725,74 +3906,20 @@ class ApplicationEngine:
             # Ashby / Greenhouse / Lever rarely show the same literal
             # text on their confirmation pages, and modern ATSes are
             # SPAs that often keep the URL path identical — so a fixed
-            # phrase list is always incomplete.  Use *four* independent
-            # signals and accept the submission as soon as one strong
-            # success signal fires **and** no validation error is
-            # visible.
-            _confirmation_texts = [
-                # Generic
-                "thank you", "thanks!", "thanks for applying",
-                "application submitted", "successfully submitted",
-                "application received", "application is received",
-                "we have received your application",
-                "we've received your application",
-                "application sent", "application complete",
-                "your application has been submitted",
-                "you've applied", "you have applied",
-                # Ashby phrasing
-                "we'll be in touch", "we will be in touch",
-                # Greenhouse / Lever phrasing
-                "thank you for your interest", "thanks for your interest",
-                "application confirmed",
-            ]
-            try:
-                _page_text = (page.evaluate(
-                    "() => (document.body ? document.body.innerText : '').toLowerCase()"
-                ) or "")[:20_000]
-            except Exception:
-                _page_text = ""
-            _text_confirmed = any(t in _page_text for t in _confirmation_texts)
-
-            _url_now = (page.url or "").lower()
-            _url_confirmed = any(
-                term in _url_now
-                for term in [
-                    "success", "confirmation", "confirm",
-                    "thank-you", "thank_you", "thanks",
-                    "submitted", "application-confirmation",
-                    "complete", "completed", "applied",
-                ]
+            # phrase list is always incomplete. _looks_like_confirmation
+            # gathers four independent signals and accepts the
+            # submission as soon as one strong signal fires OR a soft
+            # signal fires while no validation error is visible. The
+            # same helper is used during the pre-submit handoff to
+            # detect "user already submitted in the browser".
+            _strong_confirm, _soft_confirm, _post_signals = self._looks_like_confirmation(
+                page, _pre_submit_url, _pre_submit_had_submit_btn
             )
-            _url_changed = bool(
-                _pre_submit_url and _url_now and _url_now != _pre_submit_url.lower()
-            )
-
-            # "Form gone" = the submit button we just pressed is no
-            # longer on the page.  Combined with "no validation errors
-            # visible", this is essentially what a human sees when the
-            # ATS silently whisks the form away.
-            try:
-                _submit_btn_still_there = bool(_submit_button_visible(page))
-            except Exception:
-                _submit_btn_still_there = True
-            _form_disappeared = (
-                _pre_submit_had_submit_btn and not _submit_btn_still_there
-            )
-
-            try:
-                _has_errors = bool(_live_validation_errors(page))
-            except Exception:
-                _has_errors = False
-
-            # Strong positive signal: explicit confirmation text or URL
-            # clearly says "confirmation/thanks/submitted".
-            _strong_confirm = _text_confirmed or _url_confirmed
-            # Medium positive signal: URL changed or the form vanished,
-            # combined with absence of any visible validation error.
-            _soft_confirm = (_url_changed or _form_disappeared) and not _has_errors
+            _has_errors = bool(_post_signals.get("has_errors"))
 
             is_confirmation = _strong_confirm or _soft_confirm
-            success = bool(submit_clicked and is_confirmation)
+            submit_attempted = submit_clicked or manual_submit_attempted
+            success = bool(submit_attempted and is_confirmation)
 
             if success:
                 agent.show_success("Application submitted!")
@@ -3803,30 +3930,31 @@ class ApplicationEngine:
                     # behavioural signals rather than explicit text.
                     logger.info(
                         "Submission inferred from URL/form change "
-                        f"(url_changed={_url_changed}, form_gone={_form_disappeared}, "
+                        f"(url_changed={_post_signals.get('url_changed')}, "
+                        f"form_gone={_post_signals.get('form_disappeared')}, "
                         f"errors={_has_errors}).",
                         phase=ExecutionPhase.LLM,
                     )
-            elif submit_clicked and not _has_errors:
-                # Submit was clicked, nothing changed visibly, but no
+            elif submit_attempted and not _has_errors:
+                # Submit was attempted, nothing changed visibly, but no
                 # error either.  Treat as probable-success so we don't
                 # drop the user into a "form incomplete" handoff for a
                 # form that was in fact already submitted.  The user
                 # can still verify in the visible browser window.
                 agent.show_success(
-                    "Submit clicked — confirmation not auto-detected. "
+                    "Submit attempted — confirmation not auto-detected. "
                     "Verify in the browser; the application likely went through."
                 )
                 logger.capture_screenshot(
                     page, "llm_submit_unverified", ExecutionPhase.LLM
                 )
                 success = True
-            elif submit_clicked and _has_errors:
+            elif submit_attempted and _has_errors:
                 # Real failure: the form is still showing validation
                 # errors after the click.  Fall through to the handoff
                 # so the human can fix and retry.
                 agent.show_warning(
-                    "Submit was clicked but the form still shows validation errors. "
+                    "Submit was attempted but the form still shows validation errors. "
                     "Please fix them in the browser."
                 )
                 logger.capture_screenshot(
