@@ -871,7 +871,7 @@ class TestConstantsSync:
 
 class TestSubmitConfirmAndHandoffUrl:
     def test_urls_meaningfully_different_ignores_hash_and_query(self):
-        from jobcli.orchestration.engine import _urls_meaningfully_different
+        from jobcli.utils.url_compare import urls_meaningfully_different as _urls_meaningfully_different
 
         base = "https://jobs.lever.co/trellis/abc/apply"
         assert not _urls_meaningfully_different(base, base + "#section")

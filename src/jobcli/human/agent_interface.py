@@ -23,6 +23,13 @@ from io import StringIO
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
+from jobcli.utils.browser_closed import (
+    BROWSER_CLOSED_SENTINEL,
+    BrowserClosed,
+    is_playwright_page_closed,
+)
+from jobcli.utils.url_compare import urls_meaningfully_different
+
 from playwright.sync_api import Page
 from rich.console import Console
 from rich.panel import Panel
@@ -177,6 +184,15 @@ class AgentInterface:
             unregister_input_event,
         )
 
+        browser_poll_stop = threading.Event()
+
+        def _poll_browser_closed() -> None:
+            while not browser_poll_stop.is_set() and self._is_waiting:
+                if is_playwright_page_closed(self.page):
+                    self.remote_resume(BROWSER_CLOSED_SENTINEL)
+                    return
+                browser_poll_stop.wait(0.5)
+
         self._is_waiting = True
         self._input_event.clear()
         self._input_value = None
@@ -226,9 +242,11 @@ class AgentInterface:
 
                 thread = threading.Thread(target=local_input_thread, daemon=True)
                 thread.start()
+                browser_thread = threading.Thread(target=_poll_browser_closed, daemon=True)
+                browser_thread.start()
 
                 # Block until either the thread, a remote call, the global
-                # SIGINT handler, or a timeout fires.
+                # SIGINT handler, browser close, or a timeout fires.
                 if timeout_seconds is not None:
                     timed_out = not self._input_event.wait(timeout=timeout_seconds)
                     if timed_out:
@@ -237,6 +255,7 @@ class AgentInterface:
                 else:
                     self._input_event.wait()
         finally:
+            browser_poll_stop.set()
             unregister_input_event(self._input_event)
 
         self._is_waiting = False
@@ -246,6 +265,8 @@ class AgentInterface:
             raise ExitRequested("Ctrl+C during input wait")
 
         raw = self._input_value
+        if raw == BROWSER_CLOSED_SENTINEL:
+            raise BrowserClosed("User closed the browser window")
         if raw == "__JOBCLI_EXIT__":
             raise ExitRequested("Ctrl+C / EOF on stdin")
         if is_quit_keyword(raw):
@@ -866,7 +887,7 @@ class AgentInterface:
         except Exception:
             pass
 
-        advanced = _urls_meaningfully_different(url_before, url_after)
+        advanced = urls_meaningfully_different(url_before, url_after)
 
         if advanced:
             self.show_success(

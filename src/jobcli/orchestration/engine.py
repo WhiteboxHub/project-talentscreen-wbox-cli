@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional
 
 from playwright.sync_api import Error, Page, sync_playwright
 
+from jobcli.utils.browser_closed import BrowserClosed
 from jobcli.utils.fill_guard import PLACEHOLDER_VALUES, is_meaningful_value
 from jobcli.utils.logger import JobLogger, global_logger
 from jobcli.profile.schemas import (
@@ -196,16 +197,7 @@ def _normalize_label(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip().lower()
 
 
-def _urls_meaningfully_different(before: str, after: str) -> bool:
-    """True when handoff navigation moved to a different page (not hash/query noise)."""
-    from urllib.parse import urlparse
-
-    if not before or not after:
-        return False
-    b, a = urlparse(before), urlparse(after)
-    if b.netloc.lower() != a.netloc.lower():
-        return True
-    return b.path.rstrip("/") != a.path.rstrip("/")
+from jobcli.utils.url_compare import urls_meaningfully_different as _urls_meaningfully_different
 
 
 def _build_dropdown_label_set(ax_tree) -> dict[str, dict]:
@@ -1626,6 +1618,8 @@ class ApplicationEngine:
             logger.warning("Application cancelled by user", phase=state.current_phase)
             self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
             return ApplicationStatus.FAILED
+        except BrowserClosed:
+            raise
         except Exception as e:
             logger.error(f"Application error: {e}")
             if self.config.screenshot_on_error:
@@ -3970,10 +3964,11 @@ class ApplicationEngine:
             raise
         except Error as e:
             if "closed" in str(e).lower():
-                agent.show_error("Browser was closed — aborting this application.")
+                agent.show_error("Browser was closed — saving logs and syncing analytics.")
                 logger.error("Browser closed during agent loop.", phase=ExecutionPhase.LLM)
-            else:
-                logger.error(f"Playwright error in agent loop: {e}", phase=ExecutionPhase.LLM)
+                logger.log_phase_end(ExecutionPhase.LLM, False)
+                raise BrowserClosed("User closed the browser during LLM autofill") from e
+            logger.error(f"Playwright error in agent loop: {e}", phase=ExecutionPhase.LLM)
             logger.log_phase_end(ExecutionPhase.LLM, False)
             return False
         except Exception as e:
