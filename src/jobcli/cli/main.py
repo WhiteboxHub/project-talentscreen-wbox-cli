@@ -359,10 +359,10 @@ def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uni
         if is_windows:
             console.print('  [cyan]Remove-Item -Recurse -Force "$env:USERPROFILE\\.jobcli"[/cyan]')
             console.print('  [cyan]Remove-Item -Force "$env:USERPROFILE\\.local\\bin\\wboxcli.cmd"[/cyan]')
-            console.print('  [dim](or)[/dim] [cyan]irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.ps1 | iex[/cyan]')
+            console.print('  [dim](or)[/dim] [cyan]irm https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/dev/scripts/uninstall.ps1 | iex[/cyan]')
         else:
             console.print('  [cyan]rm -rf ~/.jobcli ~/.local/bin/wboxcli[/cyan]')
-            console.print('  [dim](or)[/dim] [cyan]curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.sh | bash[/cyan]')
+            console.print('  [dim](or)[/dim] [cyan]curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/dev/scripts/uninstall.sh | bash[/cyan]')
     else:
         console.print("\n[green]JobCLI has been fully uninstalled.[/green]")
 

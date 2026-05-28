@@ -1,11 +1,24 @@
 # WboxCLI
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
 Production-grade CLI for automated job applications across multiple ATS platforms, powered by a self-learning local intelligence engine.
 
 > **Naming:** Python package is `jobcli`; the installed command is **`wboxcli`**. Dev runs use `PYTHONPATH=src` and `python -m jobcli.cli.main` (or `python -m jobcli.cli.entry` for the TUI).
 
 > **Windows & macOS command guide (extension ZIP, unzip, onboarding, `apply`):**  
 > See **[docs/SETUP_WINDOWS_MAC.md](docs/SETUP_WINDOWS_MAC.md)** — full copy-paste commands for CMD, PowerShell, and bash.
+
+## Project links
+
+- **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md)
+- **Changelog:** [CHANGELOG.md](CHANGELOG.md)
+- **Security policy:** [SECURITY.md](SECURITY.md)
+- **Code of conduct:** [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- **License:** [MIT](LICENSE)
 
 ---
 
@@ -58,12 +71,12 @@ Requires **Python 3.10+** and **git**.
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/main/scripts/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/main/scripts/install.ps1 | iex
 ```
 
 ### Development Release (Dev)
@@ -72,12 +85,12 @@ irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/install.
 
 **macOS / Linux:**
 ```bash
-JOBCLI_BRANCH=dev curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.sh | bash
+JOBCLI_BRANCH=dev curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/dev/scripts/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-$env:JOBCLI_BRANCH="dev"; irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.ps1 | iex
+$env:JOBCLI_BRANCH="dev"; irm https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/dev/scripts/install.ps1 | iex
 ```
 
 This installs `wboxcli` globally — available from any terminal, just like `nvm` or `curl`. No virtual environment activation needed. After install, the interactive TUI launches automatically.
@@ -105,34 +118,34 @@ This installs `wboxcli` globally — available from any terminal, just like `nvm
 
 ```bash
 # macOS / Linux (Main)
-curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/main/scripts/install.sh | bash
 
 # macOS / Linux (Dev)
-JOBCLI_BRANCH=dev curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.sh | bash
+JOBCLI_BRANCH=dev curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/dev/scripts/install.sh | bash
 ```
 ```powershell
 # Windows PowerShell (Main)
-irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/main/scripts/install.ps1 | iex
 
 # Windows PowerShell (Dev)
-$env:JOBCLI_BRANCH="dev"; irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/install.ps1 | iex
+$env:JOBCLI_BRANCH="dev"; irm https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/dev/scripts/install.ps1 | iex
 ```
 
 **To uninstall** (you can also use the local `./scripts/wboxcli.sh uninstall` command):
 
 ```bash
 # macOS / Linux (Main)
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/uninstall.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/main/scripts/uninstall.sh)"
 
 # macOS / Linux (Dev)
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/dev/scripts/uninstall.sh)"
 ```
 ```powershell
 # Windows PowerShell (Main)
-irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/uninstall.ps1 | iex
+irm https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/main/scripts/uninstall.ps1 | iex
 
 # Windows PowerShell (Dev)
-irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.ps1 | iex
+irm https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/dev/scripts/uninstall.ps1 | iex
 ```
 
 ### Manual Install (For Development)
@@ -347,17 +360,17 @@ If `wboxcli uninstall` ever leaves files behind, the **bundled shell uninstaller
 
 ```bash
 # macOS / Linux (Main)
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/uninstall.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/main/scripts/uninstall.sh)"
 
 # macOS / Linux (Dev)
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/dev/scripts/uninstall.sh)"
 ```
 ```powershell
 # Windows PowerShell (Main)
-irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/uninstall.ps1 | iex
+irm https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/main/scripts/uninstall.ps1 | iex
 
 # Windows PowerShell (Dev)
-irm https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/dev/scripts/uninstall.ps1 | iex
+irm https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/dev/scripts/uninstall.ps1 | iex
 ```
 
 > The PATH entry pointing to `~/.local/bin` is left alone by every cleanup command — remove it from your shell profile (`~/.zshrc` / `~/.bashrc`) or Windows System Environment Variables if you want it gone too.

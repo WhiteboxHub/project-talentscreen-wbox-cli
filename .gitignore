@@ -289,3 +289,22 @@ extension/*
 # JobCLI runtime (local dev + accidental copies)
 .jobcli/
 extension_unpacked/
+
+# ── Release-prep additions ──────────────────────────────────────────────────
+# DeepEval local cache / telemetry (do not ship)
+.deepeval/
+
+# Old venvs left over from migrations
+venv_old_*/
+venv/
+
+# PyInstaller build artifacts (the .spec is intentionally tracked via override below)
+*.spec.bak
+
+# IDE
+.idea/
+.vscode/
+
+# OS noise
+.DS_Store
+Thumbs.db

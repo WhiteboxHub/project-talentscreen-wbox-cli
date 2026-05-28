@@ -3,7 +3,7 @@
 #  WboxCLI Global Installer
 #
 #  Usage:
-#    curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/install.sh | bash
+#    curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/main/scripts/install.sh | bash
 #
 #  What it does:
 #    1. Clones (or updates) the repo into ~/.jobcli/src
@@ -38,7 +38,7 @@ SRC_DIR="$INSTALL_DIR/src"
 VENV_DIR="$INSTALL_DIR/venv"
 BIN_DIR="$HOME/.local/bin"
 WRAPPER="$BIN_DIR/wboxcli"
-REPO_URL="https://github.com/WhiteboxHub/wbox-cli.git"
+REPO_URL="https://github.com/WhiteboxHub/project-talentscreen-wbox-cli.git"
 BRANCH="${JOBCLI_BRANCH:-main}"  # Override with JOBCLI_BRANCH=<branch> if needed
 
 echo ""
@@ -141,7 +141,7 @@ JOBCLI_VENV="$HOME/.jobcli/venv"
 
 if [ ! -f "$JOBCLI_VENV/bin/python" ]; then
     echo "Error: WboxCLI installation not found at $JOBCLI_VENV"
-    echo "Re-install with: curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/wbox-cli/main/scripts/install.sh | bash"
+    echo "Re-install with: curl -fsSL https://raw.githubusercontent.com/WhiteboxHub/project-talentscreen-wbox-cli/main/scripts/install.sh | bash"
     exit 1
 fi
 

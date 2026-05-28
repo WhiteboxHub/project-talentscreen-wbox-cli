@@ -826,7 +826,7 @@ def interactive_session():
                 if not user_input:
                     continue
                 if user_input.lower() in ("exit", "quit", "q"):
-                    console.print(f"\n  [{D}]goodbye[/]\n")
+                    console.print(f"\n  [{D}]goodbye, Have a great day!😀 [/]\n")
                     break
                 _dispatch(user_input)
             except KeyboardInterrupt:
