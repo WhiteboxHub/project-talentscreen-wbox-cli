@@ -42,6 +42,37 @@ On **macOS / Linux**, `./build.sh` in the CLI repo also unpacks the ZIP during t
 
 ## Part 1 — Build the Chrome extension
 
+### Easy mode: `wboxcli extupdate` (recommended)
+
+If the CLI is already installed (`pip install -e .` has run inside the
+venv) you can skip the manual clone/build/copy dance and just run:
+
+```bash
+wboxcli extupdate
+```
+
+What this does, end to end:
+
+1. `git clone --depth 1` the extension repo into a tempdir (use
+   `--branch dev` for a non-default branch, or `--source <path>` to reuse
+   an existing local clone).
+2. Runs `build.sh` on macOS / Linux or `build.ps1` on Windows.
+3. Copies the produced `dist/talentscreen-autofill-v*.zip` into
+   `extension/talentscreen-autofill.zip` inside the CLI repo.
+4. Unpacks it into `~/.jobcli/extension_unpacked/` so Playwright picks it
+   up on the next `wboxcli apply`.
+
+Prerequisites: `git` on PATH, plus `bash` + `zip` on macOS / Linux or
+PowerShell on Windows (the helper passes `-ExecutionPolicy Bypass` so you
+don't need to relax the global policy).
+
+`scripts/wboxcli.sh update` also calls `wboxcli extupdate` automatically
+after pulling the latest CLI source, so a single update command refreshes
+both the CLI and the extension.
+
+If you'd rather do it manually (or `extupdate` fails on your machine for
+some reason), the original step-by-step build is still documented below.
+
 ### macOS / Linux (Git Bash or Terminal)
 
 ```bash

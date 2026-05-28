@@ -1676,6 +1676,67 @@ def doctor_cmd(
     raise typer.Exit(run_doctor(console, wbox_smoke=wbox_smoke))
 
 
+@app.command("extupdate")
+def extupdate_cmd(
+    branch: Optional[str] = typer.Option(
+        None,
+        "--branch",
+        help="Clone a non-default branch (e.g. dev). Defaults to the repo's main branch.",
+    ),
+    source: Optional[Path] = typer.Option(
+        None,
+        "--source",
+        help="Use an existing local clone instead of cloning fresh. Skips the git step but still runs build.sh.",
+    ),
+    keep_clone: bool = typer.Option(
+        False,
+        "--keep-clone",
+        help="Don't delete the temp clone after build — useful for debugging.",
+    ),
+) -> None:
+    """Fetch + build + install the latest TalentScreen extension ZIP.
+
+    Clones the extension repo, runs its ./build.sh (or build.ps1 on
+    Windows), drops the resulting talentscreen-autofill-vX.Y.Z.zip into
+    ./extension/, and unpacks it to ~/.jobcli/extension_unpacked/. This is
+    the canonical way to refresh the in-browser autofill extension.
+    """
+    from jobcli.utils.extension_helpers import build_and_install_extension
+
+    console.print("[bold cyan]TalentScreen extension update[/bold cyan]")
+
+    def _progress(msg: str) -> None:
+        console.print(f"  [cyan]->[/cyan] {msg}")
+
+    try:
+        result = build_and_install_extension(
+            branch=branch,
+            source_dir=source,
+            progress=_progress,
+            keep_clone=keep_clone,
+        )
+    except Exception as exc:
+        console.print(f"  [red]✗[/red] Extension update failed: {exc}")
+        raise typer.Exit(1) from exc
+
+    version = result.get("manifest_version") or "(unknown)"
+    zip_path = result.get("zip_path", "")
+    unpacked = result.get("unpacked_dir", "")
+    commit = result.get("commit", "")
+
+    console.print(f"  [green]✓[/green] Installed talentscreen-autofill v{version}")
+    console.print(f"     ZIP      : {zip_path}")
+    console.print(f"     Unpacked : {unpacked}")
+    if commit:
+        branch_label = branch or "default"
+        console.print(f"     Commit   : {commit} ({branch_label})")
+    if keep_clone and result.get("clone_dir"):
+        console.print(f"     Clone    : {result['clone_dir']} (kept for debugging)")
+    console.print(
+        "  [green]✓[/green] Done. Re-run [bold]wboxcli apply[/bold] to pick up the new extension."
+    )
+
+
 @app.command("sync")
 def sync_cmd() -> None:
     """Sync learned knowledge and job activity with the central server."""

@@ -234,23 +234,22 @@ cmd_update() {
         fail "Source directory not found at $SRC_DIR. Run: $0 install"
     fi
 
-    # Update TalentScreen extension
-    EXT_TMP_DIR="/tmp/wboxcli_ext_clone_$$"
-    EXT_URL="https://github.com/WhiteboxHub/project-talentscreen-autofill-extension.git"
-
-    info "Updating TalentScreen extension..."
-    git clone --depth 1 "$EXT_URL" "$EXT_TMP_DIR" --quiet 2>/dev/null || warn "Could not fetch latest extension"
-    if [ -d "$EXT_TMP_DIR" ]; then
-        mkdir -p "$SRC_DIR/bin"
-        rm -rf "$SRC_DIR/bin/project-talentscreen-autofill-extension"
-        mv "$EXT_TMP_DIR" "$SRC_DIR/bin/project-talentscreen-autofill-extension"
-        ok "Extension updated"
-    fi
-
+    # Reinstall dependencies FIRST so `wboxcli extupdate` exists in the venv
+    # before we try to invoke it for the extension refresh below.
     info "Reinstalling dependencies..."
     "$VENV_DIR/bin/pip" install --upgrade pip --quiet 2>/dev/null
     "$VENV_DIR/bin/pip" install -e "$SRC_DIR" --quiet 2>/dev/null
     ok "Dependencies updated"
+
+    # Refresh the TalentScreen extension via the canonical CLI command.
+    # This clones the extension repo, runs its build.sh to produce a ZIP,
+    # copies it into extension/, and unpacks it under ~/.jobcli/.
+    info "Updating TalentScreen extension (build + install ZIP)..."
+    if "$VENV_DIR/bin/wboxcli" extupdate; then
+        ok "Extension updated"
+    else
+        warn "Extension update failed — previous extension remains in place. Run 'wboxcli extupdate' to retry."
+    fi
 
     info "Updating Playwright Chromium..."
     "$VENV_DIR/bin/python" -m playwright install chromium --quiet 2>/dev/null || \

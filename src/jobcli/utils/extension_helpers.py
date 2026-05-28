@@ -8,8 +8,11 @@ one place instead of duplicating path-resolution code.
 
 from __future__ import annotations
 
+import json
 import os
+import platform
 import shutil
+import subprocess
 import tempfile
 import time
 import zipfile
@@ -42,6 +45,16 @@ _BUNDLED_DIR = (
     / "bin"
     / "project-talentscreen-autofill-extension"
 )
+
+#: HTTPS URL for the public TalentScreen extension repository.
+#: ``wboxcli extupdate`` clones from here and runs the repo's build.sh.
+EXTENSION_REPO_URL = (
+    "https://github.com/WhiteboxHub/project-talentscreen-autofill-extension.git"
+)
+
+#: Canonical filename used by extupdate when copying the built ZIP into
+#: ``extension/``. Stable name keeps the resolver/doctor messages tidy.
+EXTUPDATE_INSTALLED_ZIP_NAME = "talentscreen-autofill.zip"
 
 
 def _has_manifest(directory: Path) -> bool:
@@ -337,3 +350,216 @@ def verify_extension_in_browser(
                     pass
     except Exception as exc:
         return False, False, f"Browser launch failed: {exc}"
+
+
+# ---------------------------------------------------------------------------
+# extupdate — clone + build + install the latest extension ZIP
+# ---------------------------------------------------------------------------
+
+
+def _clone_extension_repo(branch: Optional[str], dest: Path) -> None:
+    """Run ``git clone --depth 1 [-b <branch>] EXTENSION_REPO_URL <dest>``.
+
+    Captures stderr so we can surface a useful message if the clone fails
+    (e.g. no git on PATH, network unreachable, private repo gated).
+    """
+    argv: list[str] = ["git", "clone", "--depth", "1"]
+    if branch:
+        argv.extend(["-b", branch])
+    argv.extend([EXTENSION_REPO_URL, str(dest)])
+
+    result = subprocess.run(argv, capture_output=True, text=True)
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()[:1000]
+        raise RuntimeError(
+            f"git clone failed (exit {result.returncode}): {stderr or 'no stderr'}"
+        )
+
+
+def _git_head_commit(clone_dir: Path) -> str:
+    """Best-effort ``git rev-parse --short HEAD`` for the success message."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(clone_dir), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            return (result.stdout or "").strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _read_manifest_version(clone_dir: Path) -> str:
+    """Read the ``version`` field from ``manifest.json`` (best effort)."""
+    manifest_path = clone_dir / "manifest.json"
+    if not manifest_path.is_file():
+        return ""
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        return str(data.get("version", "")).strip()
+    except Exception:
+        return ""
+
+
+def _run_extension_build(clone_dir: Path) -> Path:
+    """Run the extension repo's ``build.sh`` (Unix) or ``build.ps1`` (Windows).
+
+    Returns the path to the newest produced ZIP under ``clone_dir / "dist"``
+    matching ``talentscreen-autofill-v*.zip``.
+
+    Raises:
+        FileNotFoundError: when the build script itself is missing.
+        RuntimeError: when the script exits non-zero or produces no ZIP.
+    """
+    is_windows = platform.system().lower().startswith("win")
+
+    if is_windows:
+        build_script = clone_dir / "build.ps1"
+        if not build_script.is_file():
+            raise FileNotFoundError(
+                f"build.ps1 not found in clone at {clone_dir}. "
+                "The extension repo layout may have changed."
+            )
+        argv: list[str] = [
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", str(build_script),
+        ]
+    else:
+        build_script = clone_dir / "build.sh"
+        if not build_script.is_file():
+            raise FileNotFoundError(
+                f"build.sh not found in clone at {clone_dir}. "
+                "The extension repo layout may have changed."
+            )
+        argv = ["bash", str(build_script)]
+
+    result = subprocess.run(argv, cwd=str(clone_dir), capture_output=True, text=True)
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()[:2000]
+        stdout = (result.stdout or "").strip()[:1000]
+        raise RuntimeError(
+            f"extension build exited {result.returncode}. "
+            f"stderr: {stderr or '<empty>'} | stdout tail: {stdout[-500:] if stdout else '<empty>'}"
+        )
+
+    dist_dir = clone_dir / "dist"
+    if not dist_dir.is_dir():
+        raise RuntimeError(
+            f"extension build succeeded but no dist/ directory found at {dist_dir}"
+        )
+    zips = sorted(
+        (p for p in dist_dir.glob("talentscreen-autofill-v*.zip") if p.is_file()),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not zips:
+        # Fall back to any *.zip in dist/ — covers a renamed pattern.
+        zips = sorted(
+            (p for p in dist_dir.glob("*.zip") if p.is_file()),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+    if not zips:
+        raise RuntimeError(
+            f"extension build produced no ZIP under {dist_dir}. "
+            "Check that the build script is wired correctly upstream."
+        )
+    return zips[0]
+
+
+def build_and_install_extension(
+    *,
+    branch: Optional[str] = None,
+    source_dir: Optional[Path | str] = None,
+    progress: ProgressCallback = None,
+    keep_clone: bool = False,
+) -> dict:
+    """Clone + build + install the TalentScreen extension.
+
+    The full pipeline used by ``wboxcli extupdate``:
+
+    1. If *source_dir* is given, treat it as an existing local clone (no
+       git operations). Otherwise ``git clone --depth 1`` (optionally with
+       ``-b <branch>``) to a tempdir.
+    2. Verify ``manifest.json`` exists at the clone root.
+    3. Run the build script (``build.sh`` on Unix, ``build.ps1`` on Windows).
+    4. Locate the newest ``dist/talentscreen-autofill-v*.zip``.
+    5. Copy it to ``<project-root>/extension/talentscreen-autofill.zip``.
+    6. Call :func:`maybe_install_local_extension_zip` with ``force=True`` to
+       unpack into ``~/.jobcli/extension_unpacked/``.
+
+    Args:
+        branch: Optional non-default branch to clone.
+        source_dir: Reuse an existing local clone instead of cloning fresh.
+        progress: Optional callback receiving human-readable status strings.
+        keep_clone: When True the temp clone is not deleted; its path is
+            included in the return dict for inspection.
+
+    Returns:
+        Dict with keys ``zip_path`` (installed ZIP location),
+        ``unpacked_dir`` (target unpack dir), ``manifest_version``
+        (from ``manifest.json``), ``commit`` (HEAD short-sha, may be empty
+        for ``source_dir``), and ``clone_dir`` (only when ``keep_clone``).
+
+    Raises:
+        RuntimeError: on any step failure, with a human-friendly message
+            that includes the captured subprocess stderr where available.
+    """
+    using_external_source = source_dir is not None
+    tmp_clone: Optional[Path] = None
+
+    if using_external_source:
+        clone_dir = Path(source_dir).expanduser().resolve()
+        if not _has_manifest(clone_dir):
+            raise RuntimeError(
+                f"--source path {clone_dir} does not contain manifest.json. "
+                "Point --source at the root of a TalentScreen extension clone."
+            )
+    else:
+        tmp_clone = Path(tempfile.mkdtemp(prefix="jobcli_extupdate_"))
+        clone_dir = tmp_clone
+        _report(progress, f"Cloning extension repo (branch={branch or 'default'})…")
+        try:
+            _clone_extension_repo(branch, clone_dir)
+        except Exception:
+            shutil.rmtree(tmp_clone, ignore_errors=True)
+            raise
+        if not _has_manifest(clone_dir):
+            shutil.rmtree(tmp_clone, ignore_errors=True)
+            raise RuntimeError(
+                f"Cloned repo at {clone_dir} has no manifest.json at the root. "
+                "The extension repo layout may have changed."
+            )
+
+    try:
+        _report(progress, "Building extension ZIP (build.sh)…")
+        produced_zip = _run_extension_build(clone_dir)
+
+        _EXTENSION_DIR.mkdir(parents=True, exist_ok=True)
+        installed_zip = _EXTENSION_DIR / EXTUPDATE_INSTALLED_ZIP_NAME
+        _report(progress, f"Copying ZIP -> {installed_zip}…")
+        shutil.copy2(produced_zip, installed_zip)
+
+        _report(progress, "Unpacking ZIP into ~/.jobcli/extension_unpacked/…")
+        unpacked = maybe_install_local_extension_zip(force=True)
+        if not unpacked:
+            raise RuntimeError(
+                "Built ZIP was copied but maybe_install_local_extension_zip() "
+                "did not unpack it. Re-run with WBOXCLI_DEBUG=1 for details."
+            )
+
+        result = {
+            "zip_path": str(installed_zip),
+            "unpacked_dir": unpacked,
+            "manifest_version": _read_manifest_version(clone_dir),
+            "commit": "" if using_external_source else _git_head_commit(clone_dir),
+        }
+        if keep_clone and tmp_clone is not None:
+            result["clone_dir"] = str(tmp_clone)
+        return result
+    finally:
+        if tmp_clone is not None and not keep_clone:
+            shutil.rmtree(tmp_clone, ignore_errors=True)

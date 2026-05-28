@@ -880,6 +880,21 @@ Other documentation (architecture guides, summaries, etc.) lives under `docs/` �
 
 ### Local extension dev loop
 
+Easiest path — let the CLI do all three steps:
+
+```bash
+wboxcli extupdate
+```
+
+This clones the extension repo, runs its `build.sh` (or `build.ps1` on
+Windows), drops the produced ZIP into `extension/`, and unpacks it into
+`~/.jobcli/extension_unpacked/`. Pass `--branch dev` for a non-default
+branch or `--source <local-clone>` to reuse an existing checkout. The
+`scripts/wboxcli.sh update` wrapper invokes this automatically right
+after `pip install -e .`.
+
+Or do it by hand:
+
 1. Build in `project-talentscreen-autofill-extension` (`./build.sh` or `.\build.ps1`).
 2. Copy `dist/talentscreen-autofill-v*.zip` → `project-talentscreen-wbox-cli/extension/` (any `.zip` name works; newest `talentscreen-autofill*.zip` is used).
 3. CLI unpacks to **`~/.jobcli/extension_unpacked/`** on `wboxcli setup`, `wboxcli doctor`, and when `apply` resolves the extension directory (onboarding browser test uses the unpacked dir if present).
