@@ -29,6 +29,7 @@ from jobcli.storage.repositories import (
     JobRepository,
     UserDataRepository,
 )
+from jobcli.utils.browser_closed import BrowserClosed
 from jobcli.utils.constants import DASHBOARD_SUMMARY_DAYS, REFERENCE_LINKS_COUNT, SUPPORTED_DOMAINS
 from jobcli.analytics.service import (
     build_apply_run_log,
@@ -171,9 +172,9 @@ def _track_command_event(
     metadata: Optional[dict] = None,
     processed_job_ids: Optional[list[int]] = None,
     exit_reason: Optional[str] = None,
-) -> None:
+) -> Optional[dict]:
     if not config.tracking_enabled:
-        return
+        return None
     try:
         duration_ms = int((time.time() - started_at) * 1000)
         user_id = resolve_user_id(config.job_board_username)
@@ -207,9 +208,9 @@ def _track_command_event(
         )
         # Best-effort immediate upload so analytics reaches backend even if the
         # user closes the terminal before running an explicit "wboxcli sync".
-        flush_usage_events(db, batch_size=50)
+        return flush_usage_events(db, batch_size=50)
     except Exception:
-        pass
+        return {"status": "error", "count": 0}
 
 
 def _require_wbl_credentials_for_discovery(config: Config) -> None:
@@ -1288,6 +1289,17 @@ def _run_apply(
                     interrupted_at_index = batch_start_index + (i - 1)
                     interrupted_job_id = job.id
                     break
+                except BrowserClosed:
+                    exit_reason = "Browser closed by user"
+                    interrupted_at_index = batch_start_index + (i - 1)
+                    interrupted_job_id = job.id
+                    processed += 1
+                    if job.id is not None:
+                        processed_job_ids.append(job.id)
+                    console.print(
+                        "\n[yellow]Chrome was closed — saving apply logs and uploading analytics…[/yellow]\n"
+                    )
+                    break
                 except KeyboardInterrupt:
                     # Fallback path if the SIGINT handler wasn't installed
                     # (e.g. running under an embedded interpreter). Treated
@@ -1308,6 +1320,8 @@ def _run_apply(
             # quit during browser startup) — handled identically to the
             # per-job path, just no jobs processed.
             exit_reason = ex.reason
+        except BrowserClosed:
+            exit_reason = "Browser closed by user"
         except KeyboardInterrupt:
             exit_reason = "Ctrl+C during startup"
     finally:
@@ -1414,18 +1428,30 @@ def _run_apply(
             )
         # User-initiated exit is success (0), not an error — consistent
         # with Unix shells (Ctrl+C generally exits programs gracefully).
-        _track_command_event(
+        track_result = "browser_closed" if "browser" in (exit_reason or "").lower() else "interrupted"
+        flush_info = _track_command_event(
             db=db,
             config=config,
             command="apply",
             started_at=started_at,
-            result="interrupted",
+            result=track_result,
             jobs_attempted_count=processed,
             jobs_submitted_count=submitted,
             jobs_failed_count=failed,
             processed_job_ids=processed_job_ids,
             exit_reason=exit_reason,
         )
+        if track_result == "browser_closed" and flush_info:
+            n = flush_info.get("count", 0)
+            if flush_info.get("status") == "success" and n:
+                console.print(
+                    f"[green]✓ Uploaded {n} analytics event(s) to the dashboard API.[/green]"
+                )
+            else:
+                console.print(
+                    "[yellow]Analytics upload pending or failed — run [cyan]wboxcli sync[/cyan] "
+                    "and ensure [cyan]sync_server_url[/cyan] matches your frontend API.[/yellow]"
+                )
         raise typer.Exit(0)
 
     _track_command_event(
