@@ -20,7 +20,12 @@ Behavioral guidelines for working on JobCLI — a production CLI that automates 
 
 ### 2. The LLM is a fallback, not the first tool
 
-Execution order: Extension autofill → Rule-based locators → LLM reasoning → Human-in-the-loop
+Execution order:
+1. Extension autofill (primary).
+2. Rule-based locators — FALLBACK, runs only when the extension filled 0 visible fields (gated by `self._last_extension_filled_count`).
+3. LLM reasoning fills whatever extension/rules left blank.
+4. Human-in-the-loop review — **compulsory in every mode including AUTO** (force_block=True in `handoff_to_human`). Before the agent clicks Submit, the human reviews the form in the browser.
+5. Submit — skipped automatically when `_looks_like_confirmation` detects the human already clicked Submit themselves during the review.
 
 Don't reach for the LLM when a CSS selector will do.
 
