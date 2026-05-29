@@ -254,7 +254,7 @@ def print_dashboard_summary(session):
     console.print(Panel(summary_text, title="[bold #c084fc]WBox Dashboard Summary[/]", border_style="#c084fc", expand=False))
     
     if stats['latest_links']:
-        console.print(f"\n[bold #f0abfc]Oldest-first {len(stats['latest_links'])} job links for reference:[/]")
+        console.print(f"\n[bold #f0abfc]Newest-first {len(stats['latest_links'])} job links for reference:[/]")
         table = Table(box=box.SIMPLE, show_header=True, header_style="bold #c084fc")
         table.add_column("Title", style="cyan")
         table.add_column("URL", style="blue")
@@ -269,14 +269,90 @@ def print_dashboard_summary(session):
         console.print(table)
 
 
+def _dispose_active_database() -> None:
+    """Close SQLite engine handles without recreating tables (used before uninstall)."""
+    import gc
+
+    from sqlalchemy import create_engine
+
+    try:
+        db_path = resolve_active_sqlite_database_path()
+        if db_path.is_file():
+            eng = create_engine(f"sqlite:///{db_path.as_posix()}", echo=False)
+            eng.dispose()
+            for suffix in ("-wal", "-shm"):
+                sidecar = Path(f"{db_path}{suffix}")
+                if sidecar.is_file():
+                    try:
+                        sidecar.unlink()
+                    except OSError:
+                        pass
+    except Exception:
+        pass
+    gc.collect()
+
+
+def _rmtree_robust(path: Path) -> None:
+    """Remove a directory tree; clear read-only bits on Windows before retry."""
+    import shutil
+    import stat
+
+    def _on_rm_error(func, p, _exc_info):  # type: ignore[no-untyped-def]
+        os.chmod(p, stat.S_IWRITE)
+        func(p)
+
+    shutil.rmtree(path, onerror=_on_rm_error)
+
+
+def _schedule_post_exit_jobcli_removal(config_dir: Path, shim_path: Path) -> None:
+    """Remove install dir after this process exits (venv cannot delete itself while running)."""
+    import shlex
+    import subprocess
+
+    config_s = str(config_dir.resolve())
+    shim_s = str(shim_path.resolve())
+
+    if os.name == "nt":
+        # Escape single quotes for PowerShell single-quoted literals.
+        config_ps = config_s.replace("'", "''")
+        shim_ps = shim_s.replace("'", "''")
+        ps = (
+            "Start-Sleep -Seconds 2; "
+            f"if (Test-Path -LiteralPath '{config_ps}') "
+            f"{{ Remove-Item -LiteralPath '{config_ps}' -Recurse -Force -ErrorAction SilentlyContinue }}; "
+            f"if (Test-Path -LiteralPath '{shim_ps}') "
+            f"{{ Remove-Item -LiteralPath '{shim_ps}' -Force -ErrorAction SilentlyContinue }}"
+        )
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(
+            subprocess, "DETACHED_PROCESS", 0
+        )
+        subprocess.Popen(
+            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps],
+            close_fds=True,
+            creationflags=creationflags,
+        )
+        return
+
+    # macOS / Linux — detached shell removes tree after the CLI process exits.
+    config_q = shlex.quote(config_s)
+    shim_q = shlex.quote(shim_s)
+    shell_cmd = f"sleep 2; rm -rf {config_q}; rm -f {shim_q}"
+    subprocess.Popen(
+        ["sh", "-c", shell_cmd],
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 @app.command()
 def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uninstall without confirmation")) -> None:
     """Remove all JobCLI configuration, databases, and global shims.
 
-    Works on Windows and macOS/Linux. On Windows we cannot delete the active
-    venv while ``wboxcli.exe`` is still running, so the venv is left for the
-    bundled ``scripts/uninstall.ps1`` to clean up (or a manual rm after the
-    process exits).
+    Works on Windows, macOS, and Linux. While ``wboxcli`` is running from
+    ``~/.jobcli/venv``, the venv cannot delete itself; non-venv data is removed
+    immediately and the rest is scheduled for removal ~2s after you exit.
     """
     import shutil
 
@@ -284,7 +360,7 @@ def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uni
     if not force:
         confirm = Confirm.ask(
             "Delete all JobCLI data in ~/.jobcli (config, jobs, logs, resume, memory) and the wboxcli shims?",
-            default=False,
+            default=True,
         )
         if not confirm:
             console.print("[yellow]Uninstall cancelled.[/yellow]")
@@ -292,14 +368,12 @@ def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uni
 
     # Release SQLite/log file handles so Windows lets us delete them.
     from jobcli.utils.logger import global_logger
+
     global_logger.shutdown()
-    try:
-        get_database().engine.dispose()
-    except Exception:
-        pass
+    _dispose_active_database()
 
     # Detect "are we running from inside ~/.jobcli/venv?" — if so, skip the venv
-    # subtree so we don't hit "file in use" on Windows.
+    # subtree so we don't hit "file in use" (Windows, macOS, Linux).
     is_windows = os.name == "nt"
     venv_dir = CONFIG_DIR / "venv"
     running_from_venv = False
@@ -310,38 +384,15 @@ def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uni
         running_from_venv = False
 
     leftover_paths: list[Path] = []
+    scheduled_post_exit = False
 
-    if CONFIG_DIR.exists():
-        if running_from_venv:
-            # Delete everything inside ~/.jobcli except the venv subtree.
-            for child in CONFIG_DIR.iterdir():
-                if child.resolve() == venv_dir.resolve():
-                    leftover_paths.append(child)
-                    continue
-                try:
-                    if child.is_dir():
-                        shutil.rmtree(child, ignore_errors=False)
-                    else:
-                        child.unlink()
-                    console.print(f"[green]✓ Removed {child}[/green]")
-                except Exception as e:
-                    console.print(f"[red]✗ Failed to remove {child}: {e}[/red]")
-                    leftover_paths.append(child)
-        else:
-            try:
-                shutil.rmtree(CONFIG_DIR)
-                console.print(f"[green]✓ Removed {CONFIG_DIR}[/green]")
-            except Exception as e:
-                console.print(f"[red]✗ Failed to remove {CONFIG_DIR}: {e}[/red]")
-                leftover_paths.append(CONFIG_DIR)
-    else:
-        console.print(f"[yellow]— No configuration directory at {CONFIG_DIR}[/yellow]")
-
-    # Remove the global shims dropped by install.ps1 / install.sh
+    # Remove the global shims first (install.ps1 / install.sh).
     bin_dir = Path.home() / ".local" / "bin"
     shim_names = ("wboxcli.cmd",) if is_windows else ("wboxcli",)
+    shim_paths: list[Path] = []
     for name in shim_names:
         shim = bin_dir / name
+        shim_paths.append(shim)
         if shim.exists() or shim.is_symlink():
             try:
                 shim.unlink()
@@ -350,7 +401,53 @@ def uninstall(force: bool = typer.Option(False, "--force", "-f", help="Force uni
                 console.print(f"[yellow]— Could not remove {shim}: {e}[/yellow]")
                 leftover_paths.append(shim)
 
-    if leftover_paths:
+    if CONFIG_DIR.exists():
+        if running_from_venv:
+            # Delete everything inside ~/.jobcli except the in-use venv subtree.
+            for child in CONFIG_DIR.iterdir():
+                if child.resolve() == venv_dir.resolve():
+                    continue
+                try:
+                    if child.is_dir():
+                        shutil.rmtree(child, ignore_errors=True)
+                    else:
+                        child.unlink()
+                    console.print(f"[green]✓ Removed {child}[/green]")
+                except Exception as e:
+                    console.print(f"[red]✗ Failed to remove {child}: {e}[/red]")
+                    leftover_paths.append(child)
+            primary_shim = (
+                shim_paths[0]
+                if shim_paths
+                else (bin_dir / "wboxcli.cmd" if is_windows else bin_dir / "wboxcli")
+            )
+            try:
+                _schedule_post_exit_jobcli_removal(CONFIG_DIR, primary_shim)
+                scheduled_post_exit = True
+                console.print(
+                    f"[green]✓ Scheduled removal of {CONFIG_DIR} after this process exits[/green]"
+                )
+                console.print(
+                    "[dim]Close this terminal — the venv folder is removed automatically in ~2s.[/dim]"
+                )
+            except Exception as e:
+                console.print(f"[yellow]— Could not schedule deferred cleanup: {e}[/yellow]")
+                leftover_paths.append(venv_dir)
+        else:
+            try:
+                _rmtree_robust(CONFIG_DIR)
+                if CONFIG_DIR.exists():
+                    raise OSError(f"{CONFIG_DIR} still exists")
+                console.print(f"[green]✓ Removed {CONFIG_DIR}[/green]")
+            except Exception as e:
+                console.print(f"[red]✗ Failed to remove {CONFIG_DIR}: {e}[/red]")
+                leftover_paths.append(CONFIG_DIR)
+    else:
+        console.print(f"[yellow]— No configuration directory at {CONFIG_DIR}[/yellow]")
+
+    if scheduled_post_exit:
+        console.print("\n[green]JobCLI uninstall scheduled — exit this terminal to finish cleanup.[/green]")
+    elif leftover_paths:
         console.print()
         console.print("[yellow]Some files could not be removed while wboxcli was still running.[/yellow]")
         console.print("[yellow]Close this terminal and finish cleanup with:[/yellow]")
@@ -579,15 +676,19 @@ def setup() -> None:
             console.print(f"  [red]✗ JSON not found: {json_path}[/red]")
         else:
             try:
-                import json as _json
-                with open(json_path, encoding="utf-8") as f:
-                    resume_data = _json.load(f)
+                from jobcli.utils.resume_helpers import load_resume_from_paths
+                from jobcli.utils.extension_resume import build_resume_file_blob
 
-                resume = ResumeData(**resume_data)
+                resume, _, _, raw_json = load_resume_from_paths(
+                    str(pdf_path), str(json_path)
+                )
+                resume_file = build_resume_file_blob(pdf_path)
 
                 session = db.get_session()
                 user_data_repo = UserDataRepository(session)
-                user_data_repo.save_resume(resume)
+                user_data_repo.save_resume_upload_bundle(
+                    resume, raw_json, resume_file
+                )
                 session.close()
 
                 config.resume_pdf_path = str(pdf_path.absolute())
@@ -1011,9 +1112,9 @@ def resume_upload(
         json_file = str(json_path)
 
     try:
-        resume, pdf_path, json_path = load_resume_from_paths(pdf, json_file)
+        resume, pdf_path, json_path, raw_json = load_resume_from_paths(pdf, json_file)
         print_profile_summary(console, resume, pdf_path)
-        persist_resume(resume, pdf_path, json_path)
+        persist_resume(resume, pdf_path, json_path, raw_json_resume=raw_json)
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
@@ -1534,10 +1635,10 @@ def discover(
     """Discover jobs from Whitebox Learning via API (GET /positions/cli_window).
 
     After login, local jobs are replaced with a mirror of the server listing set
-    (default: all time, ``open`` only), paged until every row is fetched — same
-    data model as the dashboard Jobs grid. Tune with ``JOBCLI_DISCOVER_DAYS``,
-    ``JOBCLI_DISCOVER_PAGE_SIZE``, ``JOBCLI_DISCOVER_STATUS``. Use ``--legacy-ui``
-    only for the old dashboard scraper.
+    (default: last 7 UTC days, ``open`` only, newest-first), paged until every
+    row is fetched — same data model as the dashboard Jobs grid. Tune with
+    ``JOBCLI_DISCOVER_DAYS`` (``0`` = all time), ``JOBCLI_DISCOVER_PAGE_SIZE``,
+    ``JOBCLI_DISCOVER_STATUS``. Use ``--legacy-ui`` only for the old dashboard scraper.
     """
     started_at = time.time()
     console.print("[bold cyan]Job Discovery[/bold cyan]\n")

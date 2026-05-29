@@ -44,6 +44,7 @@ from jobcli.storage.repositories import (
     ApplicationLogRepository,
     JobRepository,
     LearnedLocatorRepository,
+    UserDataRepository,
 )
 
 
@@ -861,7 +862,13 @@ class ApplicationEngine:
         self.job_repo = JobRepository(self.session)
         self.log_repo = ApplicationLogRepository(self.session)
         self.locator_repo = LearnedLocatorRepository(self.session)
-        
+        self.user_data_repo = UserDataRepository(self.session)
+
+        # Cached extension payloads (JSON Resume + PDF blob); loaded per apply run.
+        self._extension_resume_data: Optional[dict] = None
+        self._extension_resume_file: Optional[dict] = None
+        self._extension_normalized_data: Optional[dict] = None
+
         self.anti_bot = AntiBotManager()
         self.stop_requested = False
         
@@ -1942,6 +1949,27 @@ class ApplicationEngine:
         )
         return None
 
+    def _ensure_extension_payloads(self, logger: JobLogger) -> bool:
+        """Load JSON Resume + PDF blob from DB once per apply run."""
+        if self._extension_resume_data is not None:
+            return True
+        try:
+            from jobcli.utils.extension_resume import (
+                ExtensionResumeError,
+                load_extension_payloads,
+            )
+
+            resume_data, resume_file = load_extension_payloads(self.session)
+            self._extension_resume_data = resume_data
+            self._extension_resume_file = resume_file
+            return True
+        except ExtensionResumeError as e:
+            logger.warning(
+                f"Extension autofill skipped — {e}",
+                phase=ExecutionPhase.RULES,
+            )
+            return False
+
     def _inject_resume_into_extension(
         self,
         page: Page,
@@ -1949,129 +1977,173 @@ class ApplicationEngine:
         *,
         trigger_fill: bool = True,
     ) -> None:
-        """Make the TalentScreen autofill extension actually fire on this tab.
+        """Inject JSON Resume + normalized index + PDF into extension storage.
 
-        Reading the extension's own ``content.js`` (downloaded into
-        ``~/.jobcli/extension_unpacked/``) shows ``attemptAutoFill`` is gated
-        behind TWO conditions that are not satisfied in a Playwright session:
-
-        1. The side panel must be open in the **current Chrome window**
-           (`checkSidePanelStatus` message). Playwright cannot open the side
-           panel programmatically.
-        2. ``chrome.storage.local.autoRunActive`` must be true. The original
-           injection only set ``autoTriggerEnabled``, which the content
-           script doesn't even read.
-
-        So the previous implementation always wrote the resume into storage,
-        and the extension always ignored it. We fix that here by:
-
-        - Waking the service worker before evaluating any JS.
-        - Setting **every** storage key the extension's pageload listener
-          actually reads (``normalizedData``, ``autoTriggerEnabled``,
-          ``autoRunActive``, ``currentJobIndex``, ``totalJobs``).
-        - Reading back to confirm the write landed.
-        - Sending a direct ``{action: 'fill_form'}`` message to the tab. The
-          content script handles this with ``force=true`` and bypasses both
-          gates — see ``content.js`` line 23-27.
-
-        On failure we log at debug level and fall through; the Python rules
-        pre-pass (see ``_run_rules_prefill``) provides the deterministic
-        baseline, so a missing extension never blocks the user.
+        Mirrors the side panel: ``resumeData`` (raw JSON Resume),
+        ``normalizedData`` (``ResumeProcessor.normalize`` in the service worker),
+        and ``resumeFile`` (PDF data URL). Then optionally dispatches
+        ``fill_form`` with the normalized payload.
         """
         try:
             if not self.resume:
                 return
 
-            bg_target = self._get_extension_service_worker(page, logger)
-            if not bg_target:
-                # Already logged at debug; nothing more to do.
+            if not self._ensure_extension_payloads(logger):
                 return
 
-            import json as _json
-            resume_dict = self.resume.model_dump(exclude_none=True)
-            resume_json = _json.dumps(resume_dict)
+            bg_target = self._get_extension_service_worker(page, logger)
+            if not bg_target:
+                return
 
-            # Atomic set + verify-readback. The promise resolves with the
-            # actual stored value so we can confirm the write was honored.
-            inject_js = f"""
-                async () => {{
-                    await new Promise((resolve) => chrome.storage.local.set({{
-                        normalizedData: {resume_json},
+            resume_data = self._extension_resume_data
+            resume_file = self._extension_resume_file
+
+            inject_js = """
+                async ({ resumeData, resumeFile }) => {
+                    let normalizedData;
+                    try {
+                        normalizedData = ResumeProcessor.normalize(resumeData);
+                    } catch (e) {
+                        return {
+                            ok: false,
+                            reason: 'normalize_failed',
+                            error: String(e),
+                        };
+                    }
+                    await new Promise((resolve) => chrome.storage.local.set({
+                        resumeData,
+                        normalizedData,
+                        resumeFile: resumeFile || null,
                         autoTriggerEnabled: true,
                         autoRunActive: true,
                         currentJobIndex: 0,
-                        totalJobs: 1
-                    }}, resolve));
-                    const verify = await new Promise((resolve) => chrome.storage.local.get(
-                        ['normalizedData', 'autoRunActive', 'autoTriggerEnabled'],
-                        resolve
-                    ));
-                    return {{
-                        wrote_normalized: !!verify.normalizedData,
+                        totalJobs: 1,
+                    }, resolve));
+                    const verify = await new Promise((resolve) =>
+                        chrome.storage.local.get(
+                            ['resumeData', 'normalizedData', 'resumeFile', 'autoRunActive'],
+                            resolve
+                        )
+                    );
+                    const nd = verify.normalizedData || {};
+                    const id = nd.identity || {};
+                    const contact = nd.contact || {};
+                    return {
+                        ok: true,
+                        normalizedData: nd,
+                        resumeFile: verify.resumeFile || null,
+                        wrote_resume_data: !!verify.resumeData,
+                        wrote_normalized: !!(
+                            id.first_name || contact.email || nd.employment
+                        ),
+                        wrote_pdf: !!(verify.resumeFile && verify.resumeFile.data),
                         autoRunActive: verify.autoRunActive === true,
-                        autoTriggerEnabled: verify.autoTriggerEnabled === true,
-                    }};
-                }}
+                    };
+                }
             """
             try:
-                verify = bg_target.evaluate(inject_js)
+                result = bg_target.evaluate(
+                    inject_js,
+                    {"resumeData": resume_data, "resumeFile": resume_file},
+                )
             except Exception as e:
                 logger.debug(f"Service-worker evaluate failed during injection: {e}")
                 return
 
-            if not (verify and verify.get("wrote_normalized")):
+            if not result or not result.get("ok"):
                 logger.debug(
-                    "Resume write to chrome.storage.local did not verify — "
-                    "extension may be sandboxed."
+                    f"Extension resume injection failed: {result}",
+                    phase=ExecutionPhase.RULES,
                 )
                 return
 
-            logger.info("Successfully injected resume into extension storage.")
+            self._extension_normalized_data = result.get("normalizedData")
+
+            if not result.get("wrote_normalized"):
+                logger.debug(
+                    "Extension normalize produced empty identity/contact — "
+                    "check JSON Resume basics.",
+                    phase=ExecutionPhase.RULES,
+                )
+                return
+
+            parts = ["resumeData", "normalizedData"]
+            if result.get("wrote_pdf"):
+                parts.append("resumeFile")
+            logger.info(
+                "Successfully injected resume into extension storage "
+                f"({', '.join(parts)})."
+            )
 
             if trigger_fill:
-                self._send_extension_fill_message(bg_target, resume_json, logger)
+                self._send_extension_fill_message(
+                    bg_target,
+                    self._extension_normalized_data,
+                    self._extension_resume_file,
+                    logger,
+                )
 
         except Exception as e:
             logger.error(f"Failed to inject resume into extension: {e}")
 
     def _send_extension_fill_message(
-        self, bg_target: Any, resume_json: str, logger: JobLogger
+        self,
+        bg_target: Any,
+        normalized_data: Optional[dict],
+        resume_file: Optional[dict],
+        logger: JobLogger,
     ) -> None:
         """Ask the active Playwright tab's content script to run ``fillForm``."""
+        if not normalized_data:
+            logger.debug(
+                "Extension fill_form skipped — no normalizedData.",
+                phase=ExecutionPhase.RULES,
+            )
+            return
         try:
-            poke_js = f"""
-                async () => {{
+            poke_js = """
+                async ({ normalizedData, resumeFile }) => {
                     const tabs = await new Promise(r =>
-                        chrome.tabs.query({{ active: true, currentWindow: true }}, r)
+                        chrome.tabs.query({ active: true, currentWindow: true }, r)
                     );
                     const tab = tabs && tabs[0];
-                    if (!tab || !tab.id) return {{ ok: false, reason: 'no_active_tab' }};
+                    if (!tab || !tab.id) return { ok: false, reason: 'no_active_tab' };
                     let err = null;
-                    await new Promise((resolve) => {{
+                    await new Promise((resolve) => {
                         chrome.tabs.sendMessage(
                             tab.id,
-                            {{
+                            {
                                 action: 'fill_form',
-                                normalizedData: {resume_json},
-                                resumeFile: null,
-                                manualEdits: {{}}
-                            }},
-                            () => {{
+                                normalizedData,
+                                resumeFile: resumeFile || null,
+                                manualEdits: {},
+                            },
+                            () => {
                                 err = chrome.runtime.lastError
                                     ? chrome.runtime.lastError.message
                                     : null;
                                 resolve();
-                            }}
+                            }
                         );
-                    }});
-                    return {{ ok: !err, tabId: tab.id, url: tab.url || '', error: err }};
-                }}
+                    });
+                    return {
+                        ok: !err,
+                        tabId: tab.id,
+                        url: tab.url || '',
+                        error: err,
+                        hasPdf: !!(resumeFile && resumeFile.data),
+                    };
+                }
             """
-            result = bg_target.evaluate(poke_js)
+            result = bg_target.evaluate(
+                poke_js,
+                {"normalizedData": normalized_data, "resumeFile": resume_file},
+            )
             if result and result.get("ok"):
+                pdf_note = " with PDF" if result.get("hasPdf") else ""
                 logger.info(
                     "Extension fill_form dispatched to active tab "
-                    f"(tab {result.get('tabId')})",
+                    f"(tab {result.get('tabId')}){pdf_note}",
                     phase=ExecutionPhase.RULES,
                 )
             else:

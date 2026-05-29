@@ -230,7 +230,7 @@ class JobRepository:
                 JobModel.is_cli_friendly == True,
                 or_(JobModel.is_already_applied == False, JobModel.is_already_applied.is_(None)),
             )
-            .order_by(nullslast(JobModel.listing_created_at.asc()), JobModel.id.asc())
+            .order_by(nullslast(JobModel.listing_created_at.desc()), JobModel.id.desc())
             .all()
         )
         return [_job_model_to_job(j) for j in jobs]
@@ -396,7 +396,7 @@ class JobRepository:
         ref_jobs = (
             self.session.query(JobModel)
             .filter(*win)
-            .order_by(JobModel.listing_created_at.asc(), JobModel.id.asc())
+            .order_by(JobModel.listing_created_at.desc(), JobModel.id.desc())
             .limit(REFERENCE_LINKS_COUNT)
             .all()
         )
@@ -700,24 +700,72 @@ class UserDataRepository:
         """Initialize repository."""
         self.session = session
 
-    def save_resume(self, resume: ResumeData) -> None:
-        """Save resume data."""
+    def _upsert_user_data(self, data_type: str, data: dict) -> None:
+        """Insert or update a ``UserDataModel`` row without committing."""
         user_data = (
             self.session.query(UserDataModel)
-            .filter(UserDataModel.data_type == "resume")
+            .filter(UserDataModel.data_type == data_type)
             .first()
         )
-
         if user_data:
-            user_data.data = json.loads(resume.model_dump_json())
+            user_data.data = data
             user_data.updated_at = datetime.now()
         else:
-            user_data = UserDataModel(
-                data_type="resume", data=json.loads(resume.model_dump_json())
+            self.session.add(
+                UserDataModel(data_type=data_type, data=data)
             )
-            self.session.add(user_data)
 
+    def save_resume(self, resume: ResumeData) -> None:
+        """Save internal :class:`ResumeData` for rules/LLM (commits)."""
+        self._upsert_user_data(
+            "resume", json.loads(resume.model_dump_json())
+        )
         self.session.commit()
+
+    def save_resume_json(self, raw: dict) -> None:
+        """Save JSON Resume source for extension ``resumeData`` (no commit)."""
+        self._upsert_user_data("resume_json", raw)
+
+    def save_resume_pdf(self, resume_file: dict) -> None:
+        """Save extension-shaped PDF blob for ``resumeFile`` (no commit)."""
+        self._upsert_user_data("resume_pdf", resume_file)
+
+    def save_resume_upload_bundle(
+        self,
+        resume: ResumeData,
+        raw_json_resume: dict,
+        resume_file: Optional[dict],
+    ) -> None:
+        """Persist internal resume, JSON Resume, and optional PDF in one commit."""
+        self._upsert_user_data(
+            "resume", json.loads(resume.model_dump_json())
+        )
+        self._upsert_user_data("resume_json", raw_json_resume)
+        if resume_file is not None:
+            self._upsert_user_data("resume_pdf", resume_file)
+        self.session.commit()
+
+    def get_resume_json(self) -> Optional[dict]:
+        """Raw JSON Resume dict for extension injection."""
+        user_data = (
+            self.session.query(UserDataModel)
+            .filter(UserDataModel.data_type == "resume_json")
+            .first()
+        )
+        if not user_data or not isinstance(user_data.data, dict):
+            return None
+        return user_data.data
+
+    def get_resume_pdf(self) -> Optional[dict]:
+        """Extension ``resumeFile`` blob ``{data, name, type, size}``."""
+        user_data = (
+            self.session.query(UserDataModel)
+            .filter(UserDataModel.data_type == "resume_pdf")
+            .first()
+        )
+        if not user_data or not isinstance(user_data.data, dict):
+            return None
+        return user_data.data
 
     def get_resume(self) -> Optional[ResumeData]:
         """Get resume data."""
@@ -792,11 +840,19 @@ class UserDataRepository:
         return user_data.data
 
     def clear_profile_data(self) -> int:
-        """Delete resume, common questions, and dynamic answers from the DB."""
+        """Delete resume, extension payloads, questions, and dynamic answers."""
         deleted = (
             self.session.query(UserDataModel)
             .filter(
-                UserDataModel.data_type.in_(("resume", "questions", "dynamic_answers"))
+                UserDataModel.data_type.in_(
+                    (
+                        "resume",
+                        "resume_json",
+                        "resume_pdf",
+                        "questions",
+                        "dynamic_answers",
+                    )
+                )
             )
             .delete(synchronize_session=False)
         )

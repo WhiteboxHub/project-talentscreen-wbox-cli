@@ -24,10 +24,10 @@ from typing import Any, Optional
 import pytest
 from sqlalchemy import inspect, text
 
-from jobcli.core import wbox_discoverer as wd
-from jobcli.core.schemas import ApplicationStatus, Job
-from jobcli.core.source_filter import DEFAULT_SOURCES, normalize_source
-from jobcli.core.wbox_discoverer import (
+from jobcli.orchestration import wbox_discoverer as wd
+from jobcli.profile.schemas import ApplicationStatus, Job
+from jobcli.orchestration.source_filter import DEFAULT_SOURCES, normalize_source
+from jobcli.orchestration.wbox_discoverer import (
     WboxDiscoverer,
     _ALLOWED_SOURCES_NORMALIZED,
     _is_allowed_source,
@@ -76,9 +76,6 @@ class TestDiscoverSourceFilter:
     @pytest.mark.parametrize(
         "raw, expected",
         [
-            ("linkedin", True),
-            ("LinkedIn", True),
-            ("LINKEDIN", True),
             ("Jobright", True),
             ("jobright", True),
             ("hiring.cafe", True),
@@ -94,7 +91,7 @@ class TestDiscoverSourceFilter:
 
     @pytest.mark.parametrize(
         "raw",
-        ["indeed", "workday", "dice", "glassdoor", "lever", "monster"],
+        ["linkedin", "LinkedIn", "LINKEDIN", "indeed", "workday", "dice", "glassdoor", "lever", "monster"],
     )
     def test_non_allow_list_sources_rejected(self, raw):
         assert _is_allowed_source(raw) is False
@@ -113,7 +110,7 @@ class TestDiscoverSourceFilter:
         assert _ALLOWED_SOURCES_NORMALIZED == expected
 
     def test_allow_list_size_matches_default_sources(self):
-        # All four default sources normalise to distinct tokens.
+        # All default sources normalise to distinct tokens.
         assert len(_ALLOWED_SOURCES_NORMALIZED) == len(DEFAULT_SOURCES)
 
 
@@ -259,11 +256,11 @@ class TestDiscoverApiIngestFilter:
         inst = _make_discoverer(repo)
         imported = inst._discover_api()
 
-        # 4 allowed rows: linkedin, jobright, hiring.cafe, trueup.io.
-        assert len(imported) == 4
-        assert len(repo.created) == 4
+        # 3 allowed rows: jobright, hiring.cafe, trueup.io (linkedin excluded).
+        assert len(imported) == 3
+        assert len(repo.created) == 3
         kept_sources = {normalize_source(j.source) for j in repo.created}
-        assert kept_sources == {"linkedin", "jobright", "hiringcafe", "trueupio"}
+        assert kept_sources == {"jobright", "hiringcafe", "trueupio"}
 
     def test_disallowed_and_missing_sources_dropped(
         self,
@@ -281,8 +278,9 @@ class TestDiscoverApiIngestFilter:
         inst._discover_api()
 
         kept_titles = {j.title for j in repo.created}
-        # Indeed row (disallowed source) and Legacy row (no source) must
+        # LinkedIn, Indeed (disallowed source), and Legacy row (no source) must
         # never reach the repo.
+        assert "LinkedIn Job" not in kept_titles
         assert "Indeed Job" not in kept_titles
         assert "Legacy Row" not in kept_titles
 

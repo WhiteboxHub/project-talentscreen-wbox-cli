@@ -1218,7 +1218,7 @@ def _run_onboarding(force: bool = False):
                     json_path = input(f"{PURP}Path to Resume JSON: {RST}").strip()
 
                     try:
-                        resume, pdf_resolved, json_resolved = load_resume_from_paths(
+                        resume, pdf_resolved, json_resolved, raw_json = load_resume_from_paths(
                             pdf_path, json_path
                         )
                     except ValueError as exc:
@@ -1237,7 +1237,9 @@ def _run_onboarding(force: bool = False):
                         console.print(f"[{D}]Re-enter your resume paths to try again.[/]\n")
                         continue
 
-                    persist_resume(resume, pdf_resolved, json_resolved)
+                    persist_resume(
+                        resume, pdf_resolved, json_resolved, raw_json_resume=raw_json
+                    )
                     console.print("[bold green]✓ Resume uploaded successfully[/bold green]\n")
 
                     _next_step_panel(

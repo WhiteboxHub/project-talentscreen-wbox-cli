@@ -112,7 +112,7 @@ class WboxDiscoverer:
             detail = _format_login_errors(getattr(client, "last_login_errors", []) or [])
             raise RuntimeError(f"WBL login failed.\n{detail}")
 
-        days_raw = (os.getenv("JOBCLI_DISCOVER_DAYS") or "0").strip()
+        days_raw = (os.getenv("JOBCLI_DISCOVER_DAYS") or "7").strip()
         try:
             days = int(days_raw)
         except ValueError:
@@ -151,6 +151,12 @@ class WboxDiscoverer:
             offset += len(batch)
             if len(batch) < page_size or offset >= (total_in_window or 0):
                 break
+
+        # API may return oldest-first; sort client-side so import + logs are newest-first.
+        rows.sort(
+            key=lambda r: _parse_listing_datetime(r.get("created_at")) or datetime.min,
+            reverse=True,
+        )
 
         self.job_repo.clear_job_related_data()
 
