@@ -52,6 +52,7 @@ COMMANDS = {
     "dashboard": ["open-dashboard"],
     "reset":     ["reset"],
     "uninstall": ["uninstall"],
+    "install": ["install"],
     "update":    ["update"],
     "clear":     None,
     "help":      None,
@@ -617,6 +618,7 @@ def _cmd_help():
         ("Other", [
             ("server",    "Start web UI dashboard"),
             ("dashboard", "Open Whitebox dashboard in browser"),
+            ("install",   "Install WboxCLI (one-line installer)"),
             ("reset",     "Clear login, API keys, resume (keep jobs)"),
             ("db reset",  "Wipe entire database (via wboxcli db reset)"),
             ("update",    "Update WboxCLI code and dependencies"),
@@ -785,6 +787,25 @@ def _dispatch(raw: str):
             sys.exit(0)
         except Exception as e:
             console.print(f"[red]Error during update: {e}[/red]")
+        return
+
+    # Install mapping (runs one-line installer for the current branch)
+    if cmd == "install":
+        import subprocess
+        console.print(f"\n  [{D}]Running WboxCLI Installer...[/]")
+        try:
+            script_sh = _project_root() / "scripts" / "install.sh"
+            script_ps1 = _project_root() / "scripts" / "install.ps1"
+            if os.name != "nt":
+                subprocess.run(["bash", str(script_sh)], check=True)
+            else:
+                subprocess.run(["powershell.exe", "-File", str(script_ps1)], check=True)
+            console.print(f"\n  [green]Install complete! Follow any on-screen instructions.[/green]\n")
+            sys.exit(0)
+        except SystemExit:
+            sys.exit(0)
+        except Exception as e:
+            console.print(f"[red]Error during install: {e}[/red]")
         return
 
     # Standard
