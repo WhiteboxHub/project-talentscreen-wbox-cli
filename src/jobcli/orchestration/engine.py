@@ -2729,6 +2729,8 @@ class ApplicationEngine:
                         memory_context=memory_context,
                         dropdown_options=ax_tree.dropdown_fields,
                         resume_pdf_path=resume_pdf_path,
+                        extra_gap_labels=_unselected_required_dropdowns(page),
+                        prefilled_field_lines=prefilled_fields or None,
                     )
                 except TLSConnectionError as tls_err:
                     agent.show_error(
@@ -3591,6 +3593,8 @@ class ApplicationEngine:
                     memory_context=memory_context,
                     dropdown_options=ax_tree.dropdown_fields,
                     resume_pdf_path=resume_pdf_path,
+                    extra_gap_labels=_unselected_required_dropdowns(page),
+                    prefilled_field_lines=filled_fields or None,
                 )
                 if not llm_response:
                     break

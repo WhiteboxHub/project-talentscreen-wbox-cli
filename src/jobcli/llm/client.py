@@ -22,6 +22,7 @@ from jobcli.profile.schemas import (
 )
 from jobcli.utils.tls import httpx_verify, is_insecure, strategy as tls_strategy
 from jobcli.llm.ax_tree_extractor import AccessibilityTree
+from jobcli.llm.empty_fields import build_empty_fields_payload, is_auditor_fill_task
 
 
 # How long to wait per LLM HTTP call. The OpenAI SDK's default is generous
@@ -128,6 +129,44 @@ Your task: Parse the provided Accessibility Snapshot and output the correct sequ
   "confidence": 0.95,
   "requires_human": false
 }"""
+
+    FORM_AUDITOR_SYSTEM_PROMPT = """You are an advanced, hyper-precise AI Form-Filling Auditor. Your sole task is to complete the remaining unfilled fields on a job application form.
+
+Prior automation steps (Chrome extension autofill and static rules engines) have already processed the page. You are the intelligence layer for custom questions, dropdowns, and missing requirements that standard automation could not confidently parse.
+
+# Behavioral Rules
+1. **Focus on the Gaps:** Address required elements in TARGET GAPS. For optional gaps, only fill when resume or agent memory provides a flawless match; otherwise omit.
+2. **Never Overwrite:** Do not output actions for fields that are not listed in TARGET GAPS or that already have values.
+3. **Micro Chain-of-Thought:** For every action include a strict **1-sentence maximum** `thought` audit line.
+4. **Balanced Essay Policy:**
+   - Standard text questions (notice period, salary band, tools): infer from resume/memory when reasonable.
+   - Open-ended behavioral essays (e.g. "Describe a time you…"): use `ask` — do not invent narratives.
+5. **Locators:** Default `selector_type` to `text` (exact label from TARGET GAPS). Use `select` for dropdowns/comboboxes; `value` must exactly match a listed option. For yes/no radios use `select` or `click` with value `Yes` or `No` (not "true"/"false").
+6. **Work authorization:** Use only resume JSON and agent memory; never contradict them.
+7. **Uploads:** Use `upload` with `value` = `resume_file_path` from user JSON for Resume/CV fields only — not "Autofill with Resume" parse buttons.
+8. **Required before navigation:** Do not click Next/Continue/Submit until required gaps would be filled by your actions.
+
+# Output Format
+Return a single JSON object (no markdown fences). Lowercase action names only.
+
+{
+  "actions": [
+    {
+      "thought": "One-line reasoning.",
+      "field_label": "Exact visible label",
+      "selector": "Exact accessible name / label (same as field_label unless CSS given)",
+      "selector_type": "text",
+      "action": "fill",
+      "value": "string to enter",
+      "confidence": 0.9
+    }
+  ],
+  "reasoning": "Brief summary of what you filled vs deferred to ask.",
+  "requires_human": false,
+  "confidence": 0.9
+}
+
+Allowed actions: fill, type, select, click, upload, ask, scroll, wait."""
 
     def __init__(
         self,
@@ -405,16 +444,64 @@ Remember to return valid JSON matching the schema in the system prompt.
             if lbl in required_labels or any(rl in lbl or lbl in rl for rl in required_labels):
                 act.required = True
 
+    @staticmethod
+    def _coerce_response_payload(data: Any) -> dict[str, Any]:
+        """Normalize LLM JSON into an ``LLMActionResponse``-compatible dict."""
+        if isinstance(data, list):
+            return {"actions": data, "requires_human": False, "confidence": 0.9}
+        if not isinstance(data, dict):
+            raise TypeError("LLM response must be a JSON object or array")
+
+        actions = data.get("actions")
+        if actions is None and isinstance(data.get("action"), str):
+            actions = [data]
+            data = {k: v for k, v in data.items() if k != "action"}
+            data["actions"] = actions
+
+        if not isinstance(data.get("actions"), list):
+            data["actions"] = []
+
+        normalized_actions: list[dict[str, Any]] = []
+        for raw in data["actions"]:
+            if not isinstance(raw, dict):
+                continue
+            act = dict(raw)
+            if isinstance(act.get("action"), str):
+                act["action"] = act["action"].strip().lower()
+            sel = (act.get("selector") or act.get("field_label") or "").strip()
+            if not sel:
+                continue
+            act["selector"] = sel
+            if not act.get("field_label"):
+                act["field_label"] = sel
+            if not act.get("selector_type"):
+                act["selector_type"] = "text"
+            normalized_actions.append(act)
+
+        data["actions"] = normalized_actions
+        if "requires_human" not in data:
+            data["requires_human"] = False
+        if "confidence" not in data:
+            data["confidence"] = 0.9
+        return data
+
     def _validate_response(self, response_text: str) -> Optional[LLMActionResponse]:
         """Validate and parse LLM response."""
         try:
             # Parse JSON
             data = json.loads(response_text)
+            data = self._coerce_response_payload(data)
 
             # Validate with Pydantic
             validated = LLMActionResponse(**data)
 
             if self.logger:
+                for act in validated.actions:
+                    if act.thought and self.logger:
+                        self.logger.debug(
+                            f"Auditor thought [{act.field_label or act.selector}]: {act.thought}",
+                            phase=ExecutionPhase.LLM,
+                        )
                 self.logger.info(
                     "LLM response validated successfully",
                     phase=ExecutionPhase.LLM,
@@ -451,19 +538,37 @@ Remember to return valid JSON matching the schema in the system prompt.
         memory_context: Optional[str] = None,
         dropdown_options: Optional[list[dict[str, Any]]] = None,
         resume_pdf_path: Optional[str] = None,
+        extra_gap_labels: Optional[list[str]] = None,
+        prefilled_field_lines: Optional[list[str]] = None,
     ) -> Optional[LLMActionResponse]:
         """Analyze page using Accessibility Tree (more token efficient)."""
+        use_auditor = is_auditor_fill_task(task)
         if self.logger:
             self.logger.info(
-                f"Requesting LLM analysis from {self.provider} using AXTree",
+                f"Requesting LLM analysis from {self.provider} using AXTree"
+                + (" (Form-Filling Auditor)" if use_auditor else ""),
                 phase=ExecutionPhase.LLM,
                 task=task,
             )
 
-        # Build prompt with AXTree data (much more efficient)
-        user_prompt = self._build_axtree_prompt(
-            ax_tree, resume, task, memory_context, dropdown_options, resume_pdf_path
+        system_prompt = (
+            self.FORM_AUDITOR_SYSTEM_PROMPT if use_auditor else self.SYSTEM_PROMPT
         )
+        if use_auditor:
+            user_prompt = self._build_auditor_prompt(
+                ax_tree,
+                resume,
+                task,
+                memory_context,
+                dropdown_options,
+                resume_pdf_path,
+                extra_gap_labels=extra_gap_labels,
+                prefilled_field_lines=prefilled_field_lines,
+            )
+        else:
+            user_prompt = self._build_axtree_prompt(
+                ax_tree, resume, task, memory_context, dropdown_options, resume_pdf_path
+            )
 
         max_retries = 3
         base_delay = 2.0
@@ -471,11 +576,11 @@ Remember to return valid JSON matching the schema in the system prompt.
         for attempt in range(max_retries):
             try:
                 if self.provider == "openai":
-                    response = self._call_openai(user_prompt)
+                    response = self._call_openai(user_prompt, system_prompt=system_prompt)
                 elif self.provider == "anthropic":
-                    response = self._call_anthropic(user_prompt)
+                    response = self._call_anthropic(user_prompt, system_prompt=system_prompt)
                 elif self.provider == "gemini":
-                    response = self._call_gemini(user_prompt)
+                    response = self._call_gemini(user_prompt, system_prompt=system_prompt)
                 else:
                     return None
 
@@ -517,20 +622,12 @@ Remember to return valid JSON matching the schema in the system prompt.
             self.logger.error("All LLM attempts failed via AXTree", phase=ExecutionPhase.LLM)
         return None
 
-    def _build_axtree_prompt(
+    def _resume_user_info(
         self,
-        ax_tree: AccessibilityTree,
         resume: ResumeData,
-        task: str,
-        memory_context: Optional[str] = None,
-        dropdown_options: Optional[list[dict[str, Any]]] = None,
         resume_pdf_path: Optional[str] = None,
-    ) -> str:
-        """Build prompt using Accessibility Tree (token efficient)."""
-        # Get the raw aria snapshot text if available — best for LLM reasoning
-        raw_aria = getattr(ax_tree, "_raw_aria", "")
-
-        # Build user info summary using full resume (+ explicit deterministic hints)
+    ) -> dict[str, Any]:
+        """Shared resume JSON block for AX-tree and auditor prompts."""
         user_info: dict[str, Any] = json.loads(resume.model_dump_json())
         personal = user_info.get("personal")
         if isinstance(personal, dict):
@@ -548,9 +645,101 @@ Remember to return valid JSON matching the schema in the system prompt.
                 derived["inferred_pronouns_from_gender"] = pr
         if derived:
             user_info["_derived_hints"] = derived
-
         if resume_pdf_path:
             user_info["resume_file_path"] = resume_pdf_path
+        return user_info
+
+    def _build_auditor_prompt(
+        self,
+        ax_tree: AccessibilityTree,
+        resume: ResumeData,
+        task: str,
+        memory_context: Optional[str] = None,
+        dropdown_options: Optional[list[dict[str, Any]]] = None,
+        resume_pdf_path: Optional[str] = None,
+        *,
+        extra_gap_labels: Optional[list[str]] = None,
+        prefilled_field_lines: Optional[list[str]] = None,
+    ) -> str:
+        """Build gap-focused user prompt for the Form-Filling Auditor."""
+        user_info = self._resume_user_info(resume, resume_pdf_path)
+        empty_fields = build_empty_fields_payload(
+            ax_tree,
+            dropdown_options=dropdown_options,
+            extra_gap_labels=extra_gap_labels,
+        )
+
+        dropdown_context = ""
+        if dropdown_options:
+            dropdown_context = (
+                "\n## Pre-extracted Dropdown Options (SELECT values must match exactly):\n"
+            )
+            for dropdown in dropdown_options:
+                opt_str = ", ".join(f"'{o}'" for o in dropdown.get("options") or [])
+                dropdown_context += f"- '{dropdown.get('label', '')}': [{opt_str}]\n"
+
+        prefilled_block = ""
+        if prefilled_field_lines:
+            prefilled_block = (
+                "\n## ALREADY FILLED (do not emit actions for these):\n"
+                + "\n".join(prefilled_field_lines[:40])
+            )
+
+        aria_excerpt = ""
+        raw_aria = getattr(ax_tree, "_raw_aria", "") or ""
+        if raw_aria and len(empty_fields) <= 8:
+            aria_excerpt = (
+                f"\n## Accessibility excerpt (disambiguation only):\n```\n{raw_aria[:6000]}\n```\n"
+            )
+
+        task_note = ""
+        if task == "fill_form_fields_only":
+            task_note = "Do NOT click Apply or third-party apply buttons. Focus on form gaps only.\n"
+        elif task == "fill_empty_fields_only":
+            task_note = "Only emit actions for fields still empty on this wizard step.\n"
+
+        if not empty_fields:
+            task_note += (
+                "TARGET GAPS is empty — return {\"actions\": [], \"reasoning\": "
+                "\"No required gaps detected.\", \"requires_human\": false} unless "
+                "you see a required upload in the aria excerpt.\n"
+            )
+
+        return f"""Task: {task}
+Page URL: {ax_tree.url}
+Page Title: {ax_tree.title}
+
+{task_note}
+## CANDIDATE RESUME PROFILE (JSON)
+<RESUME_DATA>
+{json.dumps(user_info, indent=2)}
+</RESUME_DATA>
+
+## HISTORICAL MEMORY (Past Answers)
+<AGENT_MEMORY>
+{memory_context or "No previous memory available."}
+</AGENT_MEMORY>
+
+## TARGET GAPS (required empty / unselected fields — your only fill targets)
+<EMPTY_FIELDS>
+{json.dumps(empty_fields, indent=2)}
+</EMPTY_FIELDS>
+{dropdown_context}{prefilled_block}{aria_excerpt}
+Return valid JSON matching the system schema. Use lowercase action names.
+"""
+
+    def _build_axtree_prompt(
+        self,
+        ax_tree: AccessibilityTree,
+        resume: ResumeData,
+        task: str,
+        memory_context: Optional[str] = None,
+        dropdown_options: Optional[list[dict[str, Any]]] = None,
+        resume_pdf_path: Optional[str] = None,
+    ) -> str:
+        """Build prompt using Accessibility Tree (token efficient)."""
+        raw_aria = getattr(ax_tree, "_raw_aria", "")
+        user_info = self._resume_user_info(resume, resume_pdf_path)
 
         dropdown_context = ""
         if dropdown_options:
