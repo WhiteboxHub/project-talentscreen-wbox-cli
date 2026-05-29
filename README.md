@@ -605,6 +605,7 @@ Key files for common edits:
 | Task | File |
 |------|------|
 | Fill order / LinkedIn loop | `src/jobcli/orchestration/engine.py` |
+| Form-Filling Auditor prompt / gap list | `src/jobcli/llm/client.py`, `src/jobcli/llm/empty_fields.py` |
 | Don't-refill logic | `src/jobcli/utils/fill_guard.py`, `src/jobcli/orchestration/tool_executor.py` |
 | Extension ZIP / browser test | `src/jobcli/utils/extension_helpers.py` |
 | Discover source filter | `src/jobcli/orchestration/source_filter.py` |
@@ -644,7 +645,7 @@ flowchart LR
 |------|-----------|--------------|
 | **① Extension** | TalentScreen Chrome extension injects resume and fills standard fields; engine waits **2.5s** settle, then snapshots populated fields. | Later steps skip snapshot keys. |
 | **② Rules** | ATS handler + generic `FormFiller` for canonical fields (`first_name`, `email`, …). | `fill_guard` + handler checks skip non-empty inputs. |
-| **③ LLM** | Accessibility Tree loop for custom/questionnaire fields. | Actions targeting filled fields dropped in engine + `tool_executor`. |
+| **③ LLM** | **Form-Filling Auditor** — gap list + resume + memory (not full-page re-scan); custom/questionnaire fields. | Actions targeting filled fields dropped in engine + `tool_executor`. |
 | **④ Human** | Terminal prompts or browser handoff when 1–3 leave gaps (or no LLM key). Required fields first, optional second. | You type only what's still empty. |
 
 **Outside the fill pipeline:** `wboxcli discover` (WBL API + source filter), ATS detection, Apply-button click, LinkedIn 60s manual window, post-submit status sync, and [batch stop/resume](#stop-and-resume-ctrlc) (Ctrl+C checkpoint).
