@@ -91,14 +91,20 @@ class SyncManager:
             results["uploaded_answers"] = len(answers)
             results["uploaded_locators"] = len(locators)
 
-            # 2. Upload to Central DB
+            # 2. Upload to Central DB (non-fatal — analytics flush must still run)
             if answers or locators:
                 logger.info(f"Uploading {len(answers)} field patterns and {len(locators)} locators...")
                 payload = {
                     "field_answers": answers,
                     "locators": locators
                 }
-                client.upload_knowledge(payload)
+                try:
+                    client.upload_knowledge(payload)
+                    results["knowledge_sync_status"] = "success"
+                except Exception as e:
+                    logger.error(f"Knowledge sync failed: {e}")
+                    results["knowledge_sync_status"] = "failed"
+                    results["knowledge_sync_error"] = str(e)
 
             # 3. Download global updates
             logger.info(f"Checking for updates from server (current version: {self._metadata.last_version})...")

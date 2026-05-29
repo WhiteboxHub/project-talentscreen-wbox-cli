@@ -888,6 +888,8 @@ COMMANDS = {
     "questions": ["questions"],
     "scan":      ["scan"],
     "sync":      ["sync"],
+    "analytics-backfill": ["analytics-backfill"],
+    "backfill":  ["analytics-backfill"],
     "server":    ["server"],
     "dashboard": ["open-dashboard"],
     "reset":     ["reset"],
@@ -1454,6 +1456,8 @@ def _cmd_help():
             ("jobs",      "List pending jobs"),
             ("doctor",    "Health check"),
             ("sync",      "Sync learned patterns with server"),
+            ("analytics-backfill --since-hours N", "Upload apply analytics (when sync/dashboard is empty)"),
+            ("backfill",  "Alias for analytics-backfill"),
         ]),
         ("Other", [
             ("server",    "Start web UI dashboard"),

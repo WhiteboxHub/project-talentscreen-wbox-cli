@@ -1801,6 +1801,13 @@ def sync_cmd() -> None:
                 elif results.get("activity_sync_status") == "failed":
                     console.print(f"  [yellow]⚠[/yellow] Activity sync failed: {results.get('activity_error')}")
 
+                if results.get("knowledge_sync_status") == "failed":
+                    console.print(
+                        f"  [yellow]⚠[/yellow] Knowledge sync failed: {results.get('knowledge_sync_error')}"
+                    )
+                elif results.get("knowledge_sync_status") == "success":
+                    console.print("  [green]✓[/green] Knowledge patterns synced")
+
                 console.print("\n[bold green]✓ Synchronization complete[/bold green]")
                 _track_command_event(
                     db=db,

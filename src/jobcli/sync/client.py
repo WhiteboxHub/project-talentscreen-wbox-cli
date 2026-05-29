@@ -205,6 +205,62 @@ def _normalize_wbl_api_base(url: str) -> str:
     return f"{u}/api"
 
 
+def _format_knowledge_sync_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Map local extractor keys to the WBL ``UploadPayload`` schema.
+
+    The extractor uses ``success_count`` / ``failure_count``; the API expects
+    ``total_success`` / ``total_failure``. Without this transform the server
+    returns HTTP 422 and blocks analytics flush during ``wboxcli sync``.
+    """
+    field_answers_out: List[Dict[str, Any]] = []
+    for fa in payload.get("field_answers") or []:
+        if not isinstance(fa, dict):
+            continue
+        normalized = (fa.get("normalized_label") or fa.get("field_label") or "").strip()
+        value = fa.get("value")
+        if not normalized or value is None:
+            continue
+        total_success = int(fa.get("total_success", fa.get("success_count", 0)) or 0)
+        total_failure = int(fa.get("total_failure", fa.get("failure_count", 0)) or 0)
+        field_answers_out.append(
+            {
+                "ats_type": str(fa.get("ats_type") or "unknown"),
+                "normalized_label": normalized,
+                "value": str(value),
+                "total_success": total_success,
+                "total_failure": total_failure,
+                "confidence": float(fa.get("confidence", 0.0) or 0.0),
+            }
+        )
+
+    locators_out: List[Dict[str, Any]] = []
+    for loc in payload.get("locators") or []:
+        if not isinstance(loc, dict):
+            continue
+        selector = (loc.get("selector") or "").strip()
+        purpose = (loc.get("purpose") or "").strip()
+        if not selector or not purpose:
+            continue
+        total_success = int(loc.get("total_success", loc.get("success_count", 0)) or 0)
+        total_failure = int(loc.get("total_failure", loc.get("failure_count", 0)) or 0)
+        locators_out.append(
+            {
+                "ats_type": str(loc.get("ats_type") or "unknown"),
+                "purpose": purpose,
+                "selector": selector,
+                "selector_type": str(loc.get("selector_type") or "css"),
+                "domain_pattern": loc.get("domain_pattern"),
+                "total_success": total_success,
+                "total_failure": total_failure,
+                "confidence": float(
+                    loc.get("confidence", loc.get("confidence_score", 0.0)) or 0.0
+                ),
+            }
+        )
+
+    return {"field_answers": field_answers_out, "locators": locators_out}
+
+
 def _requests_verify() -> Any:
     """Delegate to the shared TLS configuration (see ``jobcli.utils.tls``)."""
     from jobcli.utils.tls import requests_verify
@@ -563,9 +619,13 @@ class SyncClient:
     def upload_knowledge(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Upload field answers and locators to the central server."""
         url = f"{self._get_server_url()}/sync_cli/knowledge_sync"
-        headers = {"Content-Type": "application/json"}
+        headers = self.get_auth_headers()
+        headers["Content-Type"] = "application/json"
+        body = _format_knowledge_sync_payload(payload)
 
-        response = requests.post(url, json=payload, headers=headers, timeout=15)
+        response = requests.post(
+            url, json=body, headers=headers, timeout=15, verify=_requests_verify()
+        )
         response.raise_for_status()
         return response.json()
 
