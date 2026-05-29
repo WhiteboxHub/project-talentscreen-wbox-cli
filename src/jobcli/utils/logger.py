@@ -310,6 +310,7 @@ class GlobalLogger:
 
     _instance: Optional["GlobalLogger"] = None
     _logger: Optional[structlog.BoundLogger] = None
+    _log_file_handle: Optional[Any] = None
 
     def __new__(cls) -> "GlobalLogger":
         """Singleton pattern."""
@@ -338,6 +339,7 @@ class GlobalLogger:
 
         # Only configure if not already configured
         if not structlog.is_configured():
+            self._log_file_handle = open(log_file, "a", encoding="utf-8")
             # Configure structlog
             structlog.configure(
                 processors=[
@@ -349,7 +351,7 @@ class GlobalLogger:
                 wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
                 context_class=dict,
                 logger_factory=structlog.WriteLoggerFactory(
-                    file=open(log_file, "a", encoding="utf-8")
+                    file=self._log_file_handle
                 ),
                 cache_logger_on_first_use=True,
             )
@@ -381,14 +383,19 @@ class GlobalLogger:
 
     def shutdown(self) -> None:
         """Close the file handle to allow directory deletion."""
-        if not self._logger:
-            return
-            
-        # structlog.WriteLoggerFactory doesn't expose the file handle easily,
-        # but we can try to find and close it via the logging module if configured that way,
-        # or manually reset the configuration.
         logging.shutdown()
-        # Reset structlog configuration if possible (rarely needed but good for clean state)
+        handle = self._log_file_handle
+        if handle is not None:
+            try:
+                handle.close()
+            except Exception:
+                pass
+            self._log_file_handle = None
+        if structlog.is_configured():
+            try:
+                structlog.reset_defaults()
+            except Exception:
+                pass
         self._logger = None
         GlobalLogger._instance = None
 

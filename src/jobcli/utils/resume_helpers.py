@@ -45,8 +45,15 @@ def resolve_resume_paths(pdf: str, json_file: str) -> tuple[Path, Path]:
     return pdf_path, json_path
 
 
-def load_resume_from_paths(pdf: str, json_file: str) -> tuple[ResumeData, Path, Path]:
-    """Validate paths, parse JSON, normalize, and return a ``ResumeData`` model."""
+def load_resume_from_paths(
+    pdf: str, json_file: str
+) -> tuple[ResumeData, Path, Path, dict]:
+    """Validate paths, parse JSON, normalize, and return a ``ResumeData`` model.
+
+    Returns:
+        ``(resume, pdf_path, json_path, raw_json_resume)`` where *raw_json_resume*
+        is the parsed JSON file unchanged (for extension ``resumeData``).
+    """
     pdf_path, json_path = resolve_resume_paths(pdf, json_file)
 
     with open(json_path, encoding="utf-8") as f:
@@ -56,7 +63,7 @@ def load_resume_from_paths(pdf: str, json_file: str) -> tuple[ResumeData, Path, 
 
     normalized = ResumeAutoDetector.detect_and_convert(raw)
     resume = ResumeData(**normalized)
-    return resume, pdf_path, json_path
+    return resume, pdf_path, json_path, raw
 
 
 def estimate_experience_years(experience: list) -> str:
@@ -168,16 +175,25 @@ def persist_resume(
     resume: ResumeData,
     pdf_path: Path,
     json_path: Path,
+    raw_json_resume: Optional[dict] = None,
 ) -> None:
-    """Save resume + file paths to the local database and config."""
+    """Save resume + extension payloads + file paths to DB and config."""
     from jobcli.cli.main import get_config, get_database, save_config
     from jobcli.storage.repositories import UserDataRepository
+    from jobcli.utils.extension_resume import build_resume_file_blob
+
+    if raw_json_resume is None:
+        with open(json_path, encoding="utf-8") as f:
+            raw_json_resume = json.load(f)
+
+    resume_file = build_resume_file_blob(pdf_path)
 
     db = get_database()
     session = db.get_session()
     try:
-        UserDataRepository(session).save_resume(resume)
-        session.commit()
+        UserDataRepository(session).save_resume_upload_bundle(
+            resume, raw_json_resume, resume_file
+        )
     finally:
         session.close()
 

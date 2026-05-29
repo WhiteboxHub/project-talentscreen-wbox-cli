@@ -2,7 +2,7 @@
 
 import pytest
 
-from jobcli.core.schemas import ATSType, ApplicationStatus, Job
+from jobcli.profile.schemas import ATSType, ApplicationStatus, Job, SelectorType
 from jobcli.storage.models import Database
 from jobcli.storage.repositories import (
     FieldAnswerRepository,
@@ -12,8 +12,7 @@ from jobcli.storage.repositories import (
 )
 from jobcli.storage.session import get_db_session
 from jobcli.sync.constants import CONFIDENCE_THRESHOLD, MIN_SUCCESS_COUNT
-from jobcli.core.locator_schemas import LearnedLocator
-from jobcli.core.schemas import SelectorType
+from jobcli.ats.schemas.locator_schemas import LearnedLocator
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -409,6 +408,45 @@ def test_get_dashboard_stats_wbox_api_window(test_database):
         assert stats["applied_count"] == 0
         assert stats["remaining_count"] == 1
         assert stats["cli_friendly"] == 1
+
+
+def test_list_pending_returns_newest_first(test_database):
+    """Pending jobs are ordered by listing_created_at descending (newest first)."""
+    from datetime import datetime, timedelta
+
+    newer = datetime.utcnow() - timedelta(days=1)
+    older = datetime.utcnow() - timedelta(days=5)
+
+    with get_db_session(test_database) as session:
+        repo = JobRepository(session)
+        older_job = repo.create(
+            Job(
+                url="https://boards.greenhouse.io/a/jobs/old",
+                title="Older Job",
+                scan_source="wbox_api",
+                listing_created_at=older,
+                is_cli_friendly=True,
+                is_already_applied=False,
+                status=ApplicationStatus.PENDING,
+            )
+        )
+        newer_job = repo.create(
+            Job(
+                url="https://boards.greenhouse.io/a/jobs/new",
+                title="Newer Job",
+                scan_source="wbox_api",
+                listing_created_at=newer,
+                is_cli_friendly=True,
+                is_already_applied=False,
+                status=ApplicationStatus.PENDING,
+            )
+        )
+
+    with get_db_session(test_database) as session:
+        pending = JobRepository(session).list_pending()
+        assert len(pending) == 2
+        assert pending[0].id == newer_job.id
+        assert pending[1].id == older_job.id
 
 
 if __name__ == "__main__":

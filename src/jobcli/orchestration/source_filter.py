@@ -30,7 +30,6 @@ DEFAULT_SOURCES: tuple[str, ...] = (
     "trueup.io",
     "hiring.cafe",
     "jobright",
-    "linkedin",
 )
 
 

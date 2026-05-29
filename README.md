@@ -31,8 +31,8 @@ Production-grade CLI for automated job applications across multiple ATS platform
 - **Always-visible browser** — `wboxcli apply` forces `headless=False`; Chrome is always on screen so you can watch and intervene.
 - **Fill order** — Chrome **extension autofill** first, then **rules-based** ATS handlers, then **LLM** for remaining fields. Don't-refill guards prevent later passes from overwriting populated fields.
 - **Required-first human prompt** — when fields stay empty after extension + rules + LLM, the terminal asks for `[red]*required[/red]` fields first (must answer) and `[dim](optional, Enter to skip)[/dim]` fields second (press Enter to skip). The `required` flag is propagated from the page's Accessibility Tree.
-- **Source-filtered discover** — `wboxcli discover` only ingests links whose WBL `Source` value is one of `trueup.io`, `hiring.cafe`, `jobright`, `linkedin`. Other listings (Indeed, Workday, …) are dropped at ingest time and never touch the local DB, so `apply` simply iterates whatever is in the queue. To change the allow-list, edit `DEFAULT_SOURCES` in [`src/jobcli/orchestration/source_filter.py`](src/jobcli/orchestration/source_filter.py).
-- **WBL job listings API** — `wboxcli discover` calls `GET {sync_server_url}/positions/cli_window` (default base `https://api.whitebox-learning.com/api`, Bearer auth), pages until every row is fetched (default: all time, `open` only). Tune with `JOBCLI_DISCOVER_DAYS`, `JOBCLI_DISCOVER_PAGE_SIZE`, `JOBCLI_DISCOVER_STATUS`. Legacy Playwright scrape: `WBOX_DISCOVER_MODE=browser` or `wboxcli discover --legacy-ui`.
+- **Source-filtered discover** — `wboxcli discover` only ingests links whose WBL `Source` value is one of `trueup.io`, `hiring.cafe`, `jobright` (LinkedIn-sourced rows are excluded). Other listings (Indeed, Workday, LinkedIn, …) are dropped at ingest time and never touch the local DB. Default window: **last 7 UTC days**, sorted **newest first** client-side. To change the allow-list, edit `DEFAULT_SOURCES` in [`src/jobcli/orchestration/source_filter.py`](src/jobcli/orchestration/source_filter.py).
+- **WBL job listings API** — `wboxcli discover` calls `GET {sync_server_url}/positions/cli_window` (default base `https://api.whitebox-learning.com/api`, Bearer auth), pages until every row in the window is fetched (default: **7 days**, `open` only, newest-first after client-side sort). Tune with `JOBCLI_DISCOVER_DAYS` (`0` = all time), `JOBCLI_DISCOVER_PAGE_SIZE`, `JOBCLI_DISCOVER_STATUS`. Legacy Playwright scrape: `WBOX_DISCOVER_MODE=browser` or `wboxcli discover --legacy-ui`.
 - **Advanced AI Reasoning** — AXTree (Accessibility Tree) analysis for high-accuracy form field mapping
 - **Universal Iframe Support** — Reach-through for Greenhouse, Lever, Paylocity, and nested iframes
 - **JS Force-Fill Fallback** — Bypasses stubborn React/Angular event listeners for 100% input reliability
@@ -252,7 +252,9 @@ wboxcli resume-upload --pdf "C:\Users\you\resume.pdf"
 wboxcli resume-upload --pdf "/Users/you/resume.pdf"
 ```
 
-`--json` is optional: defaults to `<pdf>.json` beside the PDF, or generates a minimal profile from your WBL login email if no JSON exists. Paths are saved to `~/.jobcli/jobcli.db`. The PDF is attached at apply time; JSON drives form fields.
+`--json` is optional: defaults to `<pdf>.json` beside the PDF, or generates a minimal profile from your WBL login email if no JSON exists. Paths are saved to `~/.jobcli/jobcli.db`.
+
+**Extension autofill (TalentScreen)** expects a **JSON Resume** file (`basics`, `work`, `education`, `skills` — same shape as the extension side panel). On upload the CLI stores three DB rows: internal profile (rules/LLM), raw JSON Resume (`resumeData`), and PDF blob (`resumeFile`). During `apply`, the service worker runs `ResumeProcessor.normalize()` on your JSON and injects `resumeData`, `normalizedData`, and `resumeFile` into extension storage before `fill_form`. Re-run `resume-upload` after changing your JSON or PDF so extension storage stays in sync.
 
 ### Step 3 — CLI setup (config, discover, extension, browser test)
 
@@ -351,12 +353,12 @@ Deletes `~/.jobcli/jobcli.db` (+ WAL/SHM/journal) and recreates empty tables. Do
 ```
 
 What it does:
-- Releases all SQLite/log file handles so Windows doesn't block deletion.
-- Deletes everything under `~/.jobcli/` (config, DB, extension, logs).
-- Deletes the global shims: `wboxcli.cmd` on Windows, `wboxcli` / `wboxcli` elsewhere.
-- **On Windows, if `wboxcli` is the running process**, the venv subtree under `~/.jobcli/venv/` is *intentionally* skipped (Python can't delete its own executable). The command prints a one-liner to finish the job from a fresh terminal — usually the bundled `scripts/uninstall.ps1` one-liner from the [Installation](#installation) section.
+- Releases all SQLite/log file handles so Windows/macOS don't block deletion.
+- Deletes everything under `~/.jobcli/` except the in-use `venv/` (config, DB, extension, logs, `src/`).
+- Deletes the global shims: `wboxcli.cmd` on Windows, `~/.local/bin/wboxcli` on macOS/Linux.
+- **While `wboxcli` is still running from `~/.jobcli/venv`**, the venv cannot delete itself. The CLI schedules removal of the whole `~/.jobcli` tree **~2 seconds after you close the terminal** (PowerShell on Windows, `sh` on macOS/Linux). Exit the terminal to finish.
 
-If `wboxcli uninstall` ever leaves files behind, the **bundled shell uninstaller** is the always-clean fallback because it doesn't run from inside the venv:
+If `wboxcli uninstall` ever leaves files behind, the **bundled uninstall scripts** are the fallback (they don't run from inside the venv):
 
 ```bash
 # macOS / Linux (Main)
@@ -409,19 +411,20 @@ In **`--mode auto`**, the terminal required/optional passes are **skipped**; unr
 
 Every job listing carries a `Source` value in the WBL dashboard (visible as the **Source** column — values like `Linkedin`, `Jobright`, `Hiring.Cafe`, `Trueup.Io`, `Indeed`, …). The filter is **unconditional and applied at discover time**: `wboxcli discover` only ingests rows whose `Source` matches the allow-list — every other row is dropped before it touches the local SQLite database.
 
-The default allow-list is the four CLI-friendly sources:
+The default allow-list is the three CLI-friendly sources:
 
 - `trueup.io`
 - `hiring.cafe`
 - `jobright`
-- `linkedin`
+
+LinkedIn-sourced listings are **not** imported (`source=linkedin` is rejected at discover time).
 
 ```bash
-# Pull only allow-listed listings into the local queue.
-# No flag, no env var — the filter is always on.
+# Pull allow-listed listings from the last 7 days (newest first).
+# No flag, no env var for sources — the filter is always on.
 wboxcli discover
 
-# Apply iterates whatever discover persisted; no source filter needed here.
+# Apply processes pending jobs newest-first.
 wboxcli apply
 ```
 
@@ -680,7 +683,7 @@ flowchart LR
 
 > **Best for first-time testing**: Greenhouse (`boards.greenhouse.io`) and Lever (`jobs.lever.co`) — no account login required.
 
-> **Discover source filter** (trueup.io, hiring.cafe, jobright, linkedin) is separate from ATS detection — it filters WBL listing rows, not ATS platform.
+> **Discover source filter** (trueup.io, hiring.cafe, jobright) is separate from ATS detection — it filters WBL listing rows, not ATS platform.
 
 ---
 
@@ -790,7 +793,7 @@ These knobs are read directly from the process environment if you want to tweak 
 | Env var | Effect |
 |---|---|
 | `DATABASE_PATH` | Override the SQLite DB location (useful for tests / isolation) |
-| `JOBCLI_DISCOVER_DAYS` | Override discover time window (default `0` = all listings) |
+| `JOBCLI_DISCOVER_DAYS` | Override discover time window (default `7` = last 7 UTC days; use `0` for all listings) |
 | `JOBCLI_DISCOVER_PAGE_SIZE` | Override discover page size (default `10000`, max `10000`) |
 | `JOBCLI_DISCOVER_STATUS` | Override discover status filter (default `open`; use `all` for everything) |
 | `WBOX_DISCOVER_MODE=browser` | Force the legacy Playwright dashboard scrape instead of the API |

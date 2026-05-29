@@ -72,10 +72,11 @@ def test_load_resume_from_paths(tmp_path):
         }""",
         encoding="utf-8",
     )
-    resume, pdf_out, json_out = load_resume_from_paths(str(pdf), str(json_path))
+    resume, pdf_out, json_out, raw = load_resume_from_paths(str(pdf), str(json_path))
     assert resume.personal.first_name == "Harishwar"
     assert pdf_out == pdf.resolve()
     assert json_out == json_path.resolve()
+    assert raw["personal"]["first_name"] == "Harishwar"
 
 
 def test_load_resume_missing_pdf(tmp_path):
@@ -115,9 +116,10 @@ def test_load_resume_json_resume_empty_gpa(tmp_path):
         }""",
         encoding="utf-8",
     )
-    resume, _, _ = load_resume_from_paths(str(pdf), str(json_path))
+    resume, _, _, raw = load_resume_from_paths(str(pdf), str(json_path))
     assert resume.personal.first_name == "Harishwar"
     assert len(resume.education) == 2
+    assert "basics" in raw
     assert resume.education[0].gpa is None
     assert resume.education[1].gpa == 3.7
 
