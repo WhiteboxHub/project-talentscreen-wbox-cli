@@ -523,13 +523,16 @@ Job-board landing pages (LinkedIn, Indeed, etc.) may also trigger an earlier han
 | `wboxcli open-dashboard` | Launch an interactive browser window logged into Wbox |
 | `wboxcli scan` | Scan configured ATS portals for open jobs |
 | `wboxcli sync` | Push learned patterns / activity to the server and pull global updates |
+| `wboxcli log` / `wboxcli logs` | Table of jobs from the **latest apply run** (also printed automatically when a batch apply finishes) |
+| `wboxcli log --job-id <id>` | Tail raw application log lines for one job (`--tail` / `-n`, default 60) |
+| `wboxcli log --urls` | Include job URLs under the latest apply-run table |
 | `wboxcli agent <prompt>` | Autonomous coding agent (dev/experimental; requires LLM key) |
 
 ### Interactive TUI-only (type at `wboxcli` prompt)
 
 | Command | Maps to |
 |---------|---------|
-| `jobs`, `status`, `help`, `clear`, `update` | Built-in TUI actions |
+| `jobs`, `status`, `log`, `logs`, `help`, `clear`, `update` | Built-in TUI actions |
 | `continue` | `wboxcli continue` — resume last interrupted apply batch |
 | `login`, `setup` | Interactive onboarding (not CLI `wboxcli setup`) |
 | `resume` | `resume-upload` |
@@ -650,6 +653,15 @@ flowchart LR
 
 **Outside the fill pipeline:** `wboxcli discover` (WBL API + source filter), ATS detection, Apply-button click, LinkedIn 60s manual window, post-submit status sync, and [batch stop/resume](#stop-and-resume-ctrlc) (Ctrl+C checkpoint).
 
+### Terminal ↔ browser sync (human steps)
+
+During field prompts and handoffs:
+
+- **No locator highlight popups** — Playwright `highlight()` is off by default (it showed `getByLabel(...)` tooltips over the form). Set `JOBCLI_DEBUG_HIGHLIGHT=1` only when debugging selectors.
+- **Terminal → browser** — Answers you type in the terminal are written into the matching field in the browser immediately (`utils/form_sync.py`).
+- **Browser → terminal** — While you wait at a prompt, the CLI prints `Browser updated: …` when it detects you filled a field in the page (~every 0.5s).
+- **Submit in browser** — On the mandatory pre-submit review, if you click Submit and the thank-you page appears, JobCLI detects it and continues automatically (no ENTER required).
+
 ---
 
 ## Supported ATS Platforms
@@ -765,7 +777,13 @@ All config lives in `~/.jobcli/` and is written by the interactive commands. **N
 |---|---|---|
 | `~/.jobcli/jobcli.db` | SQLite — credentials, LLM keys, resume paths, API base URL, jobs, learned memory, **apply checkpoint** (after Ctrl+C) | `wboxcli login`, `wboxcli resume-upload`, `wboxcli config`, `wboxcli discover`, `wboxcli apply` |
 | `~/.jobcli/extension_unpacked/` | TalentScreen Chrome extension (loaded during `apply`) | `setup`, `doctor`, `apply` (via `resolve_extension_dir`), ZIP in `extension/` |
-| `~/.jobcli/logs/` | Per-job JSON logs, screenshots, DOM snapshots | `wboxcli apply` |
+| `~/.jobcli/logs/` | Per-job JSON logs, screenshots, DOM snapshots; `candidate_apply_run_log.jsonl` records each apply batch | `wboxcli apply`, `wboxcli log` |
+
+### Apply run summary and analytics dashboard
+
+After each batch `wboxcli apply`, the CLI prints a **table of jobs processed in that run** (title, company, status, applied time). Run `wboxcli log` or `wboxcli logs` anytime to see the same table for the most recent run.
+
+The Whitebox **Analytics → WboxCLI** dashboard shows job counts from each user’s **last apply run only** (global summary cards sum those latest-per-user values, not lifetime totals across every historical run).
 | `~/.jobcli/venv/` | Managed Python venv (only present from the one-line installer) | `scripts/install.sh` / `scripts/install.ps1` |
 | `~/.jobcli/src/` | Cloned repo (one-line installer only) | `scripts/install.sh` / `scripts/install.ps1` |
 | `~/.local/bin/wboxcli` (+ `wboxcli`) | Global command shims; `.cmd` on Windows | One-line installer |

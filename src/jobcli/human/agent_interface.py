@@ -21,13 +21,16 @@ import threading
 import queue
 from io import StringIO
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 from jobcli.utils.browser_closed import (
     BROWSER_CLOSED_SENTINEL,
     BrowserClosed,
     is_playwright_page_closed,
 )
+
+# Returned from _get_user_input when live submit detection fires during handoff.
+SUBMITTED_SENTINEL = "__JOBCLI_SUBMITTED__"
 from jobcli.utils.url_compare import urls_meaningfully_different
 
 from playwright.sync_api import Page
@@ -156,7 +159,15 @@ class AgentInterface:
             self._input_value = value
             self._input_event.set()
 
-    def _get_user_input(self, prompt_text: str, default: str = "", timeout_seconds: Optional[int] = None) -> Optional[str]:
+    def _get_user_input(
+        self,
+        prompt_text: str,
+        default: str = "",
+        timeout_seconds: Optional[int] = None,
+        *,
+        poll_browser_fields: bool = False,
+        submission_checker: Optional[Callable[[], tuple[bool, bool, dict]]] = None,
+    ) -> Optional[str]:
         """Wait for input from either the local terminal or a remote signal.
 
         Returns the typed text (or ``default`` on empty input). Returns
@@ -185,12 +196,81 @@ class AgentInterface:
         )
 
         browser_poll_stop = threading.Event()
+        last_field_snapshot: dict[str, str] = {}
+        submit_detected = threading.Event()
 
         def _poll_browser_closed() -> None:
             while not browser_poll_stop.is_set() and self._is_waiting:
                 if is_playwright_page_closed(self.page):
                     self.remote_resume(BROWSER_CLOSED_SENTINEL)
                     return
+                browser_poll_stop.wait(0.5)
+
+        def _poll_browser_field_sync() -> None:
+            from jobcli.utils.form_sync import diff_snapshots, snapshot_field_values
+
+            nonlocal last_field_snapshot
+            if not poll_browser_fields or not self.page:
+                return
+            try:
+                last_field_snapshot = snapshot_field_values(self.page)
+            except Exception:
+                last_field_snapshot = {}
+            while not browser_poll_stop.is_set() and self._is_waiting:
+                if submit_detected.is_set():
+                    return
+                try:
+                    if is_playwright_page_closed(self.page):
+                        return
+                    current = snapshot_field_values(self.page)
+                    for label, _old, new in diff_snapshots(last_field_snapshot, current):
+                        preview = new if len(new) <= 80 else new[:77] + "…"
+                        self.console.print(
+                            f"  [dim]Browser updated:[/dim] [cyan]{label}[/cyan] "
+                            f"= '{preview}'"
+                        )
+                        if self.logger:
+                            try:
+                                self.logger.emit_event({
+                                    "type": "field_sync",
+                                    "source": "browser",
+                                    "label": label,
+                                    "value": new,
+                                })
+                            except Exception:
+                                pass
+                    last_field_snapshot = current
+                except Exception:
+                    pass
+                browser_poll_stop.wait(0.5)
+
+        def _poll_submission() -> None:
+            if not submission_checker or not self.page:
+                return
+            while not browser_poll_stop.is_set() and self._is_waiting:
+                if submit_detected.is_set():
+                    return
+                try:
+                    strong, _soft, _signals = submission_checker()
+                    if strong:
+                        submit_detected.set()
+                        self.clear_browser_overlay()
+                        self.console.print(
+                            "  [bold green]OK[/bold green] Application submitted in browser "
+                            "— detected confirmation page."
+                        )
+                        if self.logger:
+                            try:
+                                self.logger.emit_event({
+                                    "type": "submission_detected",
+                                    "source": "browser",
+                                })
+                            except Exception:
+                                pass
+                        self.remote_resume(SUBMITTED_SENTINEL)
+                        return
+                except Exception:
+                    pass
                 browser_poll_stop.wait(0.5)
 
         self._is_waiting = True
@@ -225,6 +305,13 @@ class AgentInterface:
 
         try:
             if self.is_server:
+                if poll_browser_fields:
+                    threading.Thread(
+                        target=_poll_browser_field_sync, daemon=True
+                    ).start()
+                if submission_checker:
+                    threading.Thread(target=_poll_submission, daemon=True).start()
+                threading.Thread(target=_poll_browser_closed, daemon=True).start()
                 # Server mode ignores the timeout parameter for now, as the dashboard handles its own state
                 self._input_event.wait()
             else:
@@ -244,6 +331,12 @@ class AgentInterface:
                 thread.start()
                 browser_thread = threading.Thread(target=_poll_browser_closed, daemon=True)
                 browser_thread.start()
+                if poll_browser_fields:
+                    threading.Thread(
+                        target=_poll_browser_field_sync, daemon=True
+                    ).start()
+                if submission_checker:
+                    threading.Thread(target=_poll_submission, daemon=True).start()
 
                 # Block until either the thread, a remote call, the global
                 # SIGINT handler, browser close, or a timeout fires.
@@ -267,6 +360,8 @@ class AgentInterface:
         raw = self._input_value
         if raw == BROWSER_CLOSED_SENTINEL:
             raise BrowserClosed("User closed the browser window")
+        if raw == SUBMITTED_SENTINEL:
+            return SUBMITTED_SENTINEL
         if raw == "__JOBCLI_EXIT__":
             raise ExitRequested("Ctrl+C / EOF on stdin")
         if is_quit_keyword(raw):
@@ -717,6 +812,7 @@ class AgentInterface:
         hint: Optional[str] = None,
         wait_for_navigation_seconds: int = 8,
         force_block: bool = False,
+        submission_checker: Optional[Callable[[], tuple[bool, bool, dict]]] = None,
     ) -> HandoffResult:
         """Hand full browser control to the human and **resume from wherever
         they leave it**.
@@ -817,8 +913,40 @@ class AgentInterface:
 
         response = self._get_user_input(
             f"  Press ENTER when done (or type 'skip' / 'cancel') [{wait_timeout}s timeout]: ",
-            timeout_seconds=wait_timeout
+            timeout_seconds=wait_timeout,
+            poll_browser_fields=True,
+            submission_checker=submission_checker,
         )
+
+        if response == SUBMITTED_SENTINEL:
+            self.clear_browser_overlay()
+            url_after = url_before
+            title_after = ""
+            try:
+                url_after = self.page.url or url_before
+            except Exception:
+                pass
+            try:
+                title_after = self.page.title() or ""
+            except Exception:
+                pass
+            if self.logger is not None:
+                try:
+                    self.logger.info(
+                        "human_submitted_detected_live",
+                        phase=ExecutionPhase.HUMAN,
+                        url_after=url_after,
+                    )
+                except Exception:
+                    pass
+            return HandoffResult(
+                page=self.page,
+                url_before=url_before,
+                url_after=url_after,
+                title_after=title_after,
+                advanced=True,
+                cancelled=False,
+            )
 
         if response is None:
             self.console.print(
@@ -1085,7 +1213,10 @@ class AgentInterface:
         )
         self.get_attention()
 
-        answer = self._get_user_input("  Your answer: ")
+        answer = self._get_user_input(
+            "  Your answer: ",
+            poll_browser_fields=True,
+        )
         answer = (answer or "").strip()
         self.clear_browser_overlay()
 
@@ -1105,9 +1236,20 @@ class AgentInterface:
                 )
             return None
 
-        # 3. Persist for reuse next time
+        # 3. Persist and apply to the live form immediately
         self.persist_human_answer(clean_label, answer)
-        self.console.print(f"  [green]+[/green] Saved to memory: [cyan]{clean_label}[/cyan] = '{answer}'")
+        from jobcli.utils.form_sync import apply_field_value
+
+        if self.page and apply_field_value(self.page, clean_label, answer, options):
+            self.show_success(f"Filled '{clean_label}' in browser")
+        else:
+            self.show_warning(
+                f"Saved answer for '{clean_label}' to memory but could not "
+                "auto-fill in browser — check the field manually."
+            )
+        self.console.print(
+            f"  [green]+[/green] Saved to memory: [cyan]{clean_label}[/cyan] = '{answer}'"
+        )
         return answer
 
     def request_help_finding_element(

@@ -1,6 +1,7 @@
 """Safe tool execution layer for browser actions."""
 
 import json
+import os
 import re
 from typing import Any, Optional, List, Union
 
@@ -37,6 +38,17 @@ _ATS_IFRAME_PATTERNS = [
     "paylocity.com",
     "myworkdayjobs.com",
 ]
+
+
+def _maybe_highlight(locator) -> None:
+    """Playwright locator highlight — dev-only (blocks form UI in normal use)."""
+    if os.environ.get("JOBCLI_DEBUG_HIGHLIGHT") != "1":
+        return
+    try:
+        locator.highlight()
+    except Exception:
+        pass
+
 
 class ToolExecutor:
     """Execute browser actions safely with validation."""
@@ -453,7 +465,7 @@ class ToolExecutor:
                             continue
                     except Exception:
                         pass
-                    loc.highlight()
+                    _maybe_highlight(loc)
                     loc.click(timeout=action.timeout)
                     if self.logger:
                         self.logger.info(
@@ -480,7 +492,7 @@ class ToolExecutor:
                             continue
                     except Exception:
                         pass
-                    b.highlight()
+                    _maybe_highlight(b)
                     b.click(timeout=action.timeout)
                     if self.logger:
                         self.logger.info(
@@ -568,7 +580,7 @@ class ToolExecutor:
                 try:
                     loc = root.locator(raw)
                     if loc.count() > 0:
-                        loc.first.highlight()
+                        _maybe_highlight(loc.first)
                         loc.first.click(timeout=action.timeout)
                         return True
                 except Exception: continue
@@ -613,7 +625,7 @@ class ToolExecutor:
                     try:
                         loc = get_loc()
                         if loc.is_visible(timeout=1000):
-                            loc.highlight()
+                            _maybe_highlight(loc)
                             loc.click(timeout=action.timeout)
                             if self.logger:
                                 self.logger.info(
@@ -728,7 +740,7 @@ class ToolExecutor:
                     )
                     return self._execute_select(select_action)
 
-                loc.highlight()
+                _maybe_highlight(loc)
                 try:
                     # Avoid typing if the existing value is already a
                     # reasonable match. Important for ATS forms where a

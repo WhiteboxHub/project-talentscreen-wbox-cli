@@ -888,6 +888,8 @@ COMMANDS = {
     "questions": ["questions"],
     "scan":      ["scan"],
     "sync":      ["sync"],
+    "log":       None,
+    "logs":      None,
     "analytics-backfill": ["analytics-backfill"],
     "backfill":  ["analytics-backfill"],
     "server":    ["server"],
@@ -1456,6 +1458,8 @@ def _cmd_help():
         ("Info", [
             ("status",    "Show current status"),
             ("jobs",      "List pending jobs"),
+            ("log",       "Latest apply-run jobs (table); log --job-id N for raw tail"),
+            ("logs",      "Alias for log"),
             ("doctor",    "Health check"),
             ("sync",      "Sync learned patterns with server"),
             ("analytics-backfill --since-hours N", "Upload apply analytics (when sync/dashboard is empty)"),
@@ -1566,6 +1570,34 @@ def _dispatch(raw: str):
             _exec(["apply"] + args[1:])
             return
         _cmd_jobs()
+        return
+    if cmd in ("log", "logs"):
+        from jobcli.cli.main import _run_log
+
+        job_id: int | None = None
+        tail = 60
+        show_urls = False
+        i = 0
+        while i < len(args):
+            a = args[i].lower()
+            if a in ("--job-id", "-j") and i + 1 < len(args):
+                job_id = int(args[i + 1])
+                i += 2
+                continue
+            if a in ("--tail", "-n") and i + 1 < len(args):
+                tail = int(args[i + 1])
+                i += 2
+                continue
+            if a == "--urls":
+                show_urls = True
+                i += 1
+                continue
+            if args[i].isdigit() and job_id is None:
+                job_id = int(args[i])
+                i += 1
+                continue
+            i += 1
+        _run_log(job_id=job_id, tail=tail, show_urls=show_urls)
         return
     if cmd in ("clear", "cls"):
         os.system("cls" if os.name == "nt" else "clear")

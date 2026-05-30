@@ -269,6 +269,53 @@ def print_dashboard_summary(session):
         console.print(table)
 
 
+def _print_apply_run_summary_table(
+    processed_job_ids: list[int],
+    *,
+    track_result: Optional[str] = None,
+) -> None:
+    """Show Rich table of jobs from the run just finished (or last jsonl run)."""
+    from jobcli.utils.apply_run_report import (
+        print_apply_run_table_for_job_ids,
+        print_last_apply_run_table,
+    )
+
+    if not processed_job_ids:
+        print_last_apply_run_table(console)
+        return
+    db = get_database()
+    with db.get_session() as session:
+        print_apply_run_table_for_job_ids(
+            session,
+            processed_job_ids,
+            console=console,
+            result=track_result,
+        )
+
+
+def _run_log(
+    job_id: Optional[int] = None,
+    tail: int = 60,
+    show_urls: bool = False,
+) -> None:
+    """Default: latest apply-run job table; with --job-id: per-job application log tail."""
+    if job_id is not None:
+        from jobcli.utils.log_viewer import collect_log_lines
+
+        db = get_database()
+        with db.get_session() as session:
+            lines = collect_log_lines(session, job_id=job_id, tail=tail)
+        for line in lines:
+            console.print(line)
+        if not lines:
+            console.print(f"[yellow]No logs for job_id={job_id}[/yellow]")
+        return
+
+    from jobcli.utils.apply_run_report import print_last_apply_run_table
+
+    print_last_apply_run_table(console, show_urls=show_urls)
+
+
 def _dispose_active_database() -> None:
     """Close SQLite engine handles without recreating tables (used before uninstall)."""
     import gc
@@ -1550,6 +1597,7 @@ def _run_apply(
                     "[yellow]Analytics upload pending or failed — run [cyan]wboxcli sync[/cyan] "
                     "and ensure [cyan]sync_server_url[/cyan] matches your frontend API.[/yellow]"
                 )
+        _print_apply_run_summary_table(processed_job_ids, track_result=track_result)
         raise typer.Exit(0)
 
     _track_command_event(
@@ -1563,6 +1611,7 @@ def _run_apply(
         jobs_failed_count=failed,
         processed_job_ids=processed_job_ids,
     )
+    _print_apply_run_summary_table(processed_job_ids, track_result="success")
     _print_next_step("discover", "refresh listings, then run apply again")
 
 
@@ -1786,6 +1835,31 @@ def scan(
     console.print(f"\n[bold green]Scan complete. Added {total_added} new jobs to database.[/bold green]")
 
 
+@app.command("log")
+def log_cmd(
+    job_id: Optional[int] = typer.Option(
+        None,
+        "--job-id",
+        "-j",
+        help="Show raw application log lines for one job instead of the latest apply-run table",
+    ),
+    tail: int = typer.Option(60, "--tail", "-n", help="Number of log lines when using --job-id"),
+    urls: bool = typer.Option(False, "--urls", help="Print job URLs under the latest apply-run table"),
+) -> None:
+    """Show latest applied jobs (table) or tail logs for one job (--job-id)."""
+    _run_log(job_id=job_id, tail=tail, show_urls=urls)
+
+
+@app.command("logs")
+def logs_cmd(
+    job_id: Optional[int] = typer.Option(None, "--job-id", "-j"),
+    tail: int = typer.Option(60, "--tail", "-n"),
+    urls: bool = typer.Option(False, "--urls"),
+) -> None:
+    """Alias for [cyan]wboxcli log[/cyan] — latest apply-run table or per-job log tail."""
+    _run_log(job_id=job_id, tail=tail, show_urls=urls)
+
+
 @app.command("doctor")
 def doctor_cmd(
     wbox_smoke: bool = typer.Option(
@@ -1862,8 +1936,8 @@ def analytics_backfill(
         console.print(f"  [yellow]Upload: {flush}[/yellow]")
         console.print("  Run [cyan]wboxcli sync[/cyan] or check sync_server_url / login.")
     console.print(
-        "\n[dim]Note: the dashboard [bold]sums[/bold] all events per user. "
-        "Delete the old E2E row in Analytics → WboxCLI if totals look doubled.[/dim]"
+        "\n[dim]Note: the dashboard shows [bold]last apply run[/bold] job counts per user "
+        "(not lifetime totals).[/dim]"
     )
 
 

@@ -2296,6 +2296,7 @@ class ApplicationEngine:
         hint: str,
         *,
         force_block: bool = False,
+        submission_checker: Optional[Any] = None,
     ) -> "HandoffResult":
         """Phase 4 — human takes the browser after extension, rules, and LLM.
 
@@ -2311,7 +2312,12 @@ class ApplicationEngine:
             phase=ExecutionPhase.HUMAN,
         )
         agent.show_phase_banner("Human review (4/4)")
-        result = agent.handoff_to_human(reason=reason, hint=hint, force_block=force_block)
+        result = agent.handoff_to_human(
+            reason=reason,
+            hint=hint,
+            force_block=force_block,
+            submission_checker=submission_checker,
+        )
         logger.log_phase_end(ExecutionPhase.HUMAN, not result.cancelled)
         return result
 
@@ -2352,53 +2358,12 @@ class ApplicationEngine:
         pre_submit_had_submit_btn: bool,
     ) -> tuple[bool, bool, dict]:
         """Return ``(strong, soft, signals)`` indicating whether *page* looks
-        like a post-submit confirmation.
+        like a post-submit confirmation."""
+        from jobcli.utils.form_sync import looks_like_confirmation
 
-        * ``strong``  — explicit confirmation text on page OR URL contains a
-          confirmation-y term (``success``, ``thanks``, ``submitted``, …).
-        * ``soft``    — URL changed since *pre_submit_url* OR the submit
-          button vanished, AND no validation errors are currently visible.
-        * ``signals`` — diagnostic dict (text_confirmed, url_confirmed,
-          url_changed, form_disappeared, has_errors) for logging.
-        """
-        try:
-            page_text = (page.evaluate(
-                "() => (document.body ? document.body.innerText : '').toLowerCase()"
-            ) or "")[:20_000]
-        except Exception:
-            page_text = ""
-        text_confirmed = any(t in page_text for t in self._CONFIRMATION_TEXTS)
-
-        try:
-            url_now = (page.url or "").lower()
-        except Exception:
-            url_now = ""
-        url_confirmed = any(term in url_now for term in self._CONFIRMATION_URL_TERMS)
-        url_changed = bool(
-            pre_submit_url and url_now and url_now != pre_submit_url.lower()
+        return looks_like_confirmation(
+            page, pre_submit_url, pre_submit_had_submit_btn
         )
-
-        try:
-            submit_btn_still_there = bool(_submit_button_visible(page))
-        except Exception:
-            submit_btn_still_there = True
-        form_disappeared = bool(pre_submit_had_submit_btn and not submit_btn_still_there)
-
-        try:
-            has_errors = bool(_live_validation_errors(page))
-        except Exception:
-            has_errors = False
-
-        strong = bool(text_confirmed or url_confirmed)
-        soft = bool((url_changed or form_disappeared) and not has_errors)
-
-        return strong, soft, {
-            "text_confirmed": text_confirmed,
-            "url_confirmed": url_confirmed,
-            "url_changed": url_changed,
-            "form_disappeared": form_disappeared,
-            "has_errors": has_errors,
-        }
 
     def _run_extension_autofill_phase(
         self,
@@ -3846,11 +3811,14 @@ class ApplicationEngine:
                 ),
                 hint=(
                     "This is a mandatory review checkpoint. Submit will fire "
-                    "as soon as you press ENTER. If you click Submit yourself "
-                    "in the browser, the agent will detect that and skip its "
-                    "own click."
+                    "as soon as you press ENTER. If you click Submit in the "
+                    "browser, JobCLI detects the confirmation page automatically "
+                    "and continues without waiting for ENTER."
                 ),
                 force_block=True,
+                submission_checker=lambda: self._looks_like_confirmation(
+                    agent.page, _pre_submit_url, _pre_submit_had_submit_btn
+                ),
             )
             if review_handoff.cancelled:
                 agent.show_warning("Submission cancelled by user during review.")
