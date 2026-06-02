@@ -67,6 +67,7 @@ def build_run_table_from_jobs(jobs: list[dict[str, Any]]) -> Table:
     table.add_column("Title", style="cyan", max_width=36)
     table.add_column("Company", style="white", max_width=24)
     table.add_column("Status", width=12)
+    table.add_column("Tokens", style="dim magenta", width=10, justify="right")
     table.add_column("Applied at", style="dim", width=20)
 
     for idx, job in enumerate(jobs, 1):
@@ -82,11 +83,14 @@ def build_run_table_from_jobs(jobs: list[dict[str, Any]]) -> Table:
             applied = applied.strftime("%Y-%m-%d %H:%M")
         else:
             applied = str(applied)[:19] if applied else "—"
+        raw_tokens = job.get("total_llm_tokens") or 0
+        tokens_str = f"{int(raw_tokens):,}" if raw_tokens else "—"
         table.add_row(
             str(idx),
             title,
             company,
             f"[{_status_style(status)}]{status}[/]",
+            tokens_str,
             applied,
         )
     return table
@@ -113,6 +117,9 @@ def _summary_line(run_log: dict[str, Any]) -> str:
         f"Submitted: [green]{submitted}[/green]",
         f"Failed: [red]{failed}[/red]",
     ]
+    total_tokens = summary.get("total_llm_tokens")
+    if total_tokens:
+        parts.append(f"Tokens: [magenta]{int(total_tokens):,}[/magenta]")
     if result:
         parts.append(f"Result: {result}")
     if ended:

@@ -85,12 +85,17 @@ def _read_application_jsonl(log_directory: str, job_id: int) -> List[dict[str, A
     return entries
 
 
-def _serialize_db_application_logs(session, job_id: int) -> List[dict[str, Any]]:
+def _serialize_db_application_logs(session, job_id: int) -> tuple[list[dict[str, Any]], int]:
     from jobcli.storage.repositories import ApplicationLogRepository
 
     rows = ApplicationLogRepository(session).get_logs(job_id)
     out: List[dict[str, Any]] = []
+    total_tokens: int = 0
     for row in rows:
+        metadata = row.log_metadata if isinstance(row.log_metadata, dict) else {}
+        # Accumulate token cost from every llm_tokens_used entry
+        if row.action == "llm_tokens_used":
+            total_tokens += int(metadata.get("tokens", 0) or 0)
         out.append(
             {
                 "timestamp": row.timestamp.isoformat() if row.timestamp else None,
@@ -98,10 +103,10 @@ def _serialize_db_application_logs(session, job_id: int) -> List[dict[str, Any]]
                 "action": row.action,
                 "success": row.success,
                 "error": row.error,
-                "metadata": row.log_metadata if isinstance(row.log_metadata, dict) else {},
+                "metadata": metadata,
             }
         )
-    return out
+    return out, total_tokens
 
 
 def build_apply_run_log(
@@ -136,6 +141,8 @@ def build_apply_run_log(
     job_ids = [int(j) for j in processed_job_ids if j is not None][:_MAX_JOBS_IN_RUN_LOG]
     log_directory = config.log_directory or "~/.jobcli/logs"
 
+    run_log["summary"]["total_llm_tokens"] = 0
+
     with db.get_session() as session:
         jobs = JobRepository(session).list_by_ids(job_ids)
         for job in jobs:
@@ -150,9 +157,21 @@ def build_apply_run_log(
                     else str(job.updated_at)
                 )
 
-            db_logs = _serialize_db_application_logs(session, job.id)
+            db_logs, token_total = _serialize_db_application_logs(session, job.id)
             jsonl_logs = _read_application_jsonl(log_directory, job.id)
             application_log = db_logs if db_logs else jsonl_logs
+
+            # If DB logs were missing, attempt to count tokens from the JSONL file
+            if not db_logs and jsonl_logs:
+                token_total = sum(
+                    int(entry.get("tokens", 0) or 0)
+                    for entry in jsonl_logs
+                    if entry.get("action") == "llm_tokens_used"
+                )
+
+            run_log["summary"]["total_llm_tokens"] = (
+                run_log["summary"].get("total_llm_tokens", 0) + token_total
+            )
 
             run_log["jobs"].append(
                 {
@@ -162,6 +181,7 @@ def build_apply_run_log(
                     "url": job.url,
                     "status": status_val,
                     "applied_at": applied_at,
+                    "total_llm_tokens": token_total,
                     "application_log": application_log,
                     "application_log_source": "database" if db_logs else "application.jsonl",
                     "local_log_file": str(
