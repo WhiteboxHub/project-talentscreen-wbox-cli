@@ -226,17 +226,19 @@ Allowed actions: fill, type, select, click, upload, ask, scroll, wait."""
         for attempt in range(max_retries):
             try:
                 if self.provider == "openai":
-                    response = self._call_openai(user_prompt)
+                    response, tokens = self._call_openai(user_prompt)
                 elif self.provider == "anthropic":
-                    response = self._call_anthropic(user_prompt)
+                    response, tokens = self._call_anthropic(user_prompt)
                 elif self.provider == "gemini":
-                    response = self._call_gemini(user_prompt)
+                    response, tokens = self._call_gemini(user_prompt)
                 else:
                     return None
 
                 # Validate and parse response
                 validated = self._validate_response(response)
                 if validated:
+                    if self.logger and tokens:
+                        self.logger.log_tokens(tokens, phase=ExecutionPhase.LLM, provider=self.provider)
                     return validated
 
                 if self.logger:
@@ -308,8 +310,8 @@ Remember to return valid JSON matching the schema in the system prompt.
 
         return prompt
 
-    def _call_openai(self, user_prompt: str, system_prompt: Optional[str] = None, json_mode: bool = True) -> str:
-        """Call OpenAI API."""
+    def _call_openai(self, user_prompt: str, system_prompt: Optional[str] = None, json_mode: bool = True) -> tuple[str, int]:
+        """Call OpenAI API. Returns (content, total_tokens)."""
         s_prompt = system_prompt if system_prompt is not None else self.SYSTEM_PROMPT
         response = self.client.chat.completions.create(
             model=self.model,
@@ -325,17 +327,18 @@ Remember to return valid JSON matching the schema in the system prompt.
         if not content:
             raise ValueError("Empty response from OpenAI")
 
+        total_tokens = response.usage.total_tokens if response.usage else 0
         if self.logger:
             self.logger.info(
                 "Received OpenAI response",
                 phase=ExecutionPhase.LLM,
-                tokens=response.usage.total_tokens if response.usage else 0,
+                tokens=total_tokens,
             )
 
-        return content
+        return content, total_tokens
 
-    def _call_anthropic(self, user_prompt: str, system_prompt: Optional[str] = None, json_mode: bool = True) -> str:
-        """Call Anthropic API."""
+    def _call_anthropic(self, user_prompt: str, system_prompt: Optional[str] = None, json_mode: bool = True) -> tuple[str, int]:
+        """Call Anthropic API. Returns (content, total_tokens)."""
         s_prompt = system_prompt if system_prompt is not None else self.SYSTEM_PROMPT
         response = self.client.messages.create(
             model=self.model,
@@ -349,18 +352,21 @@ Remember to return valid JSON matching the schema in the system prompt.
         if not content:
             raise ValueError("Empty response from Anthropic")
 
+        input_tokens = response.usage.input_tokens if response.usage else 0
+        output_tokens = response.usage.output_tokens if response.usage else 0
+        total_tokens = input_tokens + output_tokens
         if self.logger:
             self.logger.info(
                 "Received Anthropic response",
                 phase=ExecutionPhase.LLM,
-                input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
             )
 
-        return content
+        return content, total_tokens
 
-    def _call_gemini(self, user_prompt: str, system_prompt: Optional[str] = None, json_mode: bool = True) -> str:
-        """Call Gemini API."""
+    def _call_gemini(self, user_prompt: str, system_prompt: Optional[str] = None, json_mode: bool = True) -> tuple[str, int]:
+        """Call Gemini API. Returns (content, total_tokens)."""
         # Use provided system_prompt OR the default one, but don't mix them for chat.
         s_prompt = system_prompt if system_prompt is not None else self.SYSTEM_PROMPT
         
@@ -386,7 +392,21 @@ Remember to return valid JSON matching the schema in the system prompt.
         if not content:
             raise ValueError("Empty response from Gemini")
 
-        return content
+        total_tokens = 0
+        try:
+            usage = getattr(response, "usage_metadata", None)
+            if usage:
+                total_tokens = getattr(usage, "total_token_count", 0) or 0
+        except Exception:
+            pass
+        if self.logger:
+            self.logger.info(
+                "Received Gemini response",
+                phase=ExecutionPhase.LLM,
+                tokens=total_tokens,
+            )
+
+        return content, total_tokens
 
     def general_chat(self, message: str) -> str:
         """General non-structured chat with the agent."""
@@ -396,11 +416,14 @@ Remember to return valid JSON matching the schema in the system prompt.
             "Keep responses concise and terminal-friendly (use ANSI colors if helpful, but sparingly)."
         )
         if self.provider == "gemini":
-            return self._call_gemini(message, system_prompt=system_prompt, json_mode=False)
+            content, _ = self._call_gemini(message, system_prompt=system_prompt, json_mode=False)
+            return content
         elif self.provider == "openai":
-            return self._call_openai(message, system_prompt=system_prompt, json_mode=False)
+            content, _ = self._call_openai(message, system_prompt=system_prompt, json_mode=False)
+            return content
         elif self.provider in ("anthropic", "claude"):
-            return self._call_anthropic(message, system_prompt=system_prompt, json_mode=False)
+            content, _ = self._call_anthropic(message, system_prompt=system_prompt, json_mode=False)
+            return content
         return "Chat not implemented for this provider yet."
 
     @staticmethod
@@ -576,11 +599,11 @@ Remember to return valid JSON matching the schema in the system prompt.
         for attempt in range(max_retries):
             try:
                 if self.provider == "openai":
-                    response = self._call_openai(user_prompt, system_prompt=system_prompt)
+                    response, tokens = self._call_openai(user_prompt, system_prompt=system_prompt)
                 elif self.provider == "anthropic":
-                    response = self._call_anthropic(user_prompt, system_prompt=system_prompt)
+                    response, tokens = self._call_anthropic(user_prompt, system_prompt=system_prompt)
                 elif self.provider == "gemini":
-                    response = self._call_gemini(user_prompt, system_prompt=system_prompt)
+                    response, tokens = self._call_gemini(user_prompt, system_prompt=system_prompt)
                 else:
                     return None
 
@@ -592,6 +615,8 @@ Remember to return valid JSON matching the schema in the system prompt.
                     # can split fields into "must answer" vs "skip with
                     # Enter" without re-inspecting the DOM.
                     self._propagate_required_flag(validated, ax_tree)
+                    if self.logger and tokens:
+                        self.logger.log_tokens(tokens, phase=ExecutionPhase.LLM, provider=self.provider)
                     return validated
 
                 if self.logger:

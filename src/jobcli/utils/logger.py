@@ -176,6 +176,35 @@ class JobLogger:
         """Log critical message."""
         self.log("critical", message, phase, **metadata)
 
+    def log_tokens(
+        self,
+        total: int,
+        *,
+        phase: Optional[ExecutionPhase] = None,
+        provider: str = "",
+    ) -> None:
+        """Log LLM token consumption for this job.
+
+        Writes a structured entry with ``action="llm_tokens_used"`` so that
+        the analytics service can reliably filter and sum token counts across
+        all LLM calls made during a single job application run.
+
+        Args:
+            total: Total tokens consumed by this LLM call (input + output).
+            phase: Execution phase (usually ExecutionPhase.LLM).
+            provider: LLM provider name, e.g. "openai", "anthropic", "gemini".
+        """
+        if total <= 0:
+            return
+        self.log(
+            "info",
+            f"LLM tokens consumed ({provider}): {total:,}",
+            phase,
+            action="llm_tokens_used",
+            tokens=total,
+            provider=provider,
+        )
+
     def capture_screenshot(
         self,
         page: Page,
