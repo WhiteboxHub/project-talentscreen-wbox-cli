@@ -1462,7 +1462,7 @@ def _cmd_help():
             ("logs",      "Alias for log"),
             ("doctor",    "Health check"),
             ("sync",      "Sync learned patterns with server"),
-            ("analytics-backfill --since-hours N", "Upload apply analytics (when sync/dashboard is empty)"),
+            ("analytics-backfill --since-hours N", "Upload apply analytics, last 24h by default"),
             ("backfill",  "Alias for analytics-backfill"),
         ]),
         ("Other", [

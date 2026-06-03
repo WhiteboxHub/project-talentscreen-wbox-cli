@@ -43,7 +43,7 @@ Production-grade CLI for automated job applications across multiple ATS platform
 - **Resume Path Validation** — Automatically detects missing resume files and warns you instead of crashing, ensuring batch continuity.
 - **Multi-Provider LLM** — Native support for OpenAI, Anthropic, and Google Gemini
 - **LinkedIn handling** — LinkedIn URLs prompt to skip (default: yes). If you continue, the CLI hands off the browser until you press ENTER (600s wait in supervised/manual; 60s in `auto`, then the job is skipped).
-- **Job Activity Dashboard Sync** — After `wboxcli apply` (auto-sync at end of batch) or `wboxcli sync`, pushes recent `SUBMITTED` and `FAILED` jobs (title, company, status, timestamp) to the central dashboard
+- **Job Activity Dashboard Sync** — After `wboxcli apply` (any end: success, Ctrl+C, or closing Chrome) or `wboxcli sync`, automatically syncs learned patterns and uploads apply analytics for the **last 24 hours**. Pressing Ctrl+C twice within 2 seconds force-quits and may skip upload.
 
 ### Phase 1 — Local Learning & Memory Engine
 - **Confidence-Based Memory** — Answers are only trusted after ≥ 3 successful uses at ≥ 60% confidence
@@ -57,7 +57,7 @@ Production-grade CLI for automated job applications across multiple ATS platform
 - **Aggregated Downloads** — Pull the best field answers and UI locators from all contributing users
 - **Automated Activity Logging** — Pushes your application history (title, company, status) to the central dashboard
 - **Intelligent Job Mapping** — Automatically maps local job titles to centralized job types for accurate metrics
-- **Unified Sync Flow** — Single command to keep your local engine and central dashboard in perfect sync
+- **Unified Sync Flow** — `wboxcli sync` syncs knowledge/activity and runs analytics backfill (24h window; use `--no-backfill` to skip)
 
 ---
 

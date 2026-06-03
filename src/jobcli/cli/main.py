@@ -1536,18 +1536,35 @@ def _run_apply(
             )
         )
 
-    # Sync learned patterns even on an early-exit run — the data we
-    # captured before the user quit is still valuable for future runs.
-    try:
-        from jobcli.sync.manager import SyncManager
+    from jobcli.cli.upload_pipeline import (
+        ApplyUploadContext,
+        DEFAULT_BACKFILL_HOURS,
+        print_upload_status,
+        run_post_apply_upload,
+    )
 
-        db = get_database()
-        with db.get_session() as sync_session:
-            manager = SyncManager(sync_session)
-            console.print("\n[dim]Auto-syncing learned patterns...[/dim]")
-            manager.perform_sync()
-    except Exception:
-        pass
+    db = get_database()
+    track_result = (
+        "browser_closed"
+        if exit_reason and "browser" in (exit_reason or "").lower()
+        else ("interrupted" if exit_reason else "success")
+    )
+    upload_result = run_post_apply_upload(
+        db,
+        config,
+        apply_context=ApplyUploadContext(
+            started_at=started_at,
+            result=track_result,
+            jobs_attempted_count=processed,
+            jobs_submitted_count=submitted,
+            jobs_failed_count=failed,
+            processed_job_ids=processed_job_ids,
+            exit_reason=exit_reason,
+        ),
+        since_hours=DEFAULT_BACKFILL_HOURS,
+        console=console,
+    )
+    print_upload_status(upload_result, console=console)
 
     if exit_reason:
         if remaining and not skip_resume_prompt:
@@ -1571,46 +1588,9 @@ def _run_apply(
             console.print(
                 "[dim]To resume later, run [cyan]wboxcli continue[/cyan].[/dim]"
             )
-        # User-initiated exit is success (0), not an error — consistent
-        # with Unix shells (Ctrl+C generally exits programs gracefully).
-        track_result = "browser_closed" if "browser" in (exit_reason or "").lower() else "interrupted"
-        flush_info = _track_command_event(
-            db=db,
-            config=config,
-            command="apply",
-            started_at=started_at,
-            result=track_result,
-            jobs_attempted_count=processed,
-            jobs_submitted_count=submitted,
-            jobs_failed_count=failed,
-            processed_job_ids=processed_job_ids,
-            exit_reason=exit_reason,
-        )
-        if track_result == "browser_closed" and flush_info:
-            n = flush_info.get("count", 0)
-            if flush_info.get("status") == "success" and n:
-                console.print(
-                    f"[green]✓ Uploaded {n} analytics event(s) to the dashboard API.[/green]"
-                )
-            else:
-                console.print(
-                    "[yellow]Analytics upload pending or failed — run [cyan]wboxcli sync[/cyan] "
-                    "and ensure [cyan]sync_server_url[/cyan] matches your frontend API.[/yellow]"
-                )
         _print_apply_run_summary_table(processed_job_ids, track_result=track_result)
         raise typer.Exit(0)
 
-    _track_command_event(
-        db=db,
-        config=config,
-        command="apply",
-        started_at=started_at,
-        result="success",
-        jobs_attempted_count=processed,
-        jobs_submitted_count=submitted,
-        jobs_failed_count=failed,
-        processed_job_ids=processed_job_ids,
-    )
     _print_apply_run_summary_table(processed_job_ids, track_result="success")
     _print_next_step("discover", "refresh listings, then run apply again")
 
@@ -1877,9 +1857,9 @@ def doctor_cmd(
 @app.command("analytics-backfill")
 def analytics_backfill(
     since_hours: int = typer.Option(
-        48,
+        24,
         "--since-hours",
-        help="Include jobs updated in the last N hours (with application logs)",
+        help="Include jobs updated in the last N hours (with application logs); default 24",
     ),
     reconcile_logs: bool = typer.Option(
         True,
@@ -1942,69 +1922,80 @@ def analytics_backfill(
 
 
 @app.command("sync")
-def sync_cmd() -> None:
+def sync_cmd(
+    no_backfill: bool = typer.Option(
+        False,
+        "--no-backfill",
+        help="Sync knowledge/activity only; skip 24h apply analytics backfill",
+    ),
+    since_hours: int = typer.Option(
+        24,
+        "--since-hours",
+        help="Include jobs updated in the last N hours for analytics backfill",
+    ),
+) -> None:
     """Sync learned knowledge and job activity with the central server."""
+    from jobcli.cli.upload_pipeline import (
+        DEFAULT_BACKFILL_HOURS,
+        print_backfill_step_results,
+        print_sync_step_results,
+        run_post_apply_upload,
+    )
+
     started_at = time.time()
     db = get_database()
     cfg = get_config()
-    with db.get_session() as session:
-        from jobcli.sync.manager import SyncManager
-        manager = SyncManager(session)
-        
-        console.print("[bold cyan]JobCLI Synchronization[/bold cyan]")
-        console.print("Syncing knowledge and application activity with central server...\n")
-        
-        try:
-            results = manager.perform_sync()
-            
-            if results["status"] == "success":
-                # Knowledge Sync Results
-                if results.get("uploaded_answers") or results.get("uploaded_locators"):
-                    console.print(f"  [green]✓[/green] Uploaded {results['uploaded_answers']} field patterns")
-                    console.print(f"  [green]✓[/green] Uploaded {results['uploaded_locators']} locators")
-                
-                if results.get("downloaded_updates", 0) > 0:
-                    console.print(f"  [green]✓[/green] Downloaded {results['downloaded_updates']} global updates")
-                else:
-                    console.print("  [blue]i[/blue] Knowledge patterns are up to date.")
-                
-                # Activity Sync Results
-                if results.get("activity_sync_status") == "success":
-                    console.print(f"  [green]✓[/green] Synced {results['activity_count']} job applications to dashboard")
-                elif results.get("activity_sync_status") == "skipped":
-                    console.print("  [blue]i[/blue] No new application activity to sync.")
-                elif results.get("activity_sync_status") == "failed":
-                    console.print(f"  [yellow]⚠[/yellow] Activity sync failed: {results.get('activity_error')}")
+    hours = since_hours if since_hours > 0 else DEFAULT_BACKFILL_HOURS
 
-                if results.get("knowledge_sync_status") == "failed":
-                    console.print(
-                        f"  [yellow]⚠[/yellow] Knowledge sync failed: {results.get('knowledge_sync_error')}"
-                    )
-                elif results.get("knowledge_sync_status") == "success":
-                    console.print("  [green]✓[/green] Knowledge patterns synced")
+    console.print("[bold cyan]JobCLI Synchronization[/bold cyan]")
+    console.print("Syncing knowledge and application activity with central server...\n")
 
-                console.print("\n[bold green]✓ Synchronization complete[/bold green]")
-                _track_command_event(
-                    db=db,
-                    config=cfg,
-                    command="sync",
-                    started_at=started_at,
-                    result="success",
-                    metadata={"activity_count": results.get("activity_count", 0), "usage_event_count": results.get("usage_event_count", 0)},
-                )
-                from jobcli.analytics.service import flush_usage_events as _flush_usage_events
-
-                post_sync = _flush_usage_events(db)
-                if post_sync.get("status") == "success" and post_sync.get("count", 0) > 0:
-                    console.print(
-                        f"  [green]✓[/green] Uploaded {post_sync['count']} usage analytics event(s)"
-                    )
-            else:
-                console.print(f"[red]Sync failed: {results['error']}[/red]")
-                _track_command_event(db=db, config=cfg, command="sync", started_at=started_at, result="error")
-        except Exception as e:
-            console.print(f"[red]Sync error: {e}[/red]")
+    try:
+        upload_result = run_post_apply_upload(
+            db,
+            cfg,
+            apply_context=None,
+            run_backfill=not no_backfill,
+            since_hours=hours,
+            console=console,
+        )
+        results = upload_result.sync or {}
+        if upload_result.sync_error and not results:
+            console.print(f"[red]Sync error: {upload_result.sync_error}[/red]")
             _track_command_event(db=db, config=cfg, command="sync", started_at=started_at, result="error")
+            raise typer.Exit(1)
+
+        if results.get("status") == "success":
+            print_sync_step_results(results, console=console)
+            console.print("\n[bold green]✓ Synchronization complete[/bold green]")
+            if upload_result.backfill and not upload_result.backfill_error:
+                print_backfill_step_results(upload_result.backfill, console=console)
+            elif not no_backfill and upload_result.backfill_error:
+                console.print(
+                    f"  [yellow]⚠[/yellow] Analytics backfill failed: {upload_result.backfill_error}"
+                )
+            _track_command_event(
+                db=db,
+                config=cfg,
+                command="sync",
+                started_at=started_at,
+                result="success",
+                metadata={
+                    "activity_count": results.get("activity_count", 0),
+                    "usage_event_count": results.get("usage_event_count", 0),
+                    "backfill_jobs": (upload_result.backfill or {}).get("jobs_attempted", 0),
+                },
+            )
+        else:
+            console.print(f"[red]Sync failed: {results.get('error', 'unknown')}[/red]")
+            _track_command_event(db=db, config=cfg, command="sync", started_at=started_at, result="error")
+            raise typer.Exit(1)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]Sync error: {e}[/red]")
+        _track_command_event(db=db, config=cfg, command="sync", started_at=started_at, result="error")
+        raise typer.Exit(1)
 
 
 

@@ -54,7 +54,7 @@ def reconcile_submitted_from_logs(
 def collect_apply_job_ids(
     db: Database,
     *,
-    since_hours: int = 48,
+    since_hours: int = 24,
     log_directory: str = "~/.jobcli/logs",
     require_application_log: bool = True,
 ) -> list[int]:
@@ -120,7 +120,7 @@ def backfill_apply_analytics(
     db: Database,
     config: "Config",
     *,
-    since_hours: int = 48,
+    since_hours: int = 24,
     reconcile_logs: bool = True,
     skip_e2e: bool = True,
     clear_local_queue: bool = False,
