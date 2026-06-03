@@ -73,10 +73,12 @@ ok "git found"
 # ── Step 2: Clone or update repo ─────────────────────────────────────
 info "Setting up source at $SRC_DIR..."
 
-if [ -d "$INSTALL_DIR" ]; then
-    info "Cleaning up existing database and settings..."
+if [ "${JOBCLI_FRESH_INSTALL:-}" = "1" ]; then
+    info "JOBCLI_FRESH_INSTALL=1 — resetting local database..."
     rm -f "$INSTALL_DIR"/jobcli.db*
     ok "Removed existing settings"
+elif [ -f "$INSTALL_DIR/jobcli.db" ]; then
+    ok "Keeping existing login and settings (jobcli.db)"
 fi
 
 mkdir -p "$INSTALL_DIR"
@@ -121,6 +123,9 @@ info "Installing wboxcli and dependencies (this may take a minute)..."
 "$VENV_DIR/bin/pip" install -e "$SRC_DIR" --quiet 2>/dev/null
 ok "wboxcli installed"
 
+info "Removing stale global wboxcli shims (if any)..."
+"$VENV_DIR/bin/python" -c "from jobcli.cli.launcher import remove_stale_global_shims; r=remove_stale_global_shims(); print('\n'.join(r) if r else '')" 2>/dev/null || true
+
 # ── Step 4: Install Playwright browsers ──────────────────────────────
 info "Installing Playwright Chromium browser..."
 "$VENV_DIR/bin/python" -m playwright install chromium --quiet 2>/dev/null || \
@@ -145,7 +150,7 @@ if [ ! -f "$JOBCLI_VENV/bin/python" ]; then
     exit 1
 fi
 
-exec "$JOBCLI_VENV/bin/wboxcli" "$@"
+exec "$JOBCLI_VENV/bin/python" -m jobcli.cli.entry "$@"
 WRAPPER_EOF
 chmod +x "$WRAPPER"
 
@@ -213,6 +218,10 @@ if [ "$NEEDS_RELOAD" = true ]; then
     echo -e "    ${BOLD}source ~/.zshrc${NC}"
     echo ""
 fi
+
+echo -e "  ${GREEN}Daily command (until uninstall):${NC} ${CYAN}wboxcli${NC}"
+echo -e "  Login is saved in ~/.jobcli/jobcli.db until reset or uninstall."
+echo ""
 
 # ── Auto-launch interactive TUI ───────────────────────────────────────
 # Reconnect stdin to the terminal so we can launch the TUI even if piped

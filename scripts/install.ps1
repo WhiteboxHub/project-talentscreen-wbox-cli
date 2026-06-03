@@ -66,10 +66,13 @@ try {
 # -- Step 2: Clone or update repo -------------------------------------
 Write-Step "Setting up source at $SrcDir..."
 
-if (Test-Path $InstallDir) {
-    Write-Step "Cleaning up existing database and settings..."
+$dbPath = Join-Path $InstallDir "jobcli.db"
+if ($env:JOBCLI_FRESH_INSTALL -eq "1") {
+    Write-Step "JOBCLI_FRESH_INSTALL=1 — resetting local database..."
     Remove-Item -Path (Join-Path $InstallDir "jobcli.db*") -Force -ErrorAction SilentlyContinue
     Write-Ok "Removed existing settings"
+} elseif (Test-Path $dbPath) {
+    Write-Ok "Keeping existing login and settings (jobcli.db)"
 }
 
 if (-not (Test-Path $InstallDir)) {
@@ -147,35 +150,56 @@ if (-not (Test-Path $BinDir)) {
     New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
 }
 
-# Primary command: wboxcli
+# Primary command: wboxcli (always uses venv python -m jobcli.cli.entry)
 $WboxcliContent = @"
 @echo off
 set "JOBCLI_VENV=%USERPROFILE%\.jobcli\venv"
-if not exist "%JOBCLI_VENV%\Scripts\python.exe" (
+set "JOBCLI_PY=%JOBCLI_VENV%\Scripts\python.exe"
+if not exist "%JOBCLI_PY%" (
     echo Error: WboxCLI installation not found at %JOBCLI_VENV%
     echo Re-install with the provided command.
     exit /b 1
 )
-"%JOBCLI_VENV%\Scripts\wboxcli.exe" %*
+"%JOBCLI_PY%" -m jobcli.cli.entry %*
 "@
 Set-Content -Path $Wrapper -Value $WboxcliContent -Encoding ASCII
 
 Write-Ok "Command created: wboxcli"
 
-# -- Step 6: Ensure ~/.local/bin is on user PATH -----------------------
+# Remove broken global pip shims that shadow the managed install
+Write-Step "Removing stale global wboxcli shims (if any)..."
+try {
+    $removed = & $VenvPython -c "from jobcli.cli.launcher import remove_stale_global_shims; print(chr(10).join(remove_stale_global_shims()))" 2>$null
+    if ($removed) {
+        $removed -split "`n" | Where-Object { $_ } | ForEach-Object { Write-Ok "Removed $_" }
+    } else {
+        Write-Ok "No conflicting shims found"
+    }
+} catch {
+    Write-Warn "Could not scan for stale shims (safe to ignore on first install)"
+}
+
+# -- Step 6: Ensure ~/.local/bin is FIRST on user PATH ----------------
 Write-Step "Checking PATH..."
 
 $CurrentUserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$PathParts = @($CurrentUserPath -split ';' | Where-Object { $_ -and ($_ -ne $BinDir) })
+$NewPath = "$BinDir;" + ($PathParts -join ';')
+$NeedsRestart = $false
 if ($CurrentUserPath -notlike "*$BinDir*") {
-    Write-Step "Adding $BinDir to user PATH..."
-    $NewPath = "$BinDir;$CurrentUserPath"
+    Write-Step "Adding $BinDir to user PATH (first)..."
     [Environment]::SetEnvironmentVariable("Path", $NewPath, "User")
     $env:Path = "$BinDir;$env:Path"
     Write-Ok "Added to user PATH"
     $NeedsRestart = $true
+} elseif (-not $CurrentUserPath.StartsWith("$BinDir;") -and $CurrentUserPath -ne $BinDir) {
+    Write-Step "Moving $BinDir to front of user PATH..."
+    [Environment]::SetEnvironmentVariable("Path", $NewPath, "User")
+    $env:Path = "$BinDir;$env:Path"
+    Write-Ok "PATH updated"
+    $NeedsRestart = $true
 } else {
-    Write-Ok "$BinDir already on PATH"
-    $NeedsRestart = $false
+    Write-Ok "$BinDir already first on PATH"
 }
 
 # -- Step 7: (no .env — config is saved interactively via `wboxcli login`) ---
@@ -195,13 +219,16 @@ if ($NeedsRestart) {
     Write-Host ""
 }
 
+Write-Host "  Daily command (until uninstall):  wboxcli" -ForegroundColor Green
+Write-Host "  Login is saved in ~/.jobcli/jobcli.db until reset or uninstall." -ForegroundColor DarkGray
+Write-Host ""
+
 # -- Auto-launch interactive TUI --------------------------------------
 Write-Host "  Launching WboxCLI..." -ForegroundColor White
 Write-Host ""
 
-$VenvWboxcli = Join-Path $VenvDir "Scripts\wboxcli.exe"
-if (Test-Path $VenvWboxcli) {
-    & $VenvWboxcli
+if (Test-Path $VenvPython) {
+    & $VenvPython -m jobcli.cli.entry
 } else {
     Write-Host "  Next steps:" -ForegroundColor White
     Write-Host "    1. Restart your terminal" -ForegroundColor Cyan
