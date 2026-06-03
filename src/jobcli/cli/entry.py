@@ -9,6 +9,11 @@ import sys
 
 def main():
     """Main entry: interactive TUI when called bare, Typer CLI otherwise."""
+    from jobcli.cli.launcher import ensure_managed_launcher, warn_if_misconfigured_launcher
+
+    ensure_managed_launcher()
+    warn_if_misconfigured_launcher()
+
     # If the user typed just `wboxcli` with no args, launch the interactive TUI
     if len(sys.argv) <= 1:
         from jobcli.cli.interactive import interactive_session

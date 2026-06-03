@@ -1077,24 +1077,41 @@ def _validate_wbox_and_extension(
     return (login_ok, extension_ok, resolved, err)
 
 
+def _onboarding_complete(config, has_resume: bool) -> bool:
+    """True when WBL login, LLM key, and resume are all stored locally."""
+    return bool(
+        config.job_board_username
+        and config.job_board_password
+        and (config.openai_api_key or config.anthropic_api_key or config.gemini_api_key)
+        and has_resume
+    )
+
+
 def _run_onboarding(force: bool = False):
     """Interactive onboarding selection."""
+    from jobcli.cli.main import get_config, get_database
+    from jobcli.storage.repositories import ConfigRepository
+    import getpass
+
+    db = get_database()
+    session = db.get_session()
     try:
-        from jobcli.cli.main import get_config, get_database
-        from jobcli.storage.repositories import ConfigRepository
-        import getpass
-        
         config = get_config()
         has_llm = bool(config.openai_api_key or config.anthropic_api_key or config.gemini_api_key)
         has_wbox = bool(config.job_board_username and config.job_board_password)
-        
-        db = get_database()
-        session = db.get_session()
-        
+
         from jobcli.storage.repositories import UserDataRepository
+
         resume_data = UserDataRepository(session).get_resume()
         has_resume = resume_data is not None
-        
+
+        if not force and _onboarding_complete(config, has_resume):
+            console.print(
+                f"[green]✓[/green] Welcome back — using saved login "
+                f"([cyan]{config.job_board_username}[/cyan]). Type [bold]help[/bold] for commands.\n"
+            )
+            return
+
         if force or not has_llm or not has_wbox or not has_resume:
             PURP = "\033[1;38;2;192;132;252m"
             RST = "\033[0m"
@@ -1108,8 +1125,14 @@ def _run_onboarding(force: bool = False):
             console.print(f"[{D}]Step 1/3[/] — [bold]Whitebox Learning Credentials[/bold]")
             if force or not db_config.job_board_username or not db_config.job_board_password:
                 while True:
-                    email = input(f"{PURP}Whitebox Email: {RST}").strip()
-                    password = getpass.getpass(f"{PURP}Whitebox Password: {RST}").strip()
+                    try:
+                        email = input(f"{PURP}Whitebox Email: {RST}").strip()
+                    except (KeyboardInterrupt, EOFError):
+                        raise KeyboardInterrupt("setup interrupted at email prompt") from None
+                    try:
+                        password = getpass.getpass(f"{PURP}Whitebox Password: {RST}").strip()
+                    except (KeyboardInterrupt, EOFError):
+                        raise KeyboardInterrupt("setup interrupted at password prompt") from None
 
                     def _browser_progress(msg: str) -> None:
                         console.print(f"  [{D}]… {msg}[/]")
@@ -1150,6 +1173,11 @@ def _run_onboarding(force: bool = False):
                             console.print(f"[bold white on #c026d3] ✗ [/] [red]Login failed: {err}[/red]")
                         else:
                             console.print(f"[bold white on #c026d3] ✗ [/] [red]Invalid email or password. Please try again.[/red]")
+            else:
+                console.print(
+                    f"  [green]✓[/green] Using saved Whitebox login "
+                    f"([cyan]{db_config.job_board_username}[/cyan])"
+                )
 
             # Persist Whitebox + extension path immediately so that even if the
             # user Ctrl+C's during the LLM step we don't lose verified creds.
@@ -1258,10 +1286,22 @@ def _run_onboarding(force: bool = False):
                 session.close()
 
             console.print(f"\n[{K}]✓ Setup complete! You are ready to discover and apply to jobs.[/]")
+    except KeyboardInterrupt:
+        console.print(
+            "\n[yellow]Setup interrupted.[/yellow] Progress is saved after each completed step."
+        )
+        console.print(
+            "[dim]Run [cyan]wboxcli[/cyan] again to continue, or [cyan]wboxcli login[/cyan] "
+            "to save credentials only.[/dim]\n"
+        )
     except Exception as e:
-        import traceback
         console.print(f"[red]Error during setup: {e}[/red]")
         console.print_exception()
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass
 
 
 def _print_welcome():
