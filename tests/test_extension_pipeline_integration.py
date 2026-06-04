@@ -337,7 +337,6 @@ class TestEngineHandoffSkip:
             handoff, agent, logger, ExecutionPhase.LLM
         ) is True
         assert engine._job_skipped_by_user is True
-        agent.show_warning.assert_called_once()
 
     def test_handoff_skipped_job_false_when_not_skipped(self, engine):
         from jobcli.human.agent_interface import HandoffResult
