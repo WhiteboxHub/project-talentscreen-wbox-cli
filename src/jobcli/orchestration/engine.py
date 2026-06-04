@@ -1555,6 +1555,10 @@ class ApplicationEngine:
             self._check_stop()
             agent.show_phase_banner("Filling application form")
             success = self._agent_fill_loop(page, state, logger, agent, apply_was_clicked=apply_clicked, resume_pdf_path=resume_pdf_path)
+            if getattr(self, "_job_skipped_by_user", False):
+                self.job_repo.update_status(job.id or 0, ApplicationStatus.SKIPPED)
+                agent.show_warning("Skipped — opening next job.")
+                return ApplicationStatus.SKIPPED
             if not success and state.step_count == 0:
                 self._check_stop()
                 # Rules-based fallback only if AI made zero progress
@@ -2322,7 +2326,6 @@ class ApplicationEngine:
         if not getattr(handoff, "skipped", False):
             return False
         self._job_skipped_by_user = True
-        agent.show_warning("Application skipped — moving to the next job.")
         logger.info("Application skipped by user at handoff", phase=phase)
         return True
 
@@ -3865,15 +3868,14 @@ class ApplicationEngine:
             review_handoff = self._handoff_human_in_loop(
                 agent, logger, state,
                 reason=(
-                    "Final review before submit. Please double-check every "
-                    "field in the browser; edit anything the agent got wrong, "
-                    "then press ENTER to submit, or 'cancel' to abort."
+                    "Final review — check the form in the browser. "
+                    "Press ENTER to submit this application."
                 ),
                 hint=(
-                    "This is a mandatory review checkpoint. Submit will fire "
-                    "as soon as you press ENTER. If you click Submit in the "
-                    "browser, JobCLI detects the confirmation page automatically "
-                    "and continues without waiting for ENTER."
+                    "Type skip + ENTER to skip this job and open the next one. "
+                    "Type cancel + ENTER to abort. "
+                    "If you already submitted in the browser, JobCLI detects "
+                    "the confirmation page automatically."
                 ),
                 force_block=True,
                 submission_checker=lambda: self._looks_like_confirmation(

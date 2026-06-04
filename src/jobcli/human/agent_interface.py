@@ -315,38 +315,80 @@ class AgentInterface:
                 # Server mode ignores the timeout parameter for now, as the dashboard handles its own state
                 self._input_event.wait()
             else:
+                # CLI: read stdin on a helper thread, but poll Playwright only on
+                # the main thread — background page access causes greenlet errors
+                # on Windows and can hang skip/cancel.
                 def local_input_thread():
                     try:
-                        # We already printed the prompt, so pass empty string to input()
                         val = input()
                         self.remote_resume(val)
                     except (EOFError, KeyboardInterrupt):
-                        # Either stdin was closed or Ctrl+C arrived while this
-                        # daemon thread was blocked on input(). Either way the
-                        # user wants out — push a sentinel main thread will
-                        # translate to ExitRequested.
                         self.remote_resume("__JOBCLI_EXIT__")
 
-                thread = threading.Thread(target=local_input_thread, daemon=True)
-                thread.start()
-                browser_thread = threading.Thread(target=_poll_browser_closed, daemon=True)
-                browser_thread.start()
-                if poll_browser_fields:
-                    threading.Thread(
-                        target=_poll_browser_field_sync, daemon=True
-                    ).start()
-                if submission_checker:
-                    threading.Thread(target=_poll_submission, daemon=True).start()
+                threading.Thread(target=local_input_thread, daemon=True).start()
 
-                # Block until either the thread, a remote call, the global
-                # SIGINT handler, browser close, or a timeout fires.
-                if timeout_seconds is not None:
-                    timed_out = not self._input_event.wait(timeout=timeout_seconds)
-                    if timed_out:
+                if poll_browser_fields and self.page:
+                    try:
+                        from jobcli.utils.form_sync import snapshot_field_values
+
+                        last_field_snapshot = snapshot_field_values(self.page)
+                    except Exception:
+                        last_field_snapshot = {}
+
+                deadline = (
+                    time.monotonic() + timeout_seconds
+                    if timeout_seconds is not None
+                    else None
+                )
+
+                def _cli_poll_playwright_once() -> None:
+                    nonlocal last_field_snapshot
+                    if is_playwright_page_closed(self.page):
+                        self.remote_resume(BROWSER_CLOSED_SENTINEL)
+                        return
+                    if poll_browser_fields and self.page and not submit_detected.is_set():
+                        try:
+                            from jobcli.utils.form_sync import (
+                                diff_snapshots,
+                                snapshot_field_values,
+                            )
+
+                            current = snapshot_field_values(self.page)
+                            for label, _old, new in diff_snapshots(
+                                last_field_snapshot, current
+                            ):
+                                preview = new if len(new) <= 80 else new[:77] + "…"
+                                self.console.print(
+                                    f"  [dim]Browser updated:[/dim] [cyan]{label}[/cyan] "
+                                    f"= '{preview}'"
+                                )
+                            last_field_snapshot = current
+                        except Exception:
+                            pass
+                    if submission_checker and self.page and not submit_detected.is_set():
+                        try:
+                            strong, _soft, _signals = submission_checker()
+                            if strong:
+                                submit_detected.set()
+                                self.clear_browser_overlay()
+                                self.console.print(
+                                    "  [bold green]OK[/bold green] Application submitted "
+                                    "in browser — detected confirmation page."
+                                )
+                                self.remote_resume(SUBMITTED_SENTINEL)
+                        except Exception:
+                            pass
+
+                while not self._input_event.is_set():
+                    if is_exit_requested():
+                        break
+                    if deadline is not None and time.monotonic() >= deadline:
                         self._is_waiting = False
                         return None
-                else:
-                    self._input_event.wait()
+                    _cli_poll_playwright_once()
+                    if self._input_event.is_set():
+                        break
+                    self._input_event.wait(0.4)
         finally:
             browser_poll_stop.set()
             unregister_input_event(self._input_event)
@@ -912,7 +954,8 @@ class AgentInterface:
         self.get_attention()
 
         response = self._get_user_input(
-            f"  Press ENTER when done (or type 'skip' / 'cancel') [{wait_timeout}s timeout]: ",
+            f"  Press ENTER when done, or type skip / cancel + ENTER "
+            f"[{wait_timeout}s timeout]: ",
             timeout_seconds=wait_timeout,
             poll_browser_fields=True,
             submission_checker=submission_checker,
@@ -978,6 +1021,9 @@ class AgentInterface:
             )
 
         if response in ("skip", "skipp", "skp", "s"):
+            self.console.print(
+                "\n  [bold yellow]Skipped this job — opening the next URL.[/bold yellow]"
+            )
             return HandoffResult(
                 page=self.page,
                 url_before=url_before,
