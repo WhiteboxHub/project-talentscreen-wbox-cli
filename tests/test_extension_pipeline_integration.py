@@ -291,9 +291,105 @@ class TestHandoffCancelPath:
         )
         assert result.cancelled is True
 
+    def test_user_types_skip_returns_skipped_result(self):
+        """Typing 'skip' skips the job without cancelling (abort) semantics."""
+        agent = self._make_agent_typing("skip")
+        result = agent.handoff_to_human(
+            reason="Final review", hint=None, force_block=True
+        )
+        assert result.skipped is True
+        assert result.cancelled is False
+
     def test_user_presses_enter_resumes(self):
         agent = self._make_agent_typing("")
         result = agent.handoff_to_human(
             reason="Final review", hint=None, force_block=True
         )
         assert result.cancelled is False
+
+
+# ───────────────────────────────────────────────────────────────────────
+# Engine job-skip flag
+# ───────────────────────────────────────────────────────────────────────
+
+
+class TestEngineHandoffSkip:
+
+    def test_handoff_skipped_job_sets_flag(self, engine):
+        from jobcli.human.agent_interface import HandoffResult
+        from jobcli.profile.schemas import ExecutionPhase
+
+        page = MagicMock()
+        page.url = "https://example.com/apply"
+        handoff = HandoffResult(
+            page=page,
+            url_before="https://example.com/apply",
+            url_after="https://example.com/apply",
+            title_after="",
+            advanced=False,
+            skipped=True,
+        )
+        agent = MagicMock()
+        logger = MagicMock()
+
+        engine._job_skipped_by_user = False
+        assert engine._handoff_skipped_job(
+            handoff, agent, logger, ExecutionPhase.LLM
+        ) is True
+        assert engine._job_skipped_by_user is True
+        agent.show_warning.assert_called_once()
+
+    def test_handoff_skipped_job_false_when_not_skipped(self, engine):
+        from jobcli.human.agent_interface import HandoffResult
+        from jobcli.profile.schemas import ExecutionPhase
+
+        page = MagicMock()
+        handoff = HandoffResult(
+            page=page,
+            url_before="",
+            url_after="",
+            title_after="",
+            advanced=True,
+            skipped=False,
+        )
+        agent = MagicMock()
+        logger = MagicMock()
+
+        engine._job_skipped_by_user = False
+        assert engine._handoff_skipped_job(
+            handoff, agent, logger, ExecutionPhase.LLM
+        ) is False
+        assert engine._job_skipped_by_user is False
+
+    def test_pre_submit_review_skip_sets_flag_without_submit(self, engine):
+        """Simulate review handoff skip: flag is set and submit must not run."""
+        from jobcli.human.agent_interface import HandoffResult
+        from jobcli.profile.schemas import ExecutionPhase
+
+        page = MagicMock()
+        page.url = "https://boards.greenhouse.io/apply"
+        review_handoff = HandoffResult(
+            page=page,
+            url_before=page.url,
+            url_after=page.url,
+            title_after="",
+            advanced=False,
+            skipped=True,
+        )
+        agent = MagicMock()
+        logger = MagicMock()
+        rules_handler = MagicMock()
+        rules_handler.submit_application = MagicMock(return_value=True)
+
+        engine._job_skipped_by_user = False
+        if engine._handoff_skipped_job(
+            review_handoff, agent, logger, ExecutionPhase.LLM
+        ):
+            fill_success = False
+        else:
+            fill_success = True
+            rules_handler.submit_application()
+
+        assert fill_success is False
+        assert engine._job_skipped_by_user is True
+        rules_handler.submit_application.assert_not_called()

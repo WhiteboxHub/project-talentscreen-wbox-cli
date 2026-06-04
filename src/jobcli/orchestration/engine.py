@@ -1197,11 +1197,10 @@ class ApplicationEngine:
             hint=hint,
             wait_for_navigation_seconds=10,
         )
+        if self._handoff_skipped_job(result, agent, logger, ExecutionPhase.HUMAN):
+            return None
         if result.cancelled:
             agent.show_error("Cancelled by user at job-board handoff.")
-            return None
-        if result.skipped:
-            agent.show_warning("Skipped by user at job-board handoff.")
             return None
 
         # The human may have opened a new tab (most common on LinkedIn /
@@ -1244,6 +1243,8 @@ class ApplicationEngine:
                 hint=hint,
                 wait_for_navigation_seconds=10,
             )
+            if self._handoff_skipped_job(result, agent, logger, ExecutionPhase.HUMAN):
+                return None
             if result.cancelled:
                 return None
             adopted = adopt_application_page_after_action(
@@ -1292,6 +1293,7 @@ class ApplicationEngine:
         )
 
         self._submit_declined_by_user = False
+        self._job_skipped_by_user = False
         self._form_ready_for_submit = False
 
         mode = self.config.interaction_mode
@@ -1368,6 +1370,13 @@ class ApplicationEngine:
                         reason="LinkedIn job detected. Please apply manually in the browser.",
                         hint="When you're finished with the application, press ENTER to move to the next job."
                     )
+                    if self._handoff_skipped_job(
+                        handoff, agent, logger, ExecutionPhase.HUMAN
+                    ):
+                        self.job_repo.update_status(
+                            job.id or 0, ApplicationStatus.SKIPPED
+                        )
+                        return ApplicationStatus.SKIPPED
                     if handoff.cancelled:
                         return ApplicationStatus.FAILED
                     return ApplicationStatus.SUBMITTED
@@ -1405,6 +1414,11 @@ class ApplicationEngine:
                     page, agent, logger, board=board
                 )
                 if page is None:
+                    if getattr(self, "_job_skipped_by_user", False):
+                        self.job_repo.update_status(
+                            job.id or 0, ApplicationStatus.SKIPPED
+                        )
+                        return ApplicationStatus.SKIPPED
                     self.job_repo.update_status(
                         job.id or 0, ApplicationStatus.FAILED
                     )
@@ -1503,12 +1517,14 @@ class ApplicationEngine:
                     hint="Click the correct Apply button yourself (avoid 'Apply with LinkedIn/Indeed'), "
                          "or navigate to the application form. Then press ENTER to hand control back.",
                 )
+                if self._handoff_skipped_job(
+                    handoff, agent, logger, ExecutionPhase.HUMAN
+                ):
+                    self.job_repo.update_status(job.id or 0, ApplicationStatus.SKIPPED)
+                    return ApplicationStatus.SKIPPED
                 if handoff.cancelled:
                     self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
                     return ApplicationStatus.FAILED
-                if handoff.skipped:
-                    self.job_repo.update_status(job.id or 0, ApplicationStatus.SKIPPED)
-                    return ApplicationStatus.SKIPPED
                 page = handoff.page
                 agent.page = page
                 # If the human navigated forward, treat the apply step
@@ -1546,6 +1562,9 @@ class ApplicationEngine:
                 success = self._fill_form_rules(page, state, logger, ats_type)
             if not success:
                 self._check_stop()
+                if getattr(self, "_job_skipped_by_user", False):
+                    self.job_repo.update_status(job.id or 0, ApplicationStatus.SKIPPED)
+                    return ApplicationStatus.SKIPPED
                 if getattr(self, "_submit_declined_by_user", False):
                     agent.show_status(
                         "Submission skipped — moving to the next job.",
@@ -1563,14 +1582,16 @@ class ApplicationEngine:
                          "When you're done, press ENTER and the agent will resume from "
                          "the page you're currently on.",
                 )
+                if self._handoff_skipped_job(
+                    handoff, agent, logger, ExecutionPhase.HUMAN
+                ):
+                    self._check_stop()
+                    self.job_repo.update_status(job.id or 0, ApplicationStatus.SKIPPED)
+                    return ApplicationStatus.SKIPPED
                 if handoff.cancelled:
                     self._check_stop() # Will raise if stopped
                     self.job_repo.update_status(job.id or 0, ApplicationStatus.FAILED)
                     return ApplicationStatus.FAILED
-                if handoff.skipped:
-                    self._check_stop()
-                    self.job_repo.update_status(job.id or 0, ApplicationStatus.SKIPPED)
-                    return ApplicationStatus.SKIPPED
                 page = handoff.page
                 agent.page = page
                 # LEARNING LOOP: Scrape whatever the human typed in the browser 
@@ -1596,6 +1617,9 @@ class ApplicationEngine:
                 if not success:
                     success = self._submission_looks_plausible(page)
             self._check_stop()
+            if getattr(self, "_job_skipped_by_user", False):
+                self.job_repo.update_status(job.id or 0, ApplicationStatus.SKIPPED)
+                return ApplicationStatus.SKIPPED
             # ── 5. Final status ─────────────────────────────────────
             if success:
                 agent.show_success("Application completed successfully!")
@@ -2287,6 +2311,21 @@ class ApplicationEngine:
             phase=ExecutionPhase.RULES,
         )
 
+    def _handoff_skipped_job(
+        self,
+        handoff: "HandoffResult",
+        agent: "AgentInterface",
+        logger: JobLogger,
+        phase: ExecutionPhase,
+    ) -> bool:
+        """Return True if the human typed skip at a handoff (skip this job)."""
+        if not getattr(handoff, "skipped", False):
+            return False
+        self._job_skipped_by_user = True
+        agent.show_warning("Application skipped — moving to the next job.")
+        logger.info("Application skipped by user at handoff", phase=phase)
+        return True
+
     def _handoff_human_in_loop(
         self,
         agent: "AgentInterface",
@@ -2474,6 +2513,8 @@ class ApplicationEngine:
                 hint="Fill and submit the form yourself in the browser. "
                      "When you're done, press ENTER and JobCLI will record the result.",
             )
+            if self._handoff_skipped_job(handoff, agent, logger, ExecutionPhase.HUMAN):
+                return False
             return (not handoff.cancelled) and self._submission_looks_plausible(handoff.page)
 
         try:
@@ -2583,6 +2624,9 @@ class ApplicationEngine:
                         "the agent resumes from that page."
                     ),
                 )
+                if self._handoff_skipped_job(handoff, agent, logger, ExecutionPhase.LLM):
+                    logger.log_phase_end(ExecutionPhase.LLM, False)
+                    return False
                 if handoff.cancelled:
                     logger.log_phase_end(ExecutionPhase.LLM, False)
                     return False
@@ -2718,6 +2762,8 @@ class ApplicationEngine:
                         ),
                     )
                     logger.log_phase_end(ExecutionPhase.LLM, not handoff.cancelled)
+                    if self._handoff_skipped_job(handoff, agent, logger, ExecutionPhase.LLM):
+                        return False
                     if handoff.cancelled:
                         return False
                     page = handoff.page
@@ -2738,6 +2784,8 @@ class ApplicationEngine:
                              "press ENTER and JobCLI will resume from your current page.",
                     )
                     logger.log_phase_end(ExecutionPhase.LLM, not handoff.cancelled)
+                    if self._handoff_skipped_job(handoff, agent, logger, ExecutionPhase.LLM):
+                        return False
                     if handoff.cancelled:
                         return False
                     page = handoff.page
@@ -3247,6 +3295,9 @@ class ApplicationEngine:
                                 ),
                                 hint="When done, press ENTER and JobCLI will continue.",
                             )
+                        if self._handoff_skipped_job(handoff, agent, logger, ExecutionPhase.LLM):
+                            logger.log_phase_end(ExecutionPhase.LLM, False)
+                            return False
                         if handoff.cancelled:
                             logger.log_phase_end(ExecutionPhase.LLM, False)
                             return False
@@ -3397,6 +3448,9 @@ class ApplicationEngine:
                             + hint_extra
                         ),
                     )
+                    if self._handoff_skipped_job(handoff, agent, logger, ExecutionPhase.LLM):
+                        logger.log_phase_end(ExecutionPhase.LLM, False)
+                        return False
                     if handoff.cancelled:
                         logger.log_phase_end(ExecutionPhase.LLM, False)
                         return False
@@ -3506,6 +3560,9 @@ class ApplicationEngine:
                         hint="Finish the remaining fields in the browser and "
                              "press ENTER to continue.",
                     )
+                    if self._handoff_skipped_job(handoff, agent, logger, ExecutionPhase.LLM):
+                        logger.log_phase_end(ExecutionPhase.LLM, False)
+                        return False
                     if handoff.cancelled:
                         logger.log_phase_end(ExecutionPhase.LLM, False)
                         return False
@@ -3713,6 +3770,9 @@ class ApplicationEngine:
                         "and any unfilled dropdowns, then press ENTER."
                     ),
                 )
+                if self._handoff_skipped_job(handoff, agent, logger, ExecutionPhase.LLM):
+                    logger.log_phase_end(ExecutionPhase.LLM, False)
+                    return False
                 if handoff.cancelled:
                     logger.log_phase_end(ExecutionPhase.LLM, False)
                     return False
@@ -3820,6 +3880,9 @@ class ApplicationEngine:
                     agent.page, _pre_submit_url, _pre_submit_had_submit_btn
                 ),
             )
+            if self._handoff_skipped_job(review_handoff, agent, logger, ExecutionPhase.LLM):
+                logger.log_phase_end(ExecutionPhase.LLM, False)
+                return False
             if review_handoff.cancelled:
                 agent.show_warning("Submission cancelled by user during review.")
                 self._submit_declined_by_user = True
@@ -3929,6 +3992,9 @@ class ApplicationEngine:
                         "When you see the confirmation page, press ENTER."
                     ),
                 )
+                if self._handoff_skipped_job(handoff, agent, logger, ExecutionPhase.LLM):
+                    logger.log_phase_end(ExecutionPhase.LLM, False)
+                    return False
                 if handoff.cancelled:
                     logger.log_phase_end(ExecutionPhase.LLM, False)
                     return False
