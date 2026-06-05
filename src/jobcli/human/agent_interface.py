@@ -72,6 +72,7 @@ class HandoffResult:
     advanced: bool             # True if human navigated to a different URL
     cancelled: bool = False    # human chose to abort the application
     skipped: bool = False      # human chose to skip this job
+    submitted: bool = False    # confirmation page detected during handoff
 
 
 # ------------------------------------------------------------------
@@ -1005,6 +1006,7 @@ class AgentInterface:
                 title_after=title_after,
                 advanced=True,
                 cancelled=False,
+                submitted=True,
             )
 
         if response is None:

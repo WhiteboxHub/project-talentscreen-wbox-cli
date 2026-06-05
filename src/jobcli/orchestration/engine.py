@@ -1756,6 +1756,38 @@ class ApplicationEngine:
                 return True
         return False
 
+    def _handoff_indicates_submitted(
+        self, page: Page, handoff: "HandoffResult"
+    ) -> bool:
+        """True when the human already submitted during a mid-fill handoff."""
+        if getattr(handoff, "submitted", False):
+            return True
+        if self._submission_looks_plausible(page):
+            return True
+        title = (handoff.title_after or "").lower()
+        if any(
+            phrase in title
+            for phrase in (
+                "thank you for applying",
+                "thank you for your application",
+                "application received",
+                "application submitted",
+                "successfully submitted",
+            )
+        ):
+            return True
+        try:
+            strong, soft, _signals = self._looks_like_confirmation(
+                page,
+                handoff.url_before or "",
+                pre_submit_had_submit_btn=True,
+            )
+            if strong or soft:
+                return True
+        except Exception:
+            pass
+        return False
+
     def _fill_form_rules(
         self,
         page: Page,
@@ -2809,10 +2841,23 @@ class ApplicationEngine:
             loop_count = 0
             results: dict = {}
             performed_uploads: set = set()
+            human_submitted_during_fill = False
 
             # ── Inner fill loop (handles ASK retries) ──────────────────
             while loop_count < MAX_ASK_LOOPS:
                 self._check_stop()
+                if human_submitted_during_fill:
+                    break
+                if self._submission_looks_plausible(page):
+                    human_submitted_during_fill = True
+                    agent.show_success(
+                        "Confirmation page detected — skipping further autofill."
+                    )
+                    logger.info(
+                        "confirmation_page_before_llm_iter — stopping fill loop",
+                        phase=ExecutionPhase.LLM,
+                    )
+                    break
                 loop_count += 1
                 agent.show_status(f"AI iteration {loop_count}/{MAX_ASK_LOOPS}", phase=ExecutionPhase.LLM)
 
@@ -3421,27 +3466,61 @@ class ApplicationEngine:
                                 f"{len(still_broken)} field(s) still need attention. "
                                 "Please fill them in the browser:\n" + pretty_list
                             )
+                            try:
+                                _handoff_pre_url = page.url or ""
+                            except Exception:
+                                _handoff_pre_url = ""
+                            try:
+                                _handoff_had_submit = bool(_submit_button_visible(page))
+                            except Exception:
+                                _handoff_had_submit = True
                             handoff = agent.handoff_to_human(
                                 reason=(
                                     f"{len(still_broken)} field(s) could not be automated. "
                                     "Please fill them in the browser."
                                 ),
-                                hint="When done, press ENTER and JobCLI will continue.",
+                                hint=(
+                                    "When done, press ENTER and JobCLI will continue. "
+                                    "If you already submitted, JobCLI detects the "
+                                    "confirmation page automatically."
+                                ),
+                                submission_checker=lambda: self._looks_like_confirmation(
+                                    agent.page, _handoff_pre_url, _handoff_had_submit
+                                ),
                             )
-                        if self._handoff_skipped_job(handoff, agent, logger, ExecutionPhase.LLM):
-                            logger.log_phase_end(ExecutionPhase.LLM, False)
-                            return False
-                        if handoff.cancelled:
-                            logger.log_phase_end(ExecutionPhase.LLM, False)
-                            return False
-                        page = handoff.page
-                        agent.page = page
-                        # Human may have advanced the form — re-extract so the
-                        # next iteration sees the updated page.
-                        try:
-                            ax_tree = extractor.extract()
-                        except Exception:
-                            pass
+                        else:
+                            handoff = None
+                        if handoff is not None:
+                            if self._handoff_skipped_job(handoff, agent, logger, ExecutionPhase.LLM):
+                                logger.log_phase_end(ExecutionPhase.LLM, False)
+                                return False
+                            if handoff.cancelled:
+                                logger.log_phase_end(ExecutionPhase.LLM, False)
+                                return False
+                            page = handoff.page
+                            agent.page = page
+                            if self._handoff_indicates_submitted(page, handoff):
+                                human_submitted_during_fill = True
+                                agent.show_success(
+                                    "Application submitted during handoff — "
+                                    "skipping further autofill."
+                                )
+                                logger.info(
+                                    "human_submitted_during_failed_field_handoff",
+                                    phase=ExecutionPhase.LLM,
+                                    url_after=handoff.url_after,
+                                    title_after=handoff.title_after,
+                                )
+                                break
+                            # Human may have advanced the form — re-extract so the
+                            # next iteration sees the updated page.
+                            try:
+                                ax_tree = extractor.extract()
+                            except Exception:
+                                pass
+
+                if human_submitted_during_fill:
+                    break
 
                 if not failed_actions and not ask_actions:
                     agent.show_success("All actions completed.")
@@ -3462,6 +3541,10 @@ class ApplicationEngine:
                     except Exception:
                         pass
                     break
+
+            if human_submitted_during_fill:
+                logger.log_phase_end(ExecutionPhase.LLM, True)
+                return True
 
             # ── Multi-page form loop ──────────────────────────────────────
             # NOTE: This loop is for Workday-style "Next → Next → Submit"

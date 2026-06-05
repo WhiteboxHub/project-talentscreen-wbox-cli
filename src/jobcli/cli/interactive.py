@@ -1426,28 +1426,6 @@ def _exec(args: list[str]):
     """Run a wboxcli subcommand, streaming output."""
     cmd = _wboxcli_command(args)
 
-    # region agent log
-    if args and args[0] == "questions":
-        import json as _json
-        import time as _time
-
-        try:
-            log_path = _project_root().parent / "debug-1c8a12.log"
-            payload = {
-                "sessionId": "1c8a12",
-                "runId": "pre-fix",
-                "hypothesisId": "C",
-                "location": "interactive.py:_exec:questions",
-                "message": "TUI dispatching questions subprocess",
-                "data": {"cmd": cmd, "stdin_isatty": sys.stdin.isatty()},
-                "timestamp": int(_time.time() * 1000),
-            }
-            with open(log_path, "a", encoding="utf-8") as _f:
-                _f.write(_json.dumps(payload) + "\n")
-        except Exception:
-            pass
-    # endregion
-
     console.print(f"\n  [{D}]$ wboxcli {' '.join(args)}[/]")
     console.print()
 
@@ -1479,27 +1457,6 @@ def _exec(args: list[str]):
             sys.stdout.write(line)
             sys.stdout.flush()
         proc.wait()
-        # region agent log
-        if args and args[0] == "questions":
-            import json as _json
-            import time as _time
-
-            try:
-                log_path = _project_root().parent / "debug-1c8a12.log"
-                payload = {
-                    "sessionId": "1c8a12",
-                    "runId": "pre-fix",
-                    "hypothesisId": "C",
-                    "location": "interactive.py:_exec:questions_exit",
-                    "message": "questions subprocess finished",
-                    "data": {"returncode": proc.returncode},
-                    "timestamp": int(_time.time() * 1000),
-                }
-                with open(log_path, "a", encoding="utf-8") as _f:
-                    _f.write(_json.dumps(payload) + "\n")
-            except Exception:
-                pass
-        # endregion
         console.print()
     except KeyboardInterrupt:
         if proc is not None:
