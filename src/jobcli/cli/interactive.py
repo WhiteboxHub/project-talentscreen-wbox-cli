@@ -1709,6 +1709,20 @@ def _dispatch(raw: str):
         _run_onboarding(force=True)
         return
 
+    # Questions must run in-process — _exec pipes stdout so Rich Prompt.ask never
+    # reaches the terminal (header prints, then prompts hang invisible).
+    if cmd == "questions":
+        from jobcli.cli.main import questions as questions_cmd
+
+        console.print()
+        try:
+            questions_cmd()
+        except KeyboardInterrupt:
+            console.print(f"\n  [{D}]cancelled[/]\n")
+        except Exception as e:
+            console.print(f"[red]Error during questions: {e}[/red]")
+        return
+
     if cmd == "reset":
         from jobcli.cli.main import _run_reset
 
