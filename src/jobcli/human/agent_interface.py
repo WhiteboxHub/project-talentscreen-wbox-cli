@@ -72,6 +72,7 @@ class HandoffResult:
     advanced: bool             # True if human navigated to a different URL
     cancelled: bool = False    # human chose to abort the application
     skipped: bool = False      # human chose to skip this job
+    submitted: bool = False    # confirmation page detected during handoff
 
 
 # ------------------------------------------------------------------
@@ -546,6 +547,7 @@ class AgentInterface:
     # cross-origin frames never break the agent loop.
 
     _OVERLAY_ID = "__jobcli_handoff_overlay__"
+    _OVERLAY_STORAGE_KEY = "jobcli_handoff_overlay_pos"
 
     def show_browser_overlay(
         self,
@@ -555,18 +557,13 @@ class AgentInterface:
         kind: str = "warning",  # "warning" | "info" | "error"
         fields: Optional[list[str]] = None,
     ) -> None:
-        """Inject a fixed top banner into the browser page so the human sees
-        a clear visual cue WHILE looking at the form.
+        """Inject a draggable handoff banner into the browser page.
 
-        The banner is rendered inside a **Shadow DOM** so the host page's
-        CSS can NEVER reach it (no inherited ``letter-spacing``, no
-        ``text-transform: uppercase``, no custom font replacing
-        characters with ligatures, etc.).  Without that isolation, some
-        ATS pages' global styles were making the banner text render
-        with overlapping / merged letters.
+        Default: full-width bar at the top. The user can drag it by the handle
+        to reposition (position is remembered per origin in sessionStorage).
 
-        The banner persists until ``clear_browser_overlay()`` is called
-        or the page navigates.
+        Rendered inside Shadow DOM so ATS page CSS cannot affect it.
+        Removed by ``clear_browser_overlay()`` or on navigation.
         """
         try:
             color = {
@@ -583,29 +580,16 @@ class AgentInterface:
                 field_list_html = f"<ul class='fields'>{items}</ul>"
 
             self.page.evaluate(
-                r"""({id, title, message, color, fieldsHtml}) => {
+                r"""({id, title, message, color, fieldsHtml, storageKey}) => {
                     const old = document.getElementById(id);
                     if (old) old.remove();
 
-                    // Host element is invisible; all visual structure
-                    // lives inside its Shadow DOM, isolated from the
-                    // page's CSS.
                     const host = document.createElement('div');
                     host.id = id;
                     host.setAttribute('data-jobcli', 'handoff');
-                    host.style.cssText = [
-                        'all: initial',
-                        'position: fixed',
-                        'top: 0',
-                        'left: 0',
-                        'right: 0',
-                        'z-index: 2147483647',
-                        'pointer-events: auto',
-                    ].map(s => s + ' !important').join(';');
 
                     const shadow = host.attachShadow({mode: 'closed'});
 
-                    // CSS reset + banner styles (scoped to this shadow root)
                     const css = `
                         :host, * { all: revert; }
                         :host {
@@ -643,6 +627,21 @@ class AgentInterface:
                             display: flex;
                             align-items: flex-start;
                             gap: 14px;
+                        }
+                        .drag-handle {
+                            flex: 0 0 auto;
+                            cursor: grab;
+                            user-select: none;
+                            touch-action: none;
+                            padding: 2px 6px;
+                            margin-top: 2px;
+                            opacity: 0.9;
+                            font-size: 18px;
+                            line-height: 1;
+                            letter-spacing: -2px;
+                        }
+                        .drag-handle:active {
+                            cursor: grabbing;
                         }
                         .icon {
                             font-size: 26px;
@@ -699,17 +698,16 @@ class AgentInterface:
                     wrap.className = 'bar';
                     wrap.innerHTML = `
                         <div class="inner">
+                            <div class="drag-handle" title="Drag to move">⋮⋮</div>
                             <div class="icon">⏸</div>
                             <div class="body">
                                 <div class="title"></div>
                                 <div class="msg"></div>
                                 <div class="fields-slot"></div>
-                                <div class="hint">JobCLI is waiting in the terminal — finish here, then return to the terminal and press ENTER.</div>
+                                <div class="hint">Drag the banner by the handle to move it. JobCLI is waiting in the terminal — finish here, then return to the terminal and press ENTER.</div>
                             </div>
                         </div>
                     `;
-                    // Assign textContent so any HTML-ish characters in
-                    // title/message render literally (no injection risk).
                     wrap.querySelector('.title').textContent = title;
                     wrap.querySelector('.msg').textContent = message;
                     if (fieldsHtml) {
@@ -719,6 +717,143 @@ class AgentInterface:
                     shadow.appendChild(style);
                     shadow.appendChild(wrap);
                     document.documentElement.appendChild(host);
+
+                    const setHostBase = () => {
+                        host.style.setProperty('all', 'initial', 'important');
+                        host.style.setProperty('position', 'fixed', 'important');
+                        host.style.setProperty('z-index', '2147483647', 'important');
+                        host.style.setProperty('pointer-events', 'auto', 'important');
+                    };
+
+                    const floatWidthPx = () =>
+                        Math.min(480, Math.max(200, window.innerWidth - 24));
+
+                    const applyFullWidth = () => {
+                        setHostBase();
+                        host.style.setProperty('top', '0', 'important');
+                        host.style.setProperty('left', '0', 'important');
+                        host.style.setProperty('right', '0', 'important');
+                        host.style.setProperty('width', 'auto', 'important');
+                    };
+
+                    const applyFloating = (top, left, widthPx) => {
+                        setHostBase();
+                        host.style.setProperty('top', `${top}px`, 'important');
+                        host.style.setProperty('left', `${left}px`, 'important');
+                        host.style.setProperty('width', `${widthPx}px`, 'important');
+                        host.style.removeProperty('right');
+                    };
+
+                    const clampPos = (top, left, widthPx, heightPx) => {
+                        const w = widthPx || host.offsetWidth || floatWidthPx();
+                        const h = heightPx || host.offsetHeight || 80;
+                        const maxLeft = Math.max(0, window.innerWidth - w);
+                        const maxTop = Math.max(0, window.innerHeight - h);
+                        return {
+                            top: Math.min(Math.max(0, top), maxTop),
+                            left: Math.min(Math.max(0, left), maxLeft),
+                            width: w,
+                        };
+                    };
+
+                    const savePos = () => {
+                        try {
+                            sessionStorage.setItem(
+                                storageKey,
+                                JSON.stringify({
+                                    top: host.offsetTop,
+                                    left: host.offsetLeft,
+                                    width: host.offsetWidth,
+                                })
+                            );
+                        } catch (e) { /* private mode / blocked */ }
+                    };
+
+                    let isFloating = false;
+                    try {
+                        const raw = sessionStorage.getItem(storageKey);
+                        if (raw) {
+                            const saved = JSON.parse(raw);
+                            if (
+                                saved &&
+                                typeof saved.top === 'number' &&
+                                typeof saved.left === 'number'
+                            ) {
+                                const widthPx =
+                                    typeof saved.width === 'number'
+                                        ? saved.width
+                                        : floatWidthPx();
+                                const pos = clampPos(
+                                    saved.top,
+                                    saved.left,
+                                    widthPx,
+                                    80
+                                );
+                                applyFloating(pos.top, pos.left, pos.width);
+                                isFloating = true;
+                            }
+                        }
+                    } catch (e) { /* ignore */ }
+
+                    if (!isFloating) {
+                        applyFullWidth();
+                    }
+
+                    const handle = wrap.querySelector('.drag-handle');
+                    let dragging = false;
+                    let startX = 0;
+                    let startY = 0;
+                    let startLeft = 0;
+                    let startTop = 0;
+
+                    const onPointerMove = (e) => {
+                        if (!dragging) return;
+                        if (!isFloating) {
+                            isFloating = true;
+                            const widthPx = floatWidthPx();
+                            const rect = host.getBoundingClientRect();
+                            applyFloating(rect.top, rect.left, widthPx);
+                            startLeft = host.offsetLeft;
+                            startTop = host.offsetTop;
+                        }
+                        const dx = e.clientX - startX;
+                        const dy = e.clientY - startY;
+                        const pos = clampPos(
+                            startTop + dy,
+                            startLeft + dx,
+                            host.offsetWidth,
+                            host.offsetHeight
+                        );
+                        applyFloating(pos.top, pos.left, pos.width);
+                    };
+
+                    const endDrag = (e) => {
+                        if (!dragging) return;
+                        dragging = false;
+                        try {
+                            handle.releasePointerCapture(e.pointerId);
+                        } catch (err) { /* already released */ }
+                        savePos();
+                    };
+
+                    handle.addEventListener('pointerdown', (e) => {
+                        if (e.button !== 0) return;
+                        dragging = true;
+                        handle.setPointerCapture(e.pointerId);
+                        startX = e.clientX;
+                        startY = e.clientY;
+                        if (isFloating) {
+                            startLeft = host.offsetLeft;
+                            startTop = host.offsetTop;
+                        } else {
+                            startLeft = 0;
+                            startTop = 0;
+                        }
+                        e.preventDefault();
+                    });
+                    handle.addEventListener('pointermove', onPointerMove);
+                    handle.addEventListener('pointerup', endDrag);
+                    handle.addEventListener('pointercancel', endDrag);
                 }""",
                 {
                     "id": self._OVERLAY_ID,
@@ -726,6 +861,7 @@ class AgentInterface:
                     "message": message,
                     "color": color,
                     "fieldsHtml": field_list_html,
+                    "storageKey": self._OVERLAY_STORAGE_KEY,
                 },
             )
         except Exception:
@@ -1005,6 +1141,7 @@ class AgentInterface:
                 title_after=title_after,
                 advanced=True,
                 cancelled=False,
+                submitted=True,
             )
 
         if response is None:
