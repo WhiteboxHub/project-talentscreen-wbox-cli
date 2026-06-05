@@ -29,11 +29,14 @@ from jobcli.profile.schemas import (
     Job,
     LLMActionResponse,
     ResumeData,
+    CommonQuestions,
 )
 from jobcli.orchestration.tool_executor import ToolExecutor
 from jobcli.human.agent_interface import AgentInterface
 from jobcli.llm.client import LLMClient
 from jobcli.llm.ax_tree_extractor import AccessibilityTreeExtractor
+from jobcli.llm.empty_fields import build_empty_fields_payload
+from jobcli.intelligence.memory_prefill import MemoryPrefiller
 from jobcli.automation.anti_bot import AntiBotManager
 from jobcli.ats.locators.apply_button import ApplyButtonLocator, adopt_application_page_after_action
 from jobcli.ats.handlers.handler_factory import ATSHandlerFactory
@@ -868,6 +871,7 @@ class ApplicationEngine:
         self._extension_resume_data: Optional[dict] = None
         self._extension_resume_file: Optional[dict] = None
         self._extension_normalized_data: Optional[dict] = None
+        self.common_questions: Optional[CommonQuestions] = None
 
         self.anti_bot = AntiBotManager()
         self.stop_requested = False
@@ -1297,6 +1301,7 @@ class ApplicationEngine:
         self._form_ready_for_submit = False
 
         mode = self.config.interaction_mode
+        self.common_questions = self.user_data_repo.get_questions()
         
         # ── Resume Path Validation ──────────────────────────────────────
         # Ensure we only pass a path that actually exists on this system.
@@ -1340,6 +1345,7 @@ class ApplicationEngine:
                 resume=self.resume,
                 is_server=self.on_event is not None,
             )
+            agent.common_questions = self.common_questions
             self.active_agent = agent
             self.stop_requested = False # Reset for new job
 
@@ -2303,6 +2309,7 @@ class ApplicationEngine:
     FILL_PIPELINE_STEPS = (
         "① Extension",
         "② Rules (fallback)",
+        "②b Memory",
         "③ LLM",
         "④ Human review (always)",
     )
@@ -2485,6 +2492,103 @@ class ApplicationEngine:
             if (sel and suffix in sel) or (lbl and (suffix == lbl or suffix in lbl)):
                 return val
         return None
+
+    def _prepare_gaps_for_llm(
+        self,
+        ax_tree,
+        page: Page,
+        memory: "AgentMemory",
+        synonym_resolver,
+        state: ApplicationState,
+    ) -> tuple[list[dict[str, Any]], str]:
+        """Build enriched gap list and gap-hint block for the LLM auditor."""
+        prefiller = MemoryPrefiller(synonym_resolver)
+        gaps = build_empty_fields_payload(
+            ax_tree,
+            dropdown_options=getattr(ax_tree, "dropdown_fields", None),
+            extra_gap_labels=_unselected_required_dropdowns(page),
+        )
+        enriched = prefiller.enrich_gaps_with_suggestions(
+            gaps,
+            memory,
+            self.resume,
+            state.detected_ats,
+            self.common_questions,
+        )
+        gap_hints = memory.build_gap_hints(
+            enriched,
+            self.resume,
+            state.detected_ats,
+            common_questions=self.common_questions,
+        )
+        return enriched, gap_hints
+
+    def _run_memory_prefill(
+        self,
+        page: Page,
+        ax_tree,
+        extractor: AccessibilityTreeExtractor,
+        executor: ToolExecutor,
+        memory: "AgentMemory",
+        synonym_resolver,
+        state: ApplicationState,
+        logger: JobLogger,
+        agent: AgentInterface,
+    ) -> tuple[Any, list[dict[str, Any]]]:
+        """Phase 2b — deterministically fill gaps from resume JSON + DB memory."""
+        enriched, _ = self._prepare_gaps_for_llm(
+            ax_tree, page, memory, synonym_resolver, state
+        )
+        if not enriched:
+            return ax_tree, enriched
+
+        prefiller = MemoryPrefiller(synonym_resolver)
+        actions, resolutions = prefiller.gaps_to_actions(
+            enriched,
+            memory,
+            self.resume,
+            state.detected_ats,
+            self.common_questions,
+        )
+        resolved = [r for r in resolutions if r.value]
+        if not actions:
+            if resolved:
+                logger.info(
+                    f"Memory prefill: {len(resolved)} gap(s) had answers but no actions",
+                    phase=ExecutionPhase.RULES,
+                )
+            return ax_tree, enriched
+
+        agent.show_phase_banner("Memory prefill (2b/5)")
+        agent.show_status(
+            f"Applying {len(actions)} remembered answer(s) from resume/memory…",
+            phase=ExecutionPhase.RULES,
+        )
+        logger.info(
+            f"Memory prefill executing {len(actions)} action(s)",
+            phase=ExecutionPhase.RULES,
+        )
+
+        prefill_response = LLMActionResponse(
+            reasoning="Memory prefill from resume + saved field answers.",
+            actions=actions,
+            requires_human=False,
+            confidence=1.0,
+        )
+        _coerce_dropdown_actions(prefill_response, ax_tree, logger)
+        executor.execute_actions(prefill_response)
+        try:
+            page.wait_for_timeout(400)
+        except Exception:
+            pass
+        try:
+            ax_tree = extractor.extract()
+        except Exception:
+            pass
+        enriched, _ = self._prepare_gaps_for_llm(
+            ax_tree, page, memory, synonym_resolver, state
+        )
+        return ax_tree, enriched
 
     def _agent_fill_loop(
         self,
@@ -2672,27 +2776,37 @@ class ApplicationEngine:
 
             # Give the AgentInterface DB access so every human prompt checks
             # memory first and every human answer is auto-persisted.
-            agent.set_context(memory=memory)
+            agent.set_context(
+                memory=memory,
+                common_questions=self.common_questions,
+            )
 
             task = "fill_form_fields_only" if apply_was_clicked else "find_apply_button_and_fill_form"
 
-            # ── Phase 3/4: LLM agent loop ─────────────────────────────────
-            logger.log_phase_start(ExecutionPhase.LLM)
-            state.current_phase = ExecutionPhase.LLM
-            agent.show_phase_banner("LLM autofill (3/4)")
-            logger.info(
-                "Phase 3/4: LLM agent (phases 1–2 complete)",
-                phase=ExecutionPhase.LLM,
-            )
-
-            MAX_ASK_LOOPS = 3
-            loop_count = 0
             executor = ToolExecutor(
                 page, logger, memory=memory,
                 synonym_resolver=synonym_resolver,
                 ats_type=state.detected_ats,
                 ats_handler=rules_handler,
             )
+
+            # ── Phase 2b/5: Memory prefill (before LLM) ───────────────────
+            enriched_gaps, _ = self._run_memory_prefill(
+                page, ax_tree, extractor, executor, memory,
+                synonym_resolver, state, logger, agent,
+            )
+
+            # ── Phase 3/5: LLM agent loop ─────────────────────────────────
+            logger.log_phase_start(ExecutionPhase.LLM)
+            state.current_phase = ExecutionPhase.LLM
+            agent.show_phase_banner("LLM autofill (3/5)")
+            logger.info(
+                "Phase 3/5: LLM agent (extension, rules, memory prefill complete)",
+                phase=ExecutionPhase.LLM,
+            )
+
+            MAX_ASK_LOOPS = 3
+            loop_count = 0
             results: dict = {}
             performed_uploads: set = set()
 
@@ -2719,7 +2833,23 @@ class ApplicationEngine:
                 except Exception:
                     pass
 
-                memory_context = memory.build_llm_context(state.detected_ats) or ""
+                ax_tree, enriched_gaps = self._run_memory_prefill(
+                    page, ax_tree, extractor, executor, memory,
+                    synonym_resolver, state, logger, agent,
+                )
+                gap_hints = memory.build_gap_hints(
+                    enriched_gaps,
+                    self.resume,
+                    state.detected_ats,
+                    common_questions=self.common_questions,
+                )
+
+                memory_context = memory.combined_llm_memory_block(
+                    self.resume,
+                    state.detected_ats,
+                    common_questions=self.common_questions,
+                    gap_hints=gap_hints,
+                )
                 prefilled_snapshot = self._snapshot_filled(page)
                 prefilled_fields = self._build_prefilled_field_lines(
                     prefilled_snapshot, ax_tree
@@ -2743,6 +2873,8 @@ class ApplicationEngine:
                         resume_pdf_path=resume_pdf_path,
                         extra_gap_labels=_unselected_required_dropdowns(page),
                         prefilled_field_lines=prefilled_fields or None,
+                        enriched_gaps=enriched_gaps or None,
+                        gap_hints=gap_hints or None,
                     )
                 except TLSConnectionError as tls_err:
                     agent.show_error(
@@ -3087,8 +3219,6 @@ class ApplicationEngine:
                 # the same ATS) can short-circuit element discovery.
                 page_domain = _safe_domain(page.url)
                 for action in llm_response.actions:
-                    if action.field_label and action.value:
-                        memory.save_field_answer(action.field_label, action.value, state.detected_ats)
                     action_success = results.get(f"action_{llm_response.actions.index(action)}_{action.action.value}", False)
                     if action_success and action.value and action.action in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT):
                         label = action.field_label or action.selector
@@ -3608,10 +3738,26 @@ class ApplicationEngine:
 
                 logger.save_structured_dom(ax_tree.model_dump(), f"ax_tree_page_{page_count}", ExecutionPhase.LLM)
 
+                ax_tree, enriched_gaps = self._run_memory_prefill(
+                    page, ax_tree, extractor, executor, memory,
+                    synonym_resolver, state, logger, agent,
+                )
+                gap_hints = memory.build_gap_hints(
+                    enriched_gaps,
+                    self.resume,
+                    state.detected_ats,
+                    common_questions=self.common_questions,
+                )
+
                 filled_context = ""
                 if filled_fields:
                     filled_context = "\n\n## ALREADY FILLED FIELDS (DO NOT re-fill these — they were set by the autofill extension):\n" + "\n".join(filled_fields)
-                memory_context = (memory.build_llm_context(state.detected_ats) or "") + filled_context
+                memory_context = memory.combined_llm_memory_block(
+                    self.resume,
+                    state.detected_ats,
+                    common_questions=self.common_questions,
+                    gap_hints=gap_hints,
+                ) + filled_context
 
                 llm_response = llm_client.analyze_page_from_axtree(
                     ax_tree, self.resume, task="fill_empty_fields_only",
@@ -3620,6 +3766,8 @@ class ApplicationEngine:
                     resume_pdf_path=resume_pdf_path,
                     extra_gap_labels=_unselected_required_dropdowns(page),
                     prefilled_field_lines=filled_fields or None,
+                    enriched_gaps=enriched_gaps or None,
+                    gap_hints=gap_hints or None,
                 )
                 if not llm_response:
                     break

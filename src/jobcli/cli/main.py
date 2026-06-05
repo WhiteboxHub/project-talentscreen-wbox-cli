@@ -1179,56 +1179,135 @@ def resume_upload(
 @app.command()
 def questions() -> None:
     """Pre-fill answers to common application questions."""
-    console.print("[bold cyan]Common Application Questions[/bold cyan]\n")
+    # region agent log
+    def _dbg_qlog(hypothesis_id: str, location: str, message: str, data: dict | None = None) -> None:
+        import json as _json
+        import time as _time
 
-    # Load existing answers if any
-    db = get_database()
-    session = db.get_session()
-    user_data_repo = UserDataRepository(session)
+        try:
+            log_path = Path(__file__).resolve().parents[4] / "debug-1c8a12.log"
+            payload = {
+                "sessionId": "1c8a12",
+                "runId": "pre-fix",
+                "hypothesisId": hypothesis_id,
+                "location": location,
+                "message": message,
+                "data": data or {},
+                "timestamp": int(_time.time() * 1000),
+            }
+            with open(log_path, "a", encoding="utf-8") as _f:
+                _f.write(_json.dumps(payload) + "\n")
+        except Exception:
+            pass
 
-    existing = user_data_repo.get_questions()
+    _dbg_qlog("E", "main.py:questions:entry", "questions command entered", {
+        "stdin_isatty": sys.stdin.isatty(),
+        "stdout_isatty": sys.stdout.isatty(),
+        "executable": sys.executable,
+    })
+    # endregion
 
-    questions_data = CommonQuestions()
+    try:
+        console.print("[bold cyan]Common Application Questions[/bold cyan]\n")
 
-    # Prompt for each question
-    questions_data.salary_expectations = Prompt.ask(
-        "Salary expectations",
-        default=existing.salary_expectations if existing else "",
-        show_default=True,
-    )
+        # Load existing answers if any
+        db = get_database()
+        session = db.get_session()
+        user_data_repo = UserDataRepository(session)
 
-    questions_data.notice_period = Prompt.ask(
-        "Notice period",
-        default=existing.notice_period if existing else "",
-    )
+        # region agent log
+        _dbg_qlog("A", "main.py:questions:before_get", "loading existing questions from DB", {
+            "db_path": str(resolve_active_sqlite_database_path()),
+        })
+        # endregion
 
-    willing_relocate = Confirm.ask(
-        "Willing to relocate?",
-        default=existing.willing_to_relocate if existing else None,
-    )
-    questions_data.willing_to_relocate = willing_relocate
+        existing = user_data_repo.get_questions()
 
-    questions_data.remote_preference = Prompt.ask(
-        "Remote work preference",
-        choices=["remote", "hybrid", "onsite", "flexible"],
-        default=existing.remote_preference if existing else "flexible",
-    )
+        # region agent log
+        _dbg_qlog("A", "main.py:questions:after_get", "loaded existing questions", {
+            "has_existing": existing is not None,
+            "remote_preference": getattr(existing, "remote_preference", None) if existing else None,
+            "willing_to_relocate": getattr(existing, "willing_to_relocate", None) if existing else None,
+        })
+        # endregion
 
-    questions_data.start_date = Prompt.ask(
-        "Available start date",
-        default=existing.start_date if existing else "",
-    )
+        questions_data = CommonQuestions()
 
-    questions_data.referral = Prompt.ask(
-        "Referral (if any)",
-        default=existing.referral if existing else "",
-    )
+        # Prompt for each question
+        questions_data.salary_expectations = Prompt.ask(
+            "Salary expectations",
+            default=existing.salary_expectations if existing else "",
+            show_default=True,
+        )
 
-    # Save
-    user_data_repo.save_questions(questions_data)
-    session.close()
+        questions_data.notice_period = Prompt.ask(
+            "Notice period",
+            default=existing.notice_period if existing else "",
+        )
 
-    console.print("\n[bold green]✓ Answers saved successfully[/bold green]")
+        # region agent log
+        _dbg_qlog("B", "main.py:questions:before_relocate", "about to prompt willing_to_relocate", {
+            "default": existing.willing_to_relocate if existing else None,
+            "stdin_isatty": sys.stdin.isatty(),
+        })
+        # endregion
+
+        willing_relocate = Confirm.ask(
+            "Willing to relocate?",
+            default=existing.willing_to_relocate if existing else None,
+        )
+        questions_data.willing_to_relocate = willing_relocate
+
+        # region agent log
+        remote_default = existing.remote_preference if existing else "flexible"
+        _dbg_qlog("F", "main.py:questions:before_remote", "about to prompt remote_preference", {
+            "default": remote_default,
+            "default_in_choices": remote_default in ["remote", "hybrid", "onsite", "flexible"],
+        })
+        # endregion
+
+        questions_data.remote_preference = Prompt.ask(
+            "Remote work preference",
+            choices=["remote", "hybrid", "onsite", "flexible"],
+            default=remote_default,
+        )
+
+        questions_data.start_date = Prompt.ask(
+            "Available start date",
+            default=existing.start_date if existing else "",
+        )
+
+        questions_data.referral = Prompt.ask(
+            "Referral (if any)",
+            default=existing.referral if existing else "",
+        )
+
+        # region agent log
+        _dbg_qlog("D", "main.py:questions:before_save", "about to save questions", {
+            "salary_set": bool(questions_data.salary_expectations),
+            "notice_set": bool(questions_data.notice_period),
+            "willing_to_relocate": questions_data.willing_to_relocate,
+            "remote_preference": questions_data.remote_preference,
+        })
+        # endregion
+
+        # Save
+        user_data_repo.save_questions(questions_data)
+        session.close()
+
+        # region agent log
+        _dbg_qlog("D", "main.py:questions:after_save", "questions saved successfully")
+        # endregion
+
+        console.print("\n[bold green]✓ Answers saved successfully[/bold green]")
+    except Exception as exc:
+        # region agent log
+        _dbg_qlog("A", "main.py:questions:exception", "questions command failed", {
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        })
+        # endregion
+        raise
 
 
 def _run_apply(

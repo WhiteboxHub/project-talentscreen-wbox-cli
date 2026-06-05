@@ -1150,6 +1150,21 @@ class FieldAnswerRepository:
             .first()
         )
 
+    def get_trusted_human_answer(
+        self, normalized_label: str, ats_type: ATSType
+    ) -> Optional[FieldAnswerModel]:
+        """Return a human/user-sourced answer without the automation confidence gate."""
+        return (
+            self.session.query(FieldAnswerModel)
+            .filter(
+                FieldAnswerModel.normalized_label == normalized_label,
+                FieldAnswerModel.ats_type == ats_type,
+                FieldAnswerModel.source.in_(_HIGH_TRUST_SOURCES),
+            )
+            .order_by(FieldAnswerModel.updated_at.desc())
+            .first()
+        )
+
 
 class InteractionLogRepository:
     """Repository for interaction event tracking."""
