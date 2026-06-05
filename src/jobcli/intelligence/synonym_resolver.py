@@ -11,7 +11,7 @@ from typing import Any, Optional
 
 from jobcli.profile.derived_profile import derived_country_for_resume, derived_pronouns_for_resume
 from jobcli.profile.resume_normalize import normalize_linkedin_url
-from jobcli.profile.schemas import ResumeData, coerce_gpa_value
+from jobcli.profile.schemas import CommonQuestions, ResumeData, coerce_gpa_value
 
 
 def _pick_education_gpa(low_edu: dict[str, Any]) -> Optional[float]:
@@ -402,7 +402,10 @@ class SynonymResolver:
         return None
 
     def get_resume_value(
-        self, field_key: str, resume: ResumeData
+        self,
+        field_key: str,
+        resume: ResumeData,
+        common_questions: Optional[CommonQuestions] = None,
     ) -> Optional[str]:
         """Get the value from ResumeData for a normalized field key.
 
@@ -411,10 +414,16 @@ class SynonymResolver:
         Args:
             field_key: Internal field key (from resolve_field_label).
             resume: The user's resume data.
+            common_questions: Optional pre-set answers from ``wboxcli questions``.
 
         Returns:
             Value string, or None if not available.
         """
+        if common_questions:
+            cq_val = self._common_questions_value(field_key, common_questions)
+            if cq_val:
+                return cq_val
+
         mapping: dict[str, Any] = {
             "first_name": lambda r: r.personal.first_name,
             "last_name": lambda r: r.personal.last_name,
@@ -508,6 +517,28 @@ class SynonymResolver:
             return str(value) if value is not None else None
         except (IndexError, AttributeError):
             return None
+
+    @staticmethod
+    def _common_questions_value(
+        field_key: str, common_questions: CommonQuestions
+    ) -> Optional[str]:
+        """Map canonical field keys to ``CommonQuestions`` CLI answers."""
+        cq_map: dict[str, Any] = {
+            "notice_period": common_questions.notice_period,
+            "salary": common_questions.salary_expectations,
+            "start_date": common_questions.start_date,
+            "referral": common_questions.referral,
+            "cover_letter": common_questions.cover_letter,
+            "willing_to_relocate": common_questions.willing_to_relocate,
+            "remote_preference": common_questions.remote_preference,
+        }
+        raw = cq_map.get(field_key)
+        if raw is None:
+            return None
+        if isinstance(raw, bool):
+            return "Yes" if raw else "No"
+        text = str(raw).strip()
+        return text or None
 
     @staticmethod
     def _pronouns_value(resume: ResumeData) -> Optional[str]:

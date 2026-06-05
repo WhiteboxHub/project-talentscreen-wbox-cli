@@ -4,7 +4,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from jobcli.profile.schemas import ATSType, ResumeData, SelectorType
+from jobcli.profile.schemas import ATSType, CommonQuestions, ResumeData, SelectorType
 from jobcli.intelligence.synonym_resolver import SynonymResolver
 from jobcli.storage.models import DropdownStrategyModel
 from jobcli.storage.repositories import (
@@ -98,14 +98,20 @@ class AgentMemory:
         return True
 
     def get_best_answer(
-        self, field_label: str, ats_type: ATSType, resume: Optional[ResumeData] = None
+        self,
+        field_label: str,
+        ats_type: ATSType,
+        resume: Optional[ResumeData] = None,
+        common_questions: Optional[CommonQuestions] = None,
     ) -> tuple[Optional[str], str]:
         """Get the best answer for a field following the priority chain.
 
-        Priority 1: Resume JSON
+        Priority 1: Resume JSON + CommonQuestions
         Priority 2: Saved memory for this ATS  (confidence-gated)
         Priority 3: Universal saved memory      (confidence-gated)
-        Priority 4: Not found → caller falls through to LLM
+        Priority 4: UNKNOWN ATS row (cross-platform generic questions)
+        Priority 5: Trusted human answer (high-trust source, any success count)
+        Priority 6: Not found → caller falls through to LLM
 
         Returns:
             Tuple of (value, source_type)
@@ -117,9 +123,11 @@ class AgentMemory:
         if not normalized:
             normalized = field_label.lower().strip()
 
-        # Priority 1: Resume JSON
+        # Priority 1: Resume JSON + CommonQuestions
         if resume and normalized:
-            resume_val = self.synonym_resolver.get_resume_value(normalized, resume)
+            resume_val = self.synonym_resolver.get_resume_value(
+                normalized, resume, common_questions=common_questions
+            )
             if resume_val:
                 return resume_val, "resume_json"
 
@@ -133,7 +141,25 @@ class AgentMemory:
         if universal:
             return universal.value, "universal_memory"
 
-        # Priority 4: Not found — caller should invoke LLM
+        # Priority 4: Explicit UNKNOWN ATS bucket
+        if ats_type != ATSType.UNKNOWN:
+            unknown_row = self.field_answer_repo.get_by_normalized_label(
+                normalized, ATSType.UNKNOWN
+            )
+            if unknown_row:
+                return unknown_row.value, "universal_memory"
+
+        # Priority 5: Trusted human rows below the automation confidence gate
+        trusted = self.field_answer_repo.get_trusted_human_answer(normalized, ats_type)
+        if trusted:
+            return trusted.value, "saved_memory"
+        if ats_type != ATSType.UNKNOWN:
+            trusted_any = self.field_answer_repo.get_trusted_human_answer(
+                normalized, ATSType.UNKNOWN
+            )
+            if trusted_any:
+                return trusted_any.value, "universal_memory"
+
         return None, "not_found"
 
     def record_field_outcome(
@@ -309,7 +335,10 @@ class AgentMemory:
         return "\n".join(context_lines)
 
     def build_resolved_fields_context(
-        self, resume: ResumeData, ats_type: ATSType
+        self,
+        resume: ResumeData,
+        ats_type: ATSType,
+        common_questions: Optional[CommonQuestions] = None,
     ) -> str:
         """Human-readable lines: canonical field → value (resume first, then DB memory)."""
         hints = [
@@ -321,6 +350,8 @@ class AgentMemory:
             "State",
             "Country",
             "Location",
+            "Notice Period",
+            "Salary",
             "Gender",
             "Pronouns",
             "Sexual orientation",
@@ -337,7 +368,9 @@ class AgentMemory:
         ]
         any_line = False
         for hint in hints:
-            val, src = self.get_best_answer(hint, ats_type, resume)
+            val, src = self.get_best_answer(
+                hint, ats_type, resume, common_questions=common_questions
+            )
             if val:
                 any_line = True
                 lines.append(f"- **{hint}**: {val} _(source: {src})_")
@@ -345,8 +378,49 @@ class AgentMemory:
             return "## Resolved field values: _(none yet — use User Information JSON in prompt)_"
         return "\n".join(lines)
 
-    def combined_llm_memory_block(self, resume: ResumeData, ats_type: ATSType) -> str:
+    def build_gap_hints(
+        self,
+        gaps: list[dict],
+        resume: ResumeData,
+        ats_type: ATSType,
+        common_questions: Optional[CommonQuestions] = None,
+    ) -> str:
+        """Per-gap known answers for the LLM auditor (current page only)."""
+        lines: list[str] = ["## KNOWN ANSWERS FOR CURRENT GAPS"]
+        any_line = False
+        for gap in gaps:
+            label = (gap.get("label") or "").strip()
+            if not label:
+                continue
+            suggested = gap.get("suggested_value")
+            source = gap.get("suggested_source")
+            if suggested:
+                any_line = True
+                lines.append(f"- '{label}' → '{suggested}' (source: {source})")
+                continue
+            val, src = self.get_best_answer(
+                label, ats_type, resume, common_questions=common_questions
+            )
+            if val:
+                any_line = True
+                lines.append(f"- '{label}' → '{val}' (source: {src})")
+        if not any_line:
+            return ""
+        return "\n".join(lines)
+
+    def combined_llm_memory_block(
+        self,
+        resume: ResumeData,
+        ats_type: ATSType,
+        common_questions: Optional[CommonQuestions] = None,
+        gap_hints: str = "",
+    ) -> str:
         """Full block for LLM prompts: structured resolutions + learned field answers."""
-        resolved = self.build_resolved_fields_context(resume, ats_type)
+        resolved = self.build_resolved_fields_context(
+            resume, ats_type, common_questions=common_questions
+        )
         learned = self.build_llm_context(ats_type)
-        return f"{resolved}\n\n{learned}"
+        parts = [resolved, learned]
+        if gap_hints and gap_hints.strip():
+            parts.append(gap_hints.strip())
+        return "\n\n".join(parts)

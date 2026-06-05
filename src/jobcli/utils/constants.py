@@ -16,7 +16,8 @@ SUPPORTED_DOMAINS = [
     "jobvite.com", 
     "applytojob.com", 
     "linkedin.com",
-    "bamboohr.com"
+    "bamboohr.com",
+    "paylocity.com",
 ]
 
 # Dashboard reporting settings

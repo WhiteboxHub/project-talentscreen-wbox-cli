@@ -2,9 +2,9 @@
 
 import pytest
 
-from jobcli.core.schemas import ATSType
+from jobcli.intelligence.memory import AgentMemory
+from jobcli.profile.schemas import ATSType, PersonalInfo, ResumeData, WorkAuthorization
 from jobcli.storage.models import Database
-from jobcli.core.memory import AgentMemory
 from jobcli.storage.repositories import FieldAnswerRepository, SyncMetadataRepository
 from jobcli.sync.constants import CONFIDENCE_THRESHOLD, MIN_SUCCESS_COUNT
 
@@ -42,6 +42,7 @@ def _pump_successes(session, normalized_label, ats_type, value, n=MIN_SUCCESS_CO
             value=value,
             ats_type=ats_type,
             success=True,
+            source="llm",
         )
 
 
@@ -56,7 +57,7 @@ class TestGetBestAnswerConfidenceGate:
         repo = FieldAnswerRepository(session)
         repo.save_answer(
             "Work Style", "work style", "Remote",
-            ATSType.GREENHOUSE, success=True,
+            ATSType.GREENHOUSE, success=True, source="llm",
         )
         val, src = memory.get_best_answer("Work Style", ATSType.GREENHOUSE)
         assert val is None
@@ -72,7 +73,6 @@ class TestGetBestAnswerConfidenceGate:
 
     def test_resume_always_returned_regardless_of_confidence(self, memory):
         """Resume JSON bypasses the confidence gate entirely (Priority 1)."""
-        from jobcli.core.schemas import ResumeData, PersonalInfo, WorkAuthorization
         resume = ResumeData(
             personal=PersonalInfo(
                 first_name="Alice",
@@ -91,7 +91,7 @@ class TestGetBestAnswerConfidenceGate:
         repo = FieldAnswerRepository(session)
         # Only 1 hit — below gate
         repo.save_answer("Sponsorship Required", "sponsor_req", "No",
-                         ATSType.UNKNOWN, success=True)
+                         ATSType.UNKNOWN, success=True, source="llm")
         val, src = memory.get_best_answer("Sponsorship Required", ATSType.GREENHOUSE)
         assert val is None
 
@@ -142,7 +142,7 @@ class TestRecordFieldOutcome:
         """record_field_outcome with success=True increments success_count."""
         repo = FieldAnswerRepository(session)
         # Insert a row with known normalized_label
-        repo.save_answer("Work Auth", "work auth", "Yes", ATSType.GREENHOUSE, success=True)
+        repo.save_answer("Work Auth", "work auth", "Yes", ATSType.GREENHOUSE, success=True, source="llm")
         # record_outcome via memory (uses synonym_resolver → same normalized key)
         memory.record_field_outcome("Work Auth", "Yes", success=True, ats_type=ATSType.GREENHOUSE)
         row = repo.get_raw_by_label("work auth", ATSType.GREENHOUSE)
@@ -152,7 +152,7 @@ class TestRecordFieldOutcome:
     def test_failure_increments_failure_count(self, memory, session):
         """record_field_outcome with success=False increments failure_count."""
         repo = FieldAnswerRepository(session)
-        repo.save_answer("Work Auth", "work auth", "Yes", ATSType.GREENHOUSE, success=True)
+        repo.save_answer("Work Auth", "work auth", "Yes", ATSType.GREENHOUSE, success=True, source="llm")
         memory.record_field_outcome("Work Auth", "Yes", success=False, ats_type=ATSType.GREENHOUSE)
         row = repo.get_raw_by_label("work auth", ATSType.GREENHOUSE)
         assert row is not None
@@ -161,7 +161,7 @@ class TestRecordFieldOutcome:
     def test_confidence_updated_by_outcome(self, memory, session):
         """Confidence is recomputed after recording an outcome."""
         repo = FieldAnswerRepository(session)
-        repo.save_answer("Avail", "avail", "Now", ATSType.WORKDAY, success=True)
+        repo.save_answer("Avail", "avail", "Now", ATSType.WORKDAY, success=True, source="llm")
         # 2nd success via outcome
         memory.record_field_outcome("Avail", "Now", success=True, ats_type=ATSType.WORKDAY)
         # 1 failure via outcome
@@ -206,7 +206,7 @@ class TestBuildLLMContext:
         """Low-confidence records must not appear in the LLM context block."""
         repo = FieldAnswerRepository(session)
         # 1 hit only — below gate
-        repo.save_answer("Secret", "secret", "xyz", ATSType.GREENHOUSE, success=True)
+        repo.save_answer("Secret", "secret", "xyz", ATSType.GREENHOUSE, success=True, source="llm")
         ctx = memory.build_llm_context(ATSType.GREENHOUSE)
         assert "xyz" not in ctx
 
@@ -219,6 +219,33 @@ class TestBuildLLMContext:
     def test_empty_context_returns_fallback_message(self, memory):
         ctx = memory.build_llm_context(ATSType.GREENHOUSE)
         assert "No high-confidence memory" in ctx
+
+
+class TestHumanSeededPrefillReuse:
+    """Human-sourced answers are reusable on first prefill (seeded at MIN_SUCCESS_COUNT)."""
+
+    def test_single_human_save_passes_confidence_gate(self, memory, session):
+        memory.save_field_answer("Notice Period", "30 days", ATSType.WORKDAY, source="human")
+        val, src = memory.get_best_answer("Current notice period", ATSType.WORKDAY)
+        assert val == "30 days"
+        assert src == "saved_memory"
+
+    def test_build_gap_hints_from_enriched_gaps(self, memory, session):
+        memory.save_field_answer("Notice Period", "30 days", ATSType.WORKDAY, source="human")
+        gaps = [
+            {
+                "label": "Notice Period",
+                "suggested_value": "30 days",
+                "suggested_source": "saved_memory",
+            }
+        ]
+        hints = memory.build_gap_hints(
+            gaps,
+            ResumeData(personal=PersonalInfo(first_name="A", last_name="B", email="a@b.com")),
+            ATSType.WORKDAY,
+        )
+        assert "Notice Period" in hints
+        assert "30 days" in hints
 
 
 if __name__ == "__main__":

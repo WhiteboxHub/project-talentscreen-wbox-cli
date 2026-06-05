@@ -143,6 +143,7 @@ class AgentInterface:
         self.resume = resume
         self.ats_type = ats_type
         self.is_server = is_server
+        self.common_questions = None
         self.console = ProxyConsole(logger=logger)
         # Track which (label, value) pairs we already saved this session — avoids
         # re-saving the same answer many times during multi-page form loops.
@@ -421,6 +422,7 @@ class AgentInterface:
         memory: Optional["AgentMemory"] = None,
         resume: Optional[ResumeData] = None,
         ats_type: Optional[ATSType] = None,
+        common_questions: Optional["CommonQuestions"] = None,
     ) -> None:
         """Update memory / resume / ats_type after construction (e.g. once detected)."""
         if memory is not None:
@@ -429,6 +431,8 @@ class AgentInterface:
             self.resume = resume
         if ats_type is not None:
             self.ats_type = ats_type
+        if common_questions is not None:
+            self.common_questions = common_questions
 
     @staticmethod
     def _strip_prompt_markup(field_label: str) -> str:
@@ -485,11 +489,18 @@ class AgentInterface:
         if not self.memory or not field_label:
             return None, "not_found"
         value, source = self.memory.get_best_answer(
-            self._strip_prompt_markup(field_label), self.ats_type, self.resume
+            self._strip_prompt_markup(field_label),
+            self.ats_type,
+            self.resume,
+            common_questions=getattr(self, "common_questions", None),
         )
         if value and is_reserved_form_value(value):
             return None, "not_found"
         return value, source
+
+    def resolve_memory_silent(self, field_label: str) -> tuple[Optional[str], str]:
+        """DB lookup without terminal prompt — safe for AUTO mode."""
+        return self.lookup_db_answer(field_label)
 
     def persist_human_answer(self, field_label: str, value: str) -> bool:
         """Save a human-supplied answer to the DB so future jobs can reuse it."""
@@ -506,6 +517,11 @@ class AgentInterface:
         saved = self.memory.save_field_answer(
             field_label, value, self.ats_type, success=True, source="human"
         )
+        # Cross-ATS reuse for generic questions (notice period, salary, etc.)
+        if saved and self.memory.synonym_resolver.resolve_field_label(field_label):
+            self.memory.save_field_answer(
+                field_label, value, ATSType.UNKNOWN, success=True, source="human"
+            )
         if saved and self.logger:
             self.logger.info(
                 f"Saved human answer for '{field_label}' to DB.",
@@ -1215,6 +1231,10 @@ class AgentInterface:
                     f"DB hit for field '{clean_label}' (source={source}).",
                     phase=ExecutionPhase.HUMAN,
                 )
+            from jobcli.utils.form_sync import apply_field_value
+
+            if self.page and apply_field_value(self.page, clean_label, cached, options):
+                self.show_success(f"Filled '{clean_label}' from memory")
             return cached
 
         if self.mode == InteractionMode.AUTO and not self.is_server:

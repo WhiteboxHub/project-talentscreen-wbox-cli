@@ -145,6 +145,7 @@ Prior automation steps (Chrome extension autofill and static rules engines) have
 6. **Work authorization:** Use only resume JSON and agent memory; never contradict them.
 7. **Uploads:** Use `upload` with `value` = `resume_file_path` from user JSON for Resume/CV fields only — not "Autofill with Resume" parse buttons.
 8. **Required before navigation:** Do not click Next/Continue/Submit until required gaps would be filled by your actions.
+9. **Suggested values:** When a gap includes `suggested_value`, use that exact string as `value`. Do not invent alternatives.
 
 # Output Format
 Return a single JSON object (no markdown fences). Lowercase action names only.
@@ -563,6 +564,8 @@ Remember to return valid JSON matching the schema in the system prompt.
         resume_pdf_path: Optional[str] = None,
         extra_gap_labels: Optional[list[str]] = None,
         prefilled_field_lines: Optional[list[str]] = None,
+        enriched_gaps: Optional[list[dict[str, Any]]] = None,
+        gap_hints: Optional[str] = None,
     ) -> Optional[LLMActionResponse]:
         """Analyze page using Accessibility Tree (more token efficient)."""
         use_auditor = is_auditor_fill_task(task)
@@ -587,6 +590,8 @@ Remember to return valid JSON matching the schema in the system prompt.
                 resume_pdf_path,
                 extra_gap_labels=extra_gap_labels,
                 prefilled_field_lines=prefilled_field_lines,
+                enriched_gaps=enriched_gaps,
+                gap_hints=gap_hints,
             )
         else:
             user_prompt = self._build_axtree_prompt(
@@ -685,14 +690,19 @@ Remember to return valid JSON matching the schema in the system prompt.
         *,
         extra_gap_labels: Optional[list[str]] = None,
         prefilled_field_lines: Optional[list[str]] = None,
+        enriched_gaps: Optional[list[dict[str, Any]]] = None,
+        gap_hints: Optional[str] = None,
     ) -> str:
         """Build gap-focused user prompt for the Form-Filling Auditor."""
         user_info = self._resume_user_info(resume, resume_pdf_path)
-        empty_fields = build_empty_fields_payload(
-            ax_tree,
-            dropdown_options=dropdown_options,
-            extra_gap_labels=extra_gap_labels,
-        )
+        if enriched_gaps is not None:
+            empty_fields = enriched_gaps
+        else:
+            empty_fields = build_empty_fields_payload(
+                ax_tree,
+                dropdown_options=dropdown_options,
+                extra_gap_labels=extra_gap_labels,
+            )
 
         dropdown_context = ""
         if dropdown_options:
@@ -730,6 +740,10 @@ Remember to return valid JSON matching the schema in the system prompt.
                 "you see a required upload in the aria excerpt.\n"
             )
 
+        gap_hints_block = ""
+        if gap_hints and gap_hints.strip():
+            gap_hints_block = f"\n{gap_hints.strip()}\n"
+
         return f"""Task: {task}
 Page URL: {ax_tree.url}
 Page Title: {ax_tree.title}
@@ -744,7 +758,7 @@ Page Title: {ax_tree.title}
 <AGENT_MEMORY>
 {memory_context or "No previous memory available."}
 </AGENT_MEMORY>
-
+{gap_hints_block}
 ## TARGET GAPS (required empty / unselected fields — your only fill targets)
 <EMPTY_FIELDS>
 {json.dumps(empty_fields, indent=2)}

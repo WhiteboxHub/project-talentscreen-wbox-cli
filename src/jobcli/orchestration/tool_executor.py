@@ -958,8 +958,20 @@ class ToolExecutor:
             count = min(opts.count(), 50)
             if count == 0:
                 return False
-            # Try exact match first, then starts-with, then contains
-            val_lower = value.lower()
+            option_texts: list[str] = []
+            for i in range(count):
+                try:
+                    text = (opts.nth(i).text_content() or "").strip()
+                    if text:
+                        option_texts.append(text)
+                except Exception:
+                    continue
+            pick_value = value
+            if self.synonym_resolver and option_texts:
+                matched = self.synonym_resolver.find_best_option(value, option_texts)
+                if matched:
+                    pick_value = matched
+            val_lower = pick_value.lower()
             for strategy in ("exact", "starts", "contains"):
                 for i in range(count):
                     try:
@@ -980,6 +992,20 @@ class ToolExecutor:
             pass
         return False
 
+    def _combobox_selection_verified(self, loc, expected: str) -> bool:
+        """Return True when *loc* shows a meaningful value after selection."""
+        from jobcli.utils.fill_guard import is_meaningful_value, read_locator_value
+
+        try:
+            current = read_locator_value(loc)
+            if not is_meaningful_value(current):
+                return False
+            exp = (expected or "").strip().lower()
+            cur = str(current).strip().lower()
+            return exp in cur or cur in exp
+        except Exception:
+            return False
+
     def _click_and_fill_combobox(self, loc, value: str) -> bool:
         """Click a combobox/select element, type the value, then pick the best option."""
         try:
@@ -989,12 +1015,13 @@ class ToolExecutor:
             self.page.keyboard.type(value, delay=30)
             self.page.wait_for_timeout(600)
             if self._pick_dropdown_option(value):
-                return True
+                return self._combobox_selection_verified(loc, value)
             # No visible options found — try ArrowDown + Enter (works for some ATS)
             self.page.keyboard.press("ArrowDown")
             self.page.wait_for_timeout(200)
             self.page.keyboard.press("Enter")
-            return True
+            self.page.wait_for_timeout(300)
+            return self._combobox_selection_verified(loc, value)
         except Exception:
             return False
 
