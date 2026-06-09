@@ -128,7 +128,7 @@ def send_daily_report(session: Session, owner_email: str) -> None:
     
     try:
         response = requests.get(
-            f"{backend_url.split('/api')[0].rstrip('/')}/api/analytics/daily-summary",
+            f"{backend_url.rstrip('/')}/api/analytics/daily-summary".replace("/api/api/", "/api/"),
             headers=headers
         )
         response.raise_for_status()
