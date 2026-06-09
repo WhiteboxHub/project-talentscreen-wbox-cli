@@ -771,12 +771,18 @@ class ToolExecutor:
                     # Humanised entry path — every step mirrors what a real
                     # user does, with randomised timing so ATS spam
                     # classifiers (Ashby, Greenhouse, Cloudflare) don't
-                    # flag the submission.  The common failure mode BEFORE
-                    # this was: click → fill("") → press_sequentially at a
-                    # fixed 35ms/char → instant Tab.  That happens in ~3s
-                    # for an entire form and is indistinguishable from a
-                    # bot to anyone monitoring keystroke cadence.
-                    self._humanized_fill(loc, str(action.value))
+                    # flag the submission.
+                    fill_val = str(action.value)
+                    
+                    # Prevent leading +1 on phone inputs (country code dropdowns already handle it)
+                    if re.search(r"phone|mobile|tel|cell", name, re.IGNORECASE):
+                        try:
+                            from jobcli.utils.phone_utils import bare_national_number
+                            fill_val = bare_national_number(fill_val) or fill_val
+                        except Exception:
+                            pass
+
+                    self._humanized_fill(loc, fill_val)
                 except Exception:
                     # Last resort: only synthesise events if real typing
                     # wasn't possible (e.g. the element intercepts
