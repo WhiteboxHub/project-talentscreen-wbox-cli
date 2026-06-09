@@ -243,7 +243,15 @@ class GreenhouseHandler(GenericATSHandler):
                 results[field_name] = False
                 continue
             try:
-                self.humanized_fill(self.page.locator(selector).first, value)
+                # Phone: use bare national digits to avoid leading-0 bug
+                fill_val = value
+                if field_name == "phone":
+                    try:
+                        from jobcli.utils.phone_utils import bare_national_number
+                        fill_val = bare_national_number(value) or value
+                    except Exception:
+                        pass
+                self.humanized_fill(self.page.locator(selector).first, fill_val)
                 results[field_name] = True
                 if self.logger:
                     self.logger.info(

@@ -675,9 +675,33 @@ class FormFiller:
 
         Uses confidence scoring first; falls back to legacy label matching
         for any field that scores below threshold.
+
+        For phone fields, also attempts to fill the country-code dropdown
+        (selecting +1 for US/Canada) before filling the number input.
         """
         results: dict[str, bool] = {}
         personal = self.resume.personal
+
+        # ── Phone country-code dropdown: try first, before the normal fill pass
+        # Many ATS forms show a flag/country-code picker next to the phone input.
+        # We handle this separately so the bare national number goes into the text
+        # input and +1 is set in the dropdown, regardless of what format the
+        # resume JSON stores the number in.
+        if personal.phone:
+            try:
+                from jobcli.utils.phone_utils import fill_phone_with_country_code
+                phone_ok = fill_phone_with_country_code(
+                    self.page, personal.phone, self.logger
+                )
+                if phone_ok:
+                    results["phone"] = True
+                    if self.logger:
+                        self.logger.info(
+                            "Phone filled via country-code dropdown helper",
+                            phase=ExecutionPhase.RULES,
+                        )
+            except Exception:
+                pass
 
         # Map field_key (dot-path) → (short_key, value)
         field_map: list[tuple[str, str, Optional[str]]] = [
@@ -701,6 +725,12 @@ class FormFiller:
             if not value:
                 continue
 
+            # Phone already handled by country-code helper above — skip confidence
+            # scoring to avoid overwriting the correctly-filled number input with
+            # the raw resume value (which may include the +1 prefix).
+            if short_key == "phone" and results.get("phone"):
+                continue
+
             # Primary: confidence scoring
             result = self.field_locator.find_best_selector(field_key, self.resume)
             if result:
@@ -721,7 +751,19 @@ class FormFiller:
                         used_selectors.add(selector)
                         continue
 
-                    humanized_fill(self.page, loc, value)
+                    # For phone fields: ALWAYS use bare national digits (e.g. 4155550192).
+                    # Never use +14155550192 — ATS phone inputs that have a country-code
+                    # dropdown/overlay already handle +1; passing the full E.164 string
+                    # causes masking libraries to insert a spurious leading '0'.
+                    fill_value = value
+                    if short_key == "phone":
+                        try:
+                            from jobcli.utils.phone_utils import bare_national_number
+                            fill_value = bare_national_number(value) or value
+                        except Exception:
+                            pass
+
+                    humanized_fill(self.page, loc, fill_value)
                     used_selectors.add(selector)
                     results[short_key] = True
                 except Exception:
@@ -730,7 +772,14 @@ class FormFiller:
             if not results.get(short_key):
                 # Fallback: legacy label matching
                 labels = self.FIELD_LABELS.get(short_key, [short_key.replace("_", " ").title()])
-                success = self.field_locator.fill_text_field(labels, value)
+                fill_val = value
+                if short_key == "phone":
+                    try:
+                        from jobcli.utils.phone_utils import bare_national_number
+                        fill_val = bare_national_number(value) or value
+                    except Exception:
+                        pass
+                success = self.field_locator.fill_text_field(labels, fill_val)
                 results[short_key] = success
 
         return results

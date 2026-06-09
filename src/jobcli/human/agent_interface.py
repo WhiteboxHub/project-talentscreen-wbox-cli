@@ -149,7 +149,14 @@ class AgentInterface:
         # Track which (label, value) pairs we already saved this session — avoids
         # re-saving the same answer many times during multi-page form loops.
         self._saved_this_session: set[tuple[str, str]] = set()
-        
+        # Session-level question answer cache: maps normalized question text →
+        # the answer given during the CURRENT application run.  This lets the
+        # agent reuse answers for repeated questions that appear on multiple
+        # pages / steps of a multi-step ATS form *within the same session*,
+        # even before the DB confidence gate is met.  It is intentionally
+        # NOT persisted across runs (that is the DB memory's job).
+        self._session_question_cache: dict[str, str] = {}
+
         # Remote interaction support
         self._input_event = threading.Event()
         self._input_value: Optional[str] = None
@@ -1322,6 +1329,8 @@ class AgentInterface:
 
         Behaviour:
           1. If the field already has a value in the browser, return None.
+          1a. If the same question was already answered in THIS session
+              (e.g. earlier page of a multi-step form), reuse it silently.
           2. If a value is already in the DB (any source), return it silently
              — the agent never re-asks a question it has answered before.
           3. Optional fields are only prompted when ``prompt_optional=True``
@@ -1357,6 +1366,25 @@ class AgentInterface:
                 )
             return browser_val
 
+        # 0a. Session cache: same question asked earlier in THIS application run?
+        #     This fires on repeated pages of multi-step forms where the ATS
+        #     re-renders the same field (e.g. phone, LinkedIn) on every step.
+        session_key = clean_label.lower().strip()
+        session_cached = self._session_question_cache.get(session_key)
+        if session_cached:
+            self.console.print(
+                f"  [dim]Reusing session answer for [cyan]{clean_label}[/cyan]: '{session_cached}'[/dim]"
+            )
+            if self.logger:
+                self.logger.info(
+                    f"Session cache hit for field '{clean_label}'.",
+                    phase=ExecutionPhase.HUMAN,
+                )
+            from jobcli.utils.form_sync import apply_field_value
+            if self.page and apply_field_value(self.page, clean_label, session_cached, options):
+                self.show_success(f"Filled '{clean_label}' from session cache")
+            return session_cached
+
         # 1. DB-first: did we already answer this on a previous job?
         cached, source = self.lookup_db_answer(clean_label)
         if cached:
@@ -1368,6 +1396,8 @@ class AgentInterface:
                     f"DB hit for field '{clean_label}' (source={source}).",
                     phase=ExecutionPhase.HUMAN,
                 )
+            # Also store in session cache so subsequent pages get it too
+            self._session_question_cache[session_key] = cached
             from jobcli.utils.form_sync import apply_field_value
 
             if self.page and apply_field_value(self.page, clean_label, cached, options):
@@ -1430,6 +1460,8 @@ class AgentInterface:
                 f"  [dim]Using browser value for [cyan]{clean_label}[/cyan]: '{browser_val}'[/dim]"
             )
             self.persist_human_answer(clean_label, browser_val)
+            # Store in session cache so repeated pages don't ask again
+            self._session_question_cache[session_key] = browser_val
             return browser_val
 
         if not answer or is_skip_field_keyword(answer):
@@ -1441,6 +1473,8 @@ class AgentInterface:
 
         # 3. Persist and apply to the live form immediately
         self.persist_human_answer(clean_label, answer)
+        # Store in session cache so repeated questions on later pages are auto-filled
+        self._session_question_cache[session_key] = answer
         from jobcli.utils.form_sync import apply_field_value
 
         if self.page and apply_field_value(self.page, clean_label, answer, options):
