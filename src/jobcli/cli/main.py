@@ -2003,6 +2003,79 @@ def sync_cmd(
 
 
 
+@app.command("send-daily-report")
+def send_daily_report_cmd(
+    owner_email: str = typer.Option(None, "--email", help="The recipient admin email address (defaults to ADMIN_EMAIL in .env)"),
+) -> None:
+    """Generate and send the daily analytics report."""
+    from dotenv import load_dotenv
+    import os
+    load_dotenv()
+    
+    if not owner_email:
+        owner_email = os.environ.get("ADMIN_EMAIL")
+        
+    if not owner_email:
+        console.print("[red]No admin email provided. Set ADMIN_EMAIL in .env or pass --email.[/red]")
+        raise typer.Exit(1)
+        
+    console.print("[bold cyan]WboxCLI Daily Analytics Report[/bold cyan]\n")
+    from jobcli.analytics.report_mailer import send_daily_report
+    db = get_database()
+    session = db.get_session()
+    try:
+        send_daily_report(session, owner_email)
+    except Exception as exc:
+        console.print(f"[red]Failed to send report: {exc}[/red]")
+        raise typer.Exit(1)
+    finally:
+        session.close()
+
+
+@app.command("schedule-report")
+def schedule_report_cmd(
+    owner_email: str = typer.Option(None, "--email", help="The recipient admin email address (defaults to ADMIN_EMAIL in .env)"),
+    time: str = typer.Option("18:00", "--time", help="Time to send the report in HH:MM format (24-hour clock)"),
+) -> None:
+    """Setup a Windows Scheduled Task to run the daily report locally."""
+    import subprocess
+    import sys
+    import os
+    from dotenv import load_dotenv
+    
+    load_dotenv()
+    
+    if not owner_email:
+        owner_email = os.environ.get("ADMIN_EMAIL")
+        
+    if not owner_email:
+        console.print("[red]No admin email provided. Set ADMIN_EMAIL in .env or pass --email.[/red]")
+        raise typer.Exit(1)
+    
+    console.print("[bold cyan]WboxCLI Report Scheduler[/bold cyan]\n")
+    
+    # Path to the wboxcli executable
+    exe_path = sys.executable
+    if "python" in exe_path.lower():
+        exe_path = "wboxcli"
+        
+    command = f'{exe_path} send-daily-report --email {owner_email}'
+    
+    # Create the schtasks command
+    task_name = "WboxCLI_Daily_Report"
+    schtasks_cmd = [
+        "schtasks", "/Create", "/SC", "DAILY", "/TN", task_name,
+        "/TR", command, "/ST", time, "/F"
+    ]
+    
+    try:
+        subprocess.run(schtasks_cmd, capture_output=True, text=True, check=True)
+        console.print(f"[green]Successfully scheduled daily report for {time} to {owner_email}[/green]")
+    except subprocess.CalledProcessError as e:
+        console.print("[red]Failed to schedule task. Try running as Administrator.[/red]")
+        console.print(f"[red]Error: {e.stderr.strip()}[/red]")
+        raise typer.Exit(1)
+
 @app.command()
 def server() -> None:
     """Start the JobCLI web UI server."""

@@ -1429,6 +1429,22 @@ class AnalyticsEventRepository:
             "total_jobs_failed": int(total_jobs_failed),
         }
 
+    def summary_last_24h(self) -> dict[str, int]:
+        from datetime import datetime, timedelta
+        since = datetime.now() - timedelta(hours=24)
+        
+        query = self.session.query(AnalyticsEventModel).filter(AnalyticsEventModel.event_ts >= since)
+        total_events = query.count() or 0
+        total_jobs_attempted = self.session.query(func.coalesce(func.sum(AnalyticsEventModel.jobs_attempted_count), 0)).filter(AnalyticsEventModel.event_ts >= since).scalar() or 0
+        total_jobs_submitted = self.session.query(func.coalesce(func.sum(AnalyticsEventModel.jobs_submitted_count), 0)).filter(AnalyticsEventModel.event_ts >= since).scalar() or 0
+        total_jobs_failed = self.session.query(func.coalesce(func.sum(AnalyticsEventModel.jobs_failed_count), 0)).filter(AnalyticsEventModel.event_ts >= since).scalar() or 0
+        return {
+            "total_events": int(total_events),
+            "total_jobs_attempted": int(total_jobs_attempted),
+            "total_jobs_submitted": int(total_jobs_submitted),
+            "total_jobs_failed": int(total_jobs_failed),
+        }
+
     def per_user_summary(self, user_id: str) -> dict[str, Any]:
         rows = self.session.query(AnalyticsEventModel).filter(AnalyticsEventModel.user_id == user_id).all()
         return {
