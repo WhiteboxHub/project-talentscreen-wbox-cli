@@ -37,6 +37,7 @@ from jobcli.analytics.service import (
     resolve_user_id,
     track_usage_event,
 )
+from jobcli.analytics.tracker import SessionTracker
 
 app = typer.Typer(
     name="wboxcli",
@@ -1387,6 +1388,8 @@ def _run_apply(
     console.print(f"Applying to {len(jobs)} job(s)...\n")
 
     engine = ApplicationEngine(config, resume_data, db)
+    tracker = SessionTracker(backend_url=config.sync_server_url or "https://api.whitebox-learning.com")
+
 
     if checkpoint:
         full_job_ids = list(checkpoint.job_ids)
@@ -1429,6 +1432,12 @@ def _run_apply(
                     sv = getattr(status, "value", str(status)).lower()
                     if "submit" in sv or "success" in sv or "complete" in sv:
                         submitted += 1
+                        tracker.add_application(
+                            config.job_board_username or "Unknown",
+                            job.company or "Unknown",
+                            getattr(job.ats_type, 'value', 'unknown'),
+                            {}
+                        )
                     elif "skip" in sv or "cancel" in sv:
                         skipped += 1
                     else:
@@ -1481,6 +1490,7 @@ def _run_apply(
             engine.stop_session()
         except Exception as e:
             console.print(f"[dim red]Warning: error during session shutdown: {e}[/dim red]")
+        tracker.send_bulk_summary()
 
     # -----------------------------------------------------------------
     # Checkpoint + resume prompt (batch runs only)
