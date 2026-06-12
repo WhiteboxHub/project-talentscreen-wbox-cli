@@ -52,8 +52,9 @@ def db_send_daily_report(
     mock: bool = typer.Option(False, "--mock", help="Send mock report for testing"),
 ) -> None:
     """Fetch today's ATS stats from the backend and email them using CLI SMTP credentials."""
+    import os
     from jobcli.analytics.report_mailer import send_daily_report
-    server_url = "https://api.whitebox-learning.com/api"
+    server_url = os.getenv("API_URL", "https://api.whitebox-learning.com/api")
     send_daily_report(server_url, mock=mock)
 
 console = Console()
@@ -1445,8 +1446,22 @@ def _run_apply(
                         _rules = getattr(engine, "_last_rules_filled_count", 0)
                         _llm   = getattr(engine, "_last_llm_filled_count", 0)
                         _human = getattr(engine, "_last_human_filled_count", 0)
+                        # Resolve real candidate name from stored resume; fall back to email.
+                        _candidate_name = config.job_board_username or "Unknown"
+                        try:
+                            from jobcli.storage.repositories import UserDataRepository as _UDR
+                            _udr = _UDR(session)
+                            _resume = _udr.get_resume()
+                            if _resume and _resume.personal:
+                                _fn = (_resume.personal.first_name or "").strip()
+                                _ln = (_resume.personal.last_name or "").strip()
+                                _full = f"{_fn} {_ln}".strip()
+                                if _full:
+                                    _candidate_name = _full
+                        except Exception:
+                            pass
                         tracker.add_application(
-                            config.job_board_username or "Unknown",
+                            _candidate_name,
                             job.company or "Unknown",
                             getattr(job.ats_type, 'value', 'unknown'),
                             {
@@ -2034,31 +2049,13 @@ def sync_cmd(
 
 @app.command("send-daily-report")
 def send_daily_report_cmd(
-    owner_email: str = typer.Option(None, "--email", help="The recipient admin email address (defaults to ADMIN_EMAIL in .env)"),
+    mock: bool = typer.Option(False, "--mock", help="Send mock report for testing"),
 ) -> None:
-    """Generate and send the daily analytics report."""
-    from dotenv import load_dotenv
+    """Alias for 'wboxcli db send-daily-report'. Fetch today's ATS stats and email them."""
     import os
-    load_dotenv()
-    
-    if not owner_email:
-        owner_email = os.environ.get("ADMIN_EMAIL")
-        
-    if not owner_email:
-        console.print("[red]No admin email provided. Set ADMIN_EMAIL in .env or pass --email.[/red]")
-        raise typer.Exit(1)
-        
-    console.print("[bold cyan]WboxCLI Daily Analytics Report[/bold cyan]\n")
     from jobcli.analytics.report_mailer import send_daily_report
-    db = get_database()
-    session = db.get_session()
-    try:
-        send_daily_report(session, owner_email)
-    except Exception as exc:
-        console.print(f"[red]Failed to send report: {exc}[/red]")
-        raise typer.Exit(1)
-    finally:
-        session.close()
+    server_url = os.getenv("API_URL", "https://api.whitebox-learning.com/api")
+    send_daily_report(server_url, mock=mock)
 
 
 @app.command("schedule-report")
@@ -2083,23 +2080,27 @@ def schedule_report_cmd(
     
     console.print("[bold cyan]WboxCLI Report Scheduler[/bold cyan]\n")
     
-    # Path to the wboxcli executable
-    exe_path = sys.executable
-    if "python" in exe_path.lower():
-        exe_path = "wboxcli"
-        
-    command = f'{exe_path} send-daily-report --email {owner_email}'
-    
+    # Resolve the wboxcli executable path robustly.
+    # Prefer the venv-installed shim; fall back to the venv python -m jobcli.
+    import shutil
+    exe_path = shutil.which("wboxcli")
+    if exe_path:
+        command = f'"{exe_path}" db send-daily-report'
+    else:
+        # Use the current interpreter so the venv is guaranteed correct.
+        command = f'"{sys.executable}" -m jobcli db send-daily-report'
+
     # Create the schtasks command
     task_name = "WboxCLI_Daily_Report"
     schtasks_cmd = [
         "schtasks", "/Create", "/SC", "DAILY", "/TN", task_name,
         "/TR", command, "/ST", time, "/F"
     ]
-    
+
     try:
         subprocess.run(schtasks_cmd, capture_output=True, text=True, check=True)
-        console.print(f"[green]Successfully scheduled daily report for {time} to {owner_email}[/green]")
+        console.print(f"[green]Successfully scheduled daily report at {time} daily.[/green]")
+        console.print(f"[dim]Scheduled command: {command}[/dim]")
     except subprocess.CalledProcessError as e:
         console.print("[red]Failed to schedule task. Try running as Administrator.[/red]")
         console.print(f"[red]Error: {e.stderr.strip()}[/red]")
