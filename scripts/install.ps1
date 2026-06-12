@@ -86,13 +86,16 @@ Write-Step "Cloning TalentScreen extension..."
 & git clone --depth 1 $ExtUrl $ExtTmpDir --quiet 2>$null
 Write-Ok "Cloned extension to temporary location"
 
-if (Test-Path (Join-Path $SrcDir ".git")) {
+if (Test-Path (Join-Path $SrcDir ".git\HEAD")) {
     Write-Step "Existing installation found - pulling latest..."
     & git -C $SrcDir remote set-branches origin '*' 2>$null
     & git -C $SrcDir fetch origin --depth 1 $Branch --quiet 2>$null
     & git -C $SrcDir checkout -B $Branch "origin/$Branch" --quiet 2>$null
     Write-Ok "Updated to latest $Branch"
 } else {
+    if (Test-Path $SrcDir) {
+        Remove-Item -Recurse -Force $SrcDir -ErrorAction SilentlyContinue
+    }
     & git clone --branch $Branch --depth 1 $RepoUrl $SrcDir --quiet 2>$null
     Write-Ok "Cloned $Branch branch"
 }
