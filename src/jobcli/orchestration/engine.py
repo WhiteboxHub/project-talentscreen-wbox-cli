@@ -1657,6 +1657,18 @@ class ApplicationEngine:
                 else:
                     # Just a tiny delay to let the human see the success before navigating away
                     page.wait_for_timeout(1500)
+
+            # ── 7. Populate field-ownership counters on state ────────
+            # These are read by cli/main.py → tracker.add_application()
+            # to send real per-field counts to the backend.
+            state.autofill_fields = getattr(self, "_last_extension_filled_count", 0)
+            state.llm_fields = (
+                getattr(self, "_last_rules_filled_count", 0)
+                + getattr(self, "_last_llm_filled_count", 0)
+            )
+            state.human_fields = getattr(self, "_last_human_filled_count", 0)
+            state.total_fields = state.autofill_fields + state.llm_fields + state.human_fields
+
             return status
         except (InterruptedError, KeyboardInterrupt):
             # Clean stop requested via CLI
@@ -2393,12 +2405,38 @@ class ApplicationEngine:
             phase=ExecutionPhase.HUMAN,
         )
         agent.show_phase_banner("Human review (4/4)")
+
+        # ── Snapshot fields BEFORE the human takes over ───────────────
+        try:
+            _before_snap = self._snapshot_filled(agent.page)
+            _before_idents = self._snapshot_field_idents(_before_snap)
+        except Exception:
+            _before_idents = set()
+
         result = agent.handoff_to_human(
             reason=reason,
             hint=hint,
             force_block=force_block,
             submission_checker=submission_checker,
         )
+
+        # ── Snapshot fields AFTER the human is done — diff = human fills ─
+        if not result.cancelled:
+            try:
+                _after_snap = self._snapshot_filled(result.page)
+                _after_idents = self._snapshot_field_idents(_after_snap)
+                _human_new = len(_after_idents - _before_idents)
+                self._last_human_filled_count = (
+                    getattr(self, "_last_human_filled_count", 0) + _human_new
+                )
+                if _human_new:
+                    logger.info(
+                        f"Human filled {_human_new} new field(s) during handoff.",
+                        phase=ExecutionPhase.HUMAN,
+                    )
+            except Exception:
+                pass
+
         logger.log_phase_end(ExecutionPhase.HUMAN, not result.cancelled)
         return result
 
@@ -2671,6 +2709,8 @@ class ApplicationEngine:
 
             # ── Phase 1/4: TalentScreen extension autofill ────────────────
             self._last_extension_filled_count = 0
+            self._last_llm_filled_count = 0
+            self._last_human_filled_count = 0
             prefilled_snapshot = self._run_extension_autofill_phase(page, logger, agent)
 
             # ── Phase 2/4: Rules-based prefill (FALLBACK ONLY) ────────────
@@ -3185,6 +3225,14 @@ class ApplicationEngine:
                 pids0 = {id(p) for p in ctx.pages}
                 url0, n0 = page.url, len(ctx.pages)
                 results = executor.execute_actions(llm_response)
+
+                # ── Tally successful LLM fills for field-ownership report ─
+                _fill_verbs = ("fill", "type", "select", "click")
+                _llm_ok = sum(
+                    1 for k, v in results.items()
+                    if v and any(vb in k for vb in _fill_verbs)
+                )
+                self._last_llm_filled_count = getattr(self, "_last_llm_filled_count", 0) + _llm_ok
 
                 adopted = adopt_application_page_after_action(
                     page, page_count_before=n0, url_before=url0,

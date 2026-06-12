@@ -1,177 +1,142 @@
-"""Daily analytics email report generator and sender."""
-
 import os
 import smtplib
-from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-
+import requests
+from datetime import date
+from pathlib import Path
 from dotenv import load_dotenv
-from sqlalchemy.orm import Session
+from rich.console import Console
 
-from jobcli.profile.schemas import ApplicationStatus
-from jobcli.storage.models import JobModel
-from jobcli.storage.repositories import AnalyticsEventRepository, JobRepository
+console = Console()
 
+def send_daily_report(sync_server_url: str, mock: bool = False):
+    """Fetch today's stats from the backend and send an email using CLI's .env credentials."""
+    
+    # Load CLI project's .env file dynamically
+    pkg_dir = Path(__file__).resolve().parent.parent.parent.parent
+    env_path = pkg_dir / ".env"
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path)
+    else:
+        load_dotenv()
+    
+    # 1. Fetch data from Backend
+    base = sync_server_url.rstrip("/")
+    if not base.endswith("/api"):
+        base = f"{base}/api"
+    url = f"{base}/reports/applications/today"
+    if mock:
+        url += "?mock=true"
+    
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        records = resp.json()
+    except Exception as e:
+        console.print(f"[red]Failed to fetch today's stats from {url}: {e}[/red]")
+        return
+        
+    today = date.today()
+    if not records:
+        console.print(f"[yellow]No applications submitted on {today}. Skipping email.[/yellow]")
+        return
 
-def get_submitted_jobs_last_24h(session: Session):
-    """Get jobs submitted in the last 24 hours."""
-    since = datetime.now() - timedelta(hours=24)
-    return (
-        session.query(JobModel)
-        .filter(
-            JobModel.status == ApplicationStatus.SUBMITTED,
-            JobModel.updated_at >= since,
-        )
-        .all()
-    )
+    # 2. Compute totals
+    total_apps     = len(records)
+    total_fields   = sum(r.get("total_fields", 0) for r in records)
+    total_autofill = sum(r.get("autofill_fields", 0) for r in records)
+    total_llm      = sum(r.get("llm_fields", 0) for r in records)
+    total_human    = sum(r.get("human_fields", 0) for r in records)
+    overall_auto   = round(((total_autofill + total_llm) / total_fields) * 100, 2) if total_fields else 0
 
+    table_rows = "".join(f"""
+        <tr>
+            <td>{r.get('candidate_name')}</td><td>{r.get('company_name')}</td>
+            <td>{r.get('ats_platform')}</td><td>{r.get('total_fields', 0)}</td>
+            <td>{r.get('autofill_fields', 0)}</td><td>{r.get('llm_fields', 0)}</td>
+            <td>{r.get('human_fields', 0)}</td><td>{r.get('automation_rate', 0)}%</td>
+        </tr>""" for r in records)
 
-def build_email_html(metrics: dict) -> str:
-    """Build the HTML content for the email."""
     html = f"""
-    <!DOCTYPE html>
     <html>
     <head>
+        <meta charset="UTF-8">
         <style>
-            body {{ font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1A202C; color: #E2E8F0; margin: 0; padding: 20px; }}
-            .container {{ max-width: 600px; margin: 0 auto; background-color: #2D3748; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3); }}
-            .header {{ background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%); padding: 30px 20px; text-align: center; }}
-            .header h1 {{ margin: 0; color: #FFFFFF; font-size: 24px; font-weight: 600; }}
-            .content {{ padding: 30px; background-color: #1A202C; }}
-            .metric-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }}
-            .metric-card {{ background: #2D3748; padding: 20px; border-radius: 10px; text-align: center; border: 1px solid #4A5568; }}
-            .metric-value {{ font-size: 32px; font-weight: bold; color: #63B3ED; margin: 10px 0 5px 0; }}
-            .metric-label {{ font-size: 14px; color: #A0AEC0; text-transform: uppercase; letter-spacing: 0.05em; }}
-            .section-title {{ font-size: 18px; font-weight: 600; color: #E2E8F0; margin-bottom: 15px; border-bottom: 1px solid #4A5568; padding-bottom: 10px; margin-top: 30px; }}
-            .footer {{ text-align: center; padding: 20px; font-size: 12px; color: #718096; border-top: 1px solid #2D3748; }}
-            
-            /* Table Styles */
-            .user-table {{ width: 100%; border-collapse: collapse; margin-top: 10px; background-color: #313D50; border-radius: 6px; overflow: hidden; }}
-            .user-table th {{ background-color: #4A5568; color: #E2E8F0; font-weight: 600; padding: 12px 15px; text-align: left; font-size: 14px; }}
-            .user-table td {{ padding: 12px 15px; border-bottom: 1px solid #4A5568; font-size: 14px; color: #E2E8F0; }}
-            .user-table tr:last-child td {{ border-bottom: none; }}
-            .user-table tbody tr:hover {{ background-color: #2D3748; }}
+            body {{ font-family: Arial, sans-serif; background-color: #f9f9f9; color: #333; padding: 20px; margin: 0; }}
+            .email-container {{ max-width: 960px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+            .header {{ background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%); color: #fff; text-align: center; padding: 25px; border-radius: 8px 8px 0 0; margin: -30px -30px 30px -30px; }}
+            .header h1 {{ margin: 0; font-size: 24px; }}
+            .header .subtitle {{ margin: 5px 0 0; font-size: 14px; opacity: 0.9; }}
+            .summary-grid {{ display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }}
+            .stat-box {{ flex: 1; min-width: 130px; background: #f1f3f4; border-radius: 8px; padding: 16px; text-align: center; }}
+            .stat-box .value {{ font-size: 28px; font-weight: bold; color: #1a73e8; }}
+            .stat-box .label {{ font-size: 12px; color: #666; margin-top: 4px; }}
+            table {{ border-collapse: collapse; width: 100%; font-size: 14px; }}
+            th {{ background-color: #1a73e8; color: #fff; padding: 10px 12px; text-align: left; }}
+            td {{ padding: 9px 12px; border-bottom: 1px solid #e0e0e0; }}
+            tr:nth-child(even) td {{ background-color: #f8f9fa; }}
+            .footer {{ text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #777; font-size: 13px; }}
         </style>
     </head>
     <body>
-        <div class="container">
+        <div class="email-container">
             <div class="header">
-                <h1>Wbox Platform Daily Report</h1>
+                <h1>📊 Daily ATS Application Report</h1>
+                <div class="subtitle">{today.strftime('%B %d, %Y')} — Automation Analytics</div>
             </div>
-            <div class="content">
-                <div class="section-title" style="border: none; padding: 0; margin-bottom: 20px;">Platform Wide Last 24 Hours Activity</div>
-                <div class="metric-grid">
-                    <div class="metric-card">
-                        <div class="metric-label">Jobs Attempted</div>
-                        <div class="metric-value">{metrics.get('total_jobs_attempted', 0)}</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">Jobs Submitted</div>
-                        <div class="metric-value" style="color: #48BB78;">{metrics.get('total_jobs_submitted', 0)}</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">Total Events</div>
-                        <div class="metric-value" style="color: #F6AD55;">{metrics.get('total_events', 0)}</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">Failed</div>
-                        <div class="metric-value" style="color: #F56565;">{metrics.get('total_jobs_failed', 0)}</div>
-                    </div>
-                </div>
-                
-                <div class="section-title">User Leaderboard (Last 24h)</div>
-                <table class="user-table">
-                    <thead>
-                        <tr>
-                            <th>Candidate Email</th>
-                            <th style="text-align: right;">Jobs Submitted</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {"".join(f"<tr><td>{u['email']}</td><td style='text-align: right; font-weight: bold; color: #48BB78;'>{u['submitted']}</td></tr>" for u in metrics.get('user_breakdown', [])) if metrics.get('user_breakdown') else "<tr><td colspan='2' style='text-align: center; color: #A0AEC0;'>No jobs submitted in the last 24 hours.</td></tr>"}
-                    </tbody>
-                </table>
+
+            <div class="summary-grid">
+                <div class="stat-box"><div class="value">{total_apps}</div><div class="label">Total Applications</div></div>
+                <div class="stat-box"><div class="value">{total_fields}</div><div class="label">Total Fields</div></div>
+                <div class="stat-box"><div class="value">{total_autofill}</div><div class="label">Autofill Fields</div></div>
+                <div class="stat-box"><div class="value">{total_llm}</div><div class="label">LLM Fields</div></div>
+                <div class="stat-box"><div class="value">{total_human}</div><div class="label">Human Fields</div></div>
+                <div class="stat-box"><div class="value">{overall_auto}%</div><div class="label">Automation Rate</div></div>
             </div>
+
+            <table>
+                <tr>
+                    <th>Candidate</th><th>Company</th><th>ATS Platform</th>
+                    <th>Total Fields</th><th>Autofill</th><th>LLM</th><th>Human</th><th>Auto %</th>
+                </tr>
+                {table_rows}
+            </table>
+
             <div class="footer">
-                Generated by WboxCLI at {datetime.now().strftime('%Y-%m-%d %H:%M:%S PST')}
+                <p>This report was automatically generated by the WBox CLI ATS Automation System.</p>
+                <p>Best regards,<br><strong>Innovapath Automation Team</strong></p>
             </div>
         </div>
     </body>
     </html>
     """
-    return html
 
+    # 3. Read SMTP credentials from CLI .env
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_pass = os.getenv("SMTP_PASS")
+    admin_email = os.getenv("ADMIN_EMAIL")
 
-def send_daily_report(session: Session, owner_email: str) -> None:
-    """Gather metrics from backend, build email, and send to the owner."""
-    from jobcli.storage.repositories import ConfigRepository
-    import requests
-    import os
-    from dotenv import load_dotenv
-    
-    # Load from ~/.jobcli/.env if it exists
-    dotenv_path = os.path.expanduser("~/.jobcli/.env")
-    if os.path.exists(dotenv_path):
-        load_dotenv(dotenv_path)
-        
-    # Also load from current directory .env
-    load_dotenv()
-    
-    config = ConfigRepository(session).get_all()
-    # Try to get from .env first, then config db, then fallback to localhost
-    backend_url = os.getenv("BACKEND_URL") or getattr(config, "api_base_url", None) or getattr(config, "sync_server_url", None) or "http://localhost:8000"
-    
-    headers = {
-        "X-Internal-Secret": "super-secret-weekly-workflow-key"
-    }
-    
-    try:
-        response = requests.get(
-            f"{backend_url.split('/api')[0].rstrip('/')}/api/analytics/daily-summary",
-            headers=headers
-        )
-        response.raise_for_status()
-        metrics = response.json()
-    except Exception as e:
-        print(f"Failed to fetch global metrics from backend: {e}")
-        metrics = {
-            "total_jobs_attempted": 0,
-            "total_jobs_submitted": 0,
-            "total_events": 0,
-            "total_jobs_failed": 0,
-            "user_breakdown": []
-        }
-    
-    
-    html_content = build_email_html(metrics)
+    if not all([smtp_user, smtp_pass, admin_email]):
+        console.print("[red]Missing SMTP_USER, SMTP_PASS, or ADMIN_EMAIL in CLI .env[/red]")
+        return
 
-    # Email configuration
-    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(os.environ.get("SMTP_PORT", 587))
-    smtp_user = os.environ.get("SMTP_USER")
-    smtp_pass = os.environ.get("SMTP_PASS")
-
+    # 4. Send Email
+    subject = f"CLI Daily ATS Report – {today.strftime('%Y-%m-%d')}"
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"WboxCLI Daily Analytics Report - {datetime.now().strftime('%Y-%m-%d')}"
-    msg["From"] = smtp_user or "noreply@wboxcli.local"
-    msg["To"] = owner_email
+    msg['Subject'] = subject
+    msg['From'] = smtp_user
+    msg['To'] = admin_email
+    
+    msg.attach(MIMEText("Please view this email in an HTML-compatible client.", 'plain'))
+    msg.attach(MIMEText(html, 'html'))
 
-    part = MIMEText(html_content, "html")
-    msg.attach(part)
-
-    if smtp_user and smtp_pass:
-        try:
-            with smtplib.SMTP(smtp_host, smtp_port) as server:
-                server.starttls()
-                server.login(smtp_user, smtp_pass)
-                server.sendmail(msg["From"], [msg["To"]], msg.as_string())
-                print(f"Daily report sent successfully to {owner_email}")
-        except Exception as e:
-            print(f"Failed to send email: {e}")
-    else:
-        print("SMTP_USER and SMTP_PASS environment variables are not set. "
-              "Email was not sent. Preview of HTML generated:")
-        print("--------------------------------------------------")
-        print(html_content[:500] + "...(truncated)")
-        print("--------------------------------------------------")
+    try:
+        # Assumes Gmail based on earlier project hints, adjust if needed
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+        console.print(f"[green]Report sent successfully to {admin_email} for {total_apps} applications![/green]")
+    except Exception as e:
+        console.print(f"[red]Failed to send email: {e}[/red]")
