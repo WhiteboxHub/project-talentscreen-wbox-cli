@@ -12,15 +12,20 @@ console = Console()
 
 def send_daily_report(sync_server_url: str, mock: bool = False):
     """Fetch today's stats from the backend and send an email using CLI's .env credentials."""
-    
-    # Load CLI project's .env file dynamically
+
+    # Load CLI project's .env file dynamically.
+    # Try 4 levels up (installed package layout: src/jobcli/analytics/report_mailer.py)
+    # then 3 levels up (editable / source layout), then plain load_dotenv() as last resort.
     pkg_dir = Path(__file__).resolve().parent.parent.parent.parent
     env_path = pkg_dir / ".env"
+    if not env_path.exists():
+        # Editable install / source layout: src/jobcli/analytics → project root is 3 levels up
+        env_path = Path(__file__).resolve().parent.parent.parent / ".env"
     if env_path.exists():
-        load_dotenv(dotenv_path=env_path)
+        load_dotenv(dotenv_path=env_path, override=True)
     else:
-        load_dotenv()
-    
+        load_dotenv(override=True)
+
     # 1. Fetch data from Backend
     base = sync_server_url.rstrip("/")
     if not base.endswith("/api"):
@@ -112,10 +117,10 @@ def send_daily_report(sync_server_url: str, mock: bool = False):
     </html>
     """
 
-    # 3. Read SMTP credentials from CLI .env
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_pass = os.getenv("SMTP_PASS")
-    admin_email = os.getenv("ADMIN_EMAIL")
+    # 3. Read SMTP credentials from CLI .env (strip any accidental whitespace)
+    smtp_user  = (os.getenv("SMTP_USER") or "").strip()
+    smtp_pass  = (os.getenv("SMTP_PASS") or "").strip()
+    admin_email = (os.getenv("ADMIN_EMAIL") or "").strip()
 
     if not all([smtp_user, smtp_pass, admin_email]):
         console.print("[red]Missing SMTP_USER, SMTP_PASS, or ADMIN_EMAIL in CLI .env[/red]")
