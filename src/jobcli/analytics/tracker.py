@@ -41,8 +41,9 @@ class SessionTracker:
                 json=self.applications,
                 timeout=10
             )
-        except Exception:
-            # We fail silently so we don't break the CLI user experience
+        except Exception as e:
+            import logging
+            logging.warning(f"Failed to send bulk application summary to {url}: {e}")
             pass
             
         self.applications.clear()

@@ -47,6 +47,15 @@ app = typer.Typer(
 db_app = typer.Typer(help="Local database maintenance")
 app.add_typer(db_app, name="db")
 
+@db_app.command("send-daily-report")
+def db_send_daily_report(
+    mock: bool = typer.Option(False, "--mock", help="Send mock report for testing"),
+) -> None:
+    """Fetch today's ATS stats from the backend and email them using CLI SMTP credentials."""
+    from jobcli.analytics.report_mailer import send_daily_report
+    server_url = "https://api.whitebox-learning.com/api"
+    send_daily_report(server_url, mock=mock)
+
 console = Console()
 
 # Default config directory
@@ -1388,7 +1397,7 @@ def _run_apply(
     console.print(f"Applying to {len(jobs)} job(s)...\n")
 
     engine = ApplicationEngine(config, resume_data, db)
-    tracker = SessionTracker(backend_url=config.sync_server_url or "https://api.whitebox-learning.com")
+    tracker = SessionTracker(backend_url=config.sync_server_url or "https://api.whitebox-learning.com/api")
 
 
     if checkpoint:
@@ -1432,11 +1441,20 @@ def _run_apply(
                     sv = getattr(status, "value", str(status)).lower()
                     if "submit" in sv or "success" in sv or "complete" in sv:
                         submitted += 1
+                        _ext   = getattr(engine, "_last_extension_filled_count", 0)
+                        _rules = getattr(engine, "_last_rules_filled_count", 0)
+                        _llm   = getattr(engine, "_last_llm_filled_count", 0)
+                        _human = getattr(engine, "_last_human_filled_count", 0)
                         tracker.add_application(
                             config.job_board_username or "Unknown",
                             job.company or "Unknown",
                             getattr(job.ats_type, 'value', 'unknown'),
-                            {}
+                            {
+                                "autofill_fields": _ext,
+                                "llm_fields":      _rules + _llm,
+                                "human_fields":    _human,
+                                "total_fields":    _ext + _rules + _llm + _human,
+                            }
                         )
                     elif "skip" in sv or "cancel" in sv:
                         skipped += 1
@@ -1611,7 +1629,8 @@ def _run_apply(
 
 @app.command()
 def apply(
-    url: Optional[str] = typer.Option(None, "--url", "-u", help="Single job URL to apply"),
+    job_url: Optional[str] = typer.Argument(None, help="Single job URL to apply (positional)"),
+    url: Optional[str] = typer.Option(None, "--url", "-u", help="Single job URL to apply (legacy flag)"),
     batch: bool = typer.Option(
         False,
         "--batch",
@@ -1643,7 +1662,7 @@ def apply(
     """
     _ = batch  # accepted for backward compatibility with scripts using ``--batch``
     _run_apply(
-        url=url,
+        url=job_url or url,
         limit=limit,
         sort=sort,
         mode=mode,

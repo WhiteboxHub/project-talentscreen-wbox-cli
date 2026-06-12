@@ -472,6 +472,12 @@ class ApplicationState(BaseModel):
     started_at: datetime = Field(default_factory=datetime.now)
     completed_at: Optional[datetime] = None
 
+    # ── Field-ownership counters (set by ApplicationEngine) ──────────
+    autofill_fields: int = 0   # filled by TalentScreen browser extension
+    llm_fields: int = 0        # filled by LLM / rules-based phase
+    human_fields: int = 0      # filled manually by the human
+    total_fields: int = 0      # sum of the three above
+
 
 class DOMSnapshot(BaseModel):
     """Structured DOM snapshot for LLM."""
