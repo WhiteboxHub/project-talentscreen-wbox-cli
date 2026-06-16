@@ -1471,6 +1471,8 @@ def _run_apply(
                                 "total_fields":    _ext + _rules + _llm + _human,
                             }
                         )
+                        # Send analytics instantly to the backend to prevent data loss on crash/force-quit
+                        tracker.send_bulk_summary()
                     elif "skip" in sv or "cancel" in sv:
                         skipped += 1
                     else:
