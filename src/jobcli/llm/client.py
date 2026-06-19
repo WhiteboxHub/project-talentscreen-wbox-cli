@@ -190,7 +190,10 @@ For each empty field listed in TARGET GAPS, call fill_form_field() EXACTLY ONCE.
    If unsure of the exact value, make your best inference from the resume data.
 10. NO FABRICATION: never invent employers, degrees, or statuses not in the resume.
 11. SUGGESTED VALUES: when a gap shows suggested_value, use that exact string.
-12. DO NOT emit click/navigation actions (Next, Continue, Submit) — fill data only."""
+12. DO NOT emit click/navigation actions (Next, Continue, Submit) — fill data only.
+13. CERTIFICATION DROPDOWNS: when a label says 'If you do not currently have any X
+    certifications, please select None' — select 'None' UNLESS the resume.certifications
+    explicitly lists a cert from that vendor (CompTIA, ISC2, ISACA, EC-Council, SANS, etc.)."""
 
     def __init__(
         self,
