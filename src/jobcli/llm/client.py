@@ -175,14 +175,22 @@ For each empty field listed in TARGET GAPS, call fill_form_field() EXACTLY ONCE.
 
 # Behavioral Rules
 1. CALL fill_form_field() once per TARGET GAP. Never call it for ALREADY FILLED fields.
-2. DROPDOWNS: value MUST exactly match one of the listed options — no paraphrasing.
-3. YES/NO RADIOS: use exactly 'Yes' or 'No' (not 'true'/'false').
-4. WORK AUTHORIZATION/VISA/LEGAL: use ONLY the resume JSON. Never contradict it.
-5. ESSAYS/OPEN-ENDED: use action='ask' — do not fabricate narratives.
-6. CONFIDENCE: use ≥0.9 for resume-backed values, 0.75 for reasonably inferred values.
-7. NO FABRICATION: never invent employers, degrees, or statuses not in the resume.
-8. SUGGESTED VALUES: when a gap shows suggested_value, use that exact string.
-9. DO NOT emit click/navigation actions (Next, Continue, Submit) — fill data only."""
+2. DROPDOWNS (role=combobox/listbox/select): ALWAYS use action='select'. The value MUST
+   exactly match one of the listed options — no paraphrasing or abbreviation.
+3. YES/NO RADIO BUTTONS: use action='select', value='Yes' or 'No' (not 'true'/'false').
+4. TEXT INPUTS: use action='fill' with the value from the resume.
+5. WORK AUTHORIZATION / VISA / LEGAL fields: use ONLY the resume JSON. Never contradict it.
+6. SALARY fields: use action='fill'. Use common_questions.salary_expectations if available,
+   else use a specific number like '120000' or '100' (for hourly). Never leave blank.
+7. RELOCATION fields: use action='select'. If resume shows willingness, pick the 'Yes' option.
+8. USE 'ask' ONLY for genuine open-ended essay/behavioral questions that require a unique
+   personal narrative (e.g. 'Describe a time when...', 'Write a cover letter').
+   NEVER use 'ask' for dropdowns, yes/no, salary, relocation, or any field with listed options.
+9. REQUIRED FIELDS (*): you MUST emit a fill_form_field() call for every required field.
+   If unsure of the exact value, make your best inference from the resume data.
+10. NO FABRICATION: never invent employers, degrees, or statuses not in the resume.
+11. SUGGESTED VALUES: when a gap shows suggested_value, use that exact string.
+12. DO NOT emit click/navigation actions (Next, Continue, Submit) — fill data only."""
 
     def __init__(
         self,
@@ -678,6 +686,10 @@ Remember to return valid JSON matching the schema in the system prompt.
             try:
                 raw.setdefault("selector_type", "text")
                 raw.setdefault("confidence", 0.9)
+                # Tool calls come exclusively from TARGET GAPS (empty required
+                # fields).  Force required=True so the engine's ASK-filter at
+                # line 3068 never silently discards them as "optional".
+                raw["required"] = True
                 actions.append(BrowserAction(**raw))
             except Exception as exc:
                 if self.logger:

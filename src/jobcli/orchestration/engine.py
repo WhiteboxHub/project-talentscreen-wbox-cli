@@ -2543,22 +2543,32 @@ class ApplicationEngine:
         """Return the current live value if ``action``'s target is already
         populated (per ``snapshot``), else ``None``.
 
-        Matching is permissive: any snapshot key whose identifier appears
-        in the action's selector or matches its label counts as a hit.
-        That's because LLM-proposed selectors are stringly-typed and may
-        reference a field by any of its identifiers.
+        Normalizes both sides by stripping required-markers (``*``) so
+        ``"Country*"`` (LLM) correctly matches ``"country"`` (extension
+        snapshot), while only returning a hit when the snapshot value is
+        non-empty (i.e., the field was actually filled).
         """
+        import re as _re
+
+        def _norm(s: str) -> str:
+            return _re.sub(r"\s+", " ", _re.sub(r"\*+", "", s or "").strip()).lower()
+
         if action.action not in (ActionType.FILL, ActionType.TYPE, ActionType.SELECT):
             return None
-        sel = (action.selector or "").lower()
-        lbl = (action.field_label or "").lower()
+        sel = _norm(action.selector or "")
+        lbl = _norm(action.field_label or "")
         if not sel and not lbl:
             return None
         for key, val in snapshot.items():
             _, _, suffix = key.partition(":")
             if not suffix:
                 continue
-            if (sel and suffix in sel) or (lbl and (suffix == lbl or suffix in lbl)):
+            norm_suffix = _norm(suffix)
+            if not norm_suffix or not val:
+                continue
+            # Exact match after normalization — avoids "country" matching
+            # inside longer labels like "work authorization country".
+            if (sel and norm_suffix == sel) or (lbl and norm_suffix == lbl):
                 return val
         return None
 
