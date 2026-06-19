@@ -9,13 +9,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_WBL_API_BASE = "https://whitebox-learning.com/api"
+_DEFAULT_WBL_API_BASE = "https://api.whitebox-learning.com/api"
 
 # Candidate URLs for probing the API when the saved config is missing/invalid.
 # Probed in order — local dev should ideally be overridden via `wboxcli config`,
 # but `login` will test these sequentially if no config is present.
+# NOTE: whitebox-learning.com is the Next.js frontend; the FastAPI backend
+# is deployed on the api.whitebox-learning.com subdomain.
 WBL_API_CANDIDATES = [
-    "https://whitebox-learning.com/api",
+    "https://api.whitebox-learning.com/api",
     "http://localhost:8000/api",
     "http://127.0.0.1:8000/api",
 ]
