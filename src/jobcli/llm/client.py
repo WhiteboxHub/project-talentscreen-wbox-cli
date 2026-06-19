@@ -169,6 +169,21 @@ Return a single JSON object (no markdown fences). Lowercase action names only.
 
 Allowed actions: fill, type, select, click, upload, ask, scroll, wait."""
 
+    FORM_AUDITOR_TOOL_SYSTEM_PROMPT: str = """You are an expert job application form-filling agent using native tool calling.
+
+For each empty field listed in TARGET GAPS, call fill_form_field() EXACTLY ONCE.
+
+# Behavioral Rules
+1. CALL fill_form_field() once per TARGET GAP. Never call it for ALREADY FILLED fields.
+2. DROPDOWNS: value MUST exactly match one of the listed options — no paraphrasing.
+3. YES/NO RADIOS: use exactly 'Yes' or 'No' (not 'true'/'false').
+4. WORK AUTHORIZATION/VISA/LEGAL: use ONLY the resume JSON. Never contradict it.
+5. ESSAYS/OPEN-ENDED: use action='ask' — do not fabricate narratives.
+6. CONFIDENCE: use ≥0.9 for resume-backed values, 0.75 for reasonably inferred values.
+7. NO FABRICATION: never invent employers, degrees, or statuses not in the resume.
+8. SUGGESTED VALUES: when a gap shows suggested_value, use that exact string.
+9. DO NOT emit click/navigation actions (Next, Continue, Submit) — fill data only."""
+
     def __init__(
         self,
         provider: Literal["openai", "anthropic", "gemini", "claude"],
@@ -554,6 +569,222 @@ Remember to return valid JSON matching the schema in the system prompt.
                 )
             return None
 
+
+    # ── Native tool-calling methods ────────────────────────────────────────
+
+    def _call_openai_tools(
+        self, user_prompt: str, system_prompt: str
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Call OpenAI with native function calling. Returns (arg_dicts, tokens)."""
+        from jobcli.llm.tool_schemas import FILL_FORM_FIELD_OPENAI  # noqa: PLC0415
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            tools=[FILL_FORM_FIELD_OPENAI],
+            tool_choice="required",
+            temperature=0.1,
+        )
+        tool_calls = getattr(response.choices[0].message, "tool_calls", None) or []
+        raw_args: list[dict[str, Any]] = []
+        for tc in tool_calls:
+            try:
+                raw_args.append(json.loads(tc.function.arguments))
+            except Exception:
+                pass
+        total_tokens = response.usage.total_tokens if response.usage else 0
+        return raw_args, total_tokens
+
+    def _call_anthropic_tools(
+        self, user_prompt: str, system_prompt: str
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Call Anthropic with native tool_use. Returns (arg_dicts, tokens)."""
+        from jobcli.llm.tool_schemas import FILL_FORM_FIELD_ANTHROPIC  # noqa: PLC0415
+
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=4096,
+            temperature=0.1,
+            system=system_prompt,
+            tools=[FILL_FORM_FIELD_ANTHROPIC],
+            tool_choice={"type": "any"},
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        raw_args: list[dict[str, Any]] = []
+        for block in response.content:
+            if getattr(block, "type", None) == "tool_use":
+                raw_args.append(dict(block.input))
+        total_tokens = (
+            (response.usage.input_tokens or 0) + (response.usage.output_tokens or 0)
+            if response.usage else 0
+        )
+        return raw_args, total_tokens
+
+    def _call_gemini_tools(
+        self, user_prompt: str, system_prompt: str
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Call Gemini with native function calling (google-genai v2.8). Returns (arg_dicts, tokens)."""
+        from google.genai import types as genai_types  # noqa: PLC0415
+        from jobcli.llm.tool_schemas import build_gemini_tool  # noqa: PLC0415
+
+        tool = build_gemini_tool()
+        full_prompt = f"SYSTEM: {system_prompt}\n\nUSER: {user_prompt}"
+        config = genai_types.GenerateContentConfig(
+            tools=[tool],
+            temperature=0.1,
+        )
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=full_prompt,
+            config=config,
+        )
+        raw_args: list[dict[str, Any]] = []
+        try:
+            for part in response.candidates[0].content.parts:
+                fc = getattr(part, "function_call", None)
+                if fc:
+                    raw_args.append(dict(fc.args))
+        except Exception:
+            pass
+        total_tokens = 0
+        try:
+            usage = getattr(response, "usage_metadata", None)
+            if usage:
+                total_tokens = getattr(usage, "total_token_count", 0) or 0
+        except Exception:
+            pass
+        return raw_args, total_tokens
+
+    def _parse_tool_calls(
+        self,
+        raw_calls: list[dict[str, Any]],
+        ax_tree: Optional["AccessibilityTree"] = None,
+    ) -> Optional[LLMActionResponse]:
+        """Convert provider tool-call arg dicts into a single ``LLMActionResponse``.
+
+        Acts as the adapter between any provider tool-call wire format and the
+        existing ``BrowserAction`` / ``LLMActionResponse`` Pydantic models so
+        nothing downstream (``ToolExecutor``, ``engine.py``) needs to change.
+        """
+        if not raw_calls:
+            return None
+        from jobcli.profile.schemas import BrowserAction  # noqa: PLC0415
+
+        actions: list = []
+        for raw in raw_calls:
+            try:
+                raw.setdefault("selector_type", "text")
+                raw.setdefault("confidence", 0.9)
+                actions.append(BrowserAction(**raw))
+            except Exception as exc:
+                if self.logger:
+                    self.logger.debug(
+                        f"Skipping malformed tool call {raw}: {exc}",
+                        phase=ExecutionPhase.LLM,
+                    )
+        if not actions:
+            return None
+        validated = LLMActionResponse(
+            actions=actions,
+            requires_human=False,
+            confidence=0.95,
+            reasoning="Native tool-calling response.",
+        )
+        if ax_tree is not None:
+            self._propagate_required_flag(validated, ax_tree)
+        if self.logger:
+            self.logger.info(
+                f"Tool calling: {len(actions)} action(s) parsed.",
+                phase=ExecutionPhase.LLM,
+            )
+        return validated
+
+    def _analyze_with_tools(
+        self,
+        ax_tree: "AccessibilityTree",
+        resume: ResumeData,
+        task: str,
+        memory_context: Optional[str] = None,
+        dropdown_options: Optional[list[dict[str, Any]]] = None,
+        resume_pdf_path: Optional[str] = None,
+        *,
+        extra_gap_labels: Optional[list[str]] = None,
+        prefilled_field_lines: Optional[list[str]] = None,
+        enriched_gaps: Optional[list[dict[str, Any]]] = None,
+        gap_hints: Optional[str] = None,
+    ) -> Optional[LLMActionResponse]:
+        """Fill tasks via native tool calling (OpenAI / Anthropic / Gemini).
+
+        Uses the same auditor user prompt as the JSON path so context is
+        identical.  The only difference is the output contract: instead of
+        free-form JSON text the model calls ``fill_form_field()`` once per
+        gap field with schema-validated arguments.
+
+        Returns ``None`` on exhausted retries; caller falls back to JSON mode.
+        """
+        system_prompt = self.FORM_AUDITOR_TOOL_SYSTEM_PROMPT
+        user_prompt = self._build_auditor_prompt(
+            ax_tree, resume, task, memory_context, dropdown_options,
+            resume_pdf_path,
+            extra_gap_labels=extra_gap_labels,
+            prefilled_field_lines=prefilled_field_lines,
+            enriched_gaps=enriched_gaps,
+            gap_hints=gap_hints,
+        )
+
+        max_retries = 3
+        base_delay = 2.0
+
+        for attempt in range(max_retries):
+            try:
+                if self.provider == "openai":
+                    raw_calls, tokens = self._call_openai_tools(user_prompt, system_prompt)
+                elif self.provider in ("anthropic", "claude"):
+                    raw_calls, tokens = self._call_anthropic_tools(user_prompt, system_prompt)
+                elif self.provider == "gemini":
+                    raw_calls, tokens = self._call_gemini_tools(user_prompt, system_prompt)
+                else:
+                    return None
+
+                result = self._parse_tool_calls(raw_calls, ax_tree)
+                if result is not None:
+                    if self.logger and tokens:
+                        try:
+                            self.logger.log_tokens(
+                                tokens, phase=ExecutionPhase.LLM, provider=self.provider
+                            )
+                        except Exception:
+                            pass
+                    return result
+
+                if self.logger:
+                    self.logger.warning(
+                        f"Tool calling returned no actions (attempt {attempt + 1}).",
+                        phase=ExecutionPhase.LLM,
+                    )
+
+            except Exception as exc:
+                if _is_tls_error(exc):
+                    raise TLSConnectionError(_tls_remediation_hint()) from exc
+                if self.logger:
+                    self.logger.warning(
+                        f"Tool calling attempt {attempt + 1} failed: {exc!r}",
+                        phase=ExecutionPhase.LLM,
+                    )
+
+            if attempt < max_retries - 1:
+                time.sleep(base_delay * (2 ** attempt))
+
+        if self.logger:
+            self.logger.warning(
+                "All tool-calling attempts exhausted — falling back to JSON mode.",
+                phase=ExecutionPhase.LLM,
+            )
+        return None
+
     def analyze_page_from_axtree(
         self,
         ax_tree: AccessibilityTree,
@@ -567,16 +798,54 @@ Remember to return valid JSON matching the schema in the system prompt.
         enriched_gaps: Optional[list[dict[str, Any]]] = None,
         gap_hints: Optional[str] = None,
     ) -> Optional[LLMActionResponse]:
-        """Analyze page using Accessibility Tree (more token efficient)."""
+        """Analyze page using Accessibility Tree (more token efficient).
+
+        Fill tasks (``fill_form_fields_only``, ``fill_empty_fields_only``):
+          1. Try native tool calling (provider function-call API).
+          2. Fall back to structured JSON output if tool calling fails or
+             returns no actions (network errors, rate limits, etc.).
+
+        Navigation tasks (``find_apply_button``):
+          Uses JSON output only — no tool-calling overhead for a single click.
+        """
         use_auditor = is_auditor_fill_task(task)
+        _mode_tag = " [Tool Calling]" if use_auditor else " [JSON]"
         if self.logger:
             self.logger.info(
-                f"Requesting LLM analysis from {self.provider} using AXTree"
+                f"Requesting LLM analysis from {self.provider} using AXTree{_mode_tag}"
                 + (" (Form-Filling Auditor)" if use_auditor else ""),
                 phase=ExecutionPhase.LLM,
                 task=task,
             )
 
+        # ── Tool calling path (fill tasks only) ────────────────────────────
+        if use_auditor:
+            try:
+                _tc_result = self._analyze_with_tools(
+                    ax_tree, resume, task, memory_context, dropdown_options,
+                    resume_pdf_path,
+                    extra_gap_labels=extra_gap_labels,
+                    prefilled_field_lines=prefilled_field_lines,
+                    enriched_gaps=enriched_gaps,
+                    gap_hints=gap_hints,
+                )
+                if _tc_result is not None:
+                    return _tc_result
+                if self.logger:
+                    self.logger.warning(
+                        "Tool calling returned no actions — falling back to JSON mode.",
+                        phase=ExecutionPhase.LLM,
+                    )
+            except TLSConnectionError:
+                raise  # propagate TLS errors; retrying won't help
+            except Exception as _tc_err:
+                if self.logger:
+                    self.logger.warning(
+                        f"Tool calling failed ({_tc_err!r}) — falling back to JSON mode.",
+                        phase=ExecutionPhase.LLM,
+                    )
+
+        # ── JSON mode (fallback for fill tasks / primary for navigation) ────
         system_prompt = (
             self.FORM_AUDITOR_SYSTEM_PROMPT if use_auditor else self.SYSTEM_PROMPT
         )
