@@ -2248,7 +2248,7 @@ class ApplicationEngine:
 
     # Tunable: how long to wait after dispatching extension fill_form before
     # snapshotting the DOM and handing off to the LLM.
-    EXTENSION_AUTOFILL_SETTLE_MS = 2500
+    EXTENSION_AUTOFILL_SETTLE_MS = 3500
 
     _SNAPSHOT_PLACEHOLDERS = tuple(PLACEHOLDER_VALUES)
 
@@ -2559,8 +2559,13 @@ class ApplicationEngine:
             _, _, suffix = key.partition(":")
             if not suffix:
                 continue
-            if (sel and suffix in sel) or (lbl and (suffix == lbl or suffix in lbl)):
+            # Exact match first (most reliable)
+            if suffix == sel or suffix == lbl:
                 return val
+            # Fuzzy only when suffix is >= 8 chars (avoids false matches on short tokens like "name")
+            if len(suffix) >= 8:
+                if (sel and suffix in sel) or (lbl and suffix in lbl):
+                    return val
         return None
 
     def _prepare_gaps_for_llm(
@@ -2922,12 +2927,52 @@ class ApplicationEngine:
                     page, ax_tree, extractor, executor, memory,
                     synonym_resolver, state, logger, agent,
                 )
+                
+                # ── Fallback: if enriched_gaps is empty, try to extract all form fields as gaps ──
+                if not enriched_gaps and ax_tree.form_fields:
+                    logger.warning(
+                        f"Gap enrichment returned 0 gaps but AX tree has {len(ax_tree.form_fields)} form_fields. "
+                        "Falling back to raw form_fields as gaps for LLM.",
+                        phase=ExecutionPhase.LLM,
+                    )
+                    enriched_gaps = build_empty_fields_payload(
+                        ax_tree,
+                        dropdown_options=ax_tree.dropdown_fields,
+                        extra_gap_labels=_unselected_required_dropdowns(page),
+                        include_optional=True,
+                    )
+                    # If still empty, pass aria snapshot text directly to LLM without gap targeting
+                    if not enriched_gaps:
+                        logger.warning(
+                            "No gaps found even with include_optional=True. "
+                            "LLM will rely on raw aria snapshot for field discovery.",
+                            phase=ExecutionPhase.LLM,
+                        )
+                
                 gap_hints = memory.build_gap_hints(
                     enriched_gaps,
                     self.resume,
                     state.detected_ats,
                     common_questions=self.common_questions,
                 )
+
+                # ── Diagnostic: log gap count so users can verify the LLM is receiving fields ──
+                if enriched_gaps is not None:
+                    req_count = sum(1 for g in enriched_gaps if g.get("required"))
+                    opt_count = len(enriched_gaps) - req_count
+                    logger.info(
+                        f"LLM TARGET GAPS — required: {req_count}, optional: {opt_count}, total: {len(enriched_gaps)}",
+                        phase=ExecutionPhase.LLM,
+                    )
+                    if not enriched_gaps:
+                        logger.warning(
+                            "TARGET GAPS is EMPTY — LLM has no fields to fill. "
+                            "This usually means all form fields are already filled or "
+                            "the AX tree did not extract any form fields from the page.",
+                            phase=ExecutionPhase.LLM,
+                        )
+                else:
+                    logger.warning("enriched_gaps is None — LLM will use raw AX tree without gap targeting.", phase=ExecutionPhase.LLM)
 
                 memory_context = memory.combined_llm_memory_block(
                     self.resume,
