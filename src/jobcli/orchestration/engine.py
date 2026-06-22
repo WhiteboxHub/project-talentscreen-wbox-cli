@@ -3027,6 +3027,8 @@ class ApplicationEngine:
 
                 if llm_response.requires_human:
                     logger.warning("LLM flagged requires_human — proceeding with actions anyway")
+                    # Clear it so ToolExecutor doesn't silently abort executing the non-ASK actions
+                    llm_response.requires_human = False
 
                 # ── Don't-refill filter ───────────────────────────────────
                 # Refresh the live snapshot for this iteration and drop any
@@ -3940,6 +3942,7 @@ class ApplicationEngine:
                 _strip_third_party_apply_clicks(llm_response, logger)
                 _coerce_dropdown_actions(llm_response, ax_tree, logger)
                 llm_response.actions = [a for a in llm_response.actions if a.action != ActionType.ASK]
+                llm_response.requires_human = False
 
                 # Required-fields-first gate (same as the inner loop).
                 non_advance2, advance2 = _split_off_advance_clicks(llm_response)
