@@ -2614,55 +2614,7 @@ class ApplicationEngine:
         enriched, _ = self._prepare_gaps_for_llm(
             ax_tree, page, memory, synonym_resolver, state
         )
-        if not enriched:
-            return ax_tree, enriched
-
-        prefiller = MemoryPrefiller(synonym_resolver)
-        actions, resolutions = prefiller.gaps_to_actions(
-            enriched,
-            memory,
-            self.resume,
-            state.detected_ats,
-            self.common_questions,
-        )
-        resolved = [r for r in resolutions if r.value]
-        if not actions:
-            if resolved:
-                logger.info(
-                    f"Memory prefill: {len(resolved)} gap(s) had answers but no actions",
-                    phase=ExecutionPhase.RULES,
-                )
-            return ax_tree, enriched
-
-        agent.show_phase_banner("Memory prefill (2b/5)")
-        agent.show_status(
-            f"Applying {len(actions)} remembered answer(s) from resume/memory…",
-            phase=ExecutionPhase.RULES,
-        )
-        logger.info(
-            f"Memory prefill executing {len(actions)} action(s)",
-            phase=ExecutionPhase.RULES,
-        )
-
-        prefill_response = LLMActionResponse(
-            reasoning="Memory prefill from resume + saved field answers.",
-            actions=actions,
-            requires_human=False,
-            confidence=1.0,
-        )
-        _coerce_dropdown_actions(prefill_response, ax_tree, logger)
-        executor.execute_actions(prefill_response)
-        try:
-            page.wait_for_timeout(400)
-        except Exception:
-            pass
-        try:
-            ax_tree = extractor.extract()
-        except Exception:
-            pass
-        enriched, _ = self._prepare_gaps_for_llm(
-            ax_tree, page, memory, synonym_resolver, state
-        )
+        # Disabled memory prefill execution as it sometimes fills incorrect information
         return ax_tree, enriched
 
     def _agent_fill_loop(
@@ -3270,6 +3222,27 @@ class ApplicationEngine:
                 pids0 = {id(p) for p in ctx.pages}
                 url0, n0 = page.url, len(ctx.pages)
                 results = executor.execute_actions(llm_response)
+
+                # ── Post-execution validation: check if required fields are still empty ──
+                try:
+                    post_ax = extractor.extract()
+                    from jobcli.llm.empty_fields import build_empty_fields_payload as _bef
+                    still_empty_required = [
+                        g["label"] for g in _bef(post_ax, include_optional=False)
+                    ]
+                    if still_empty_required:
+                        logger.warning(
+                            f"After LLM pass: {len(still_empty_required)} required field(s) still empty: "
+                            + ", ".join(still_empty_required[:8]),
+                            phase=ExecutionPhase.LLM,
+                        )
+                    else:
+                        logger.info(
+                            "Post-LLM validation: all required fields appear filled.",
+                            phase=ExecutionPhase.LLM,
+                        )
+                except Exception as _ve:
+                    logger.debug(f"Post-LLM validation scan failed: {_ve}", phase=ExecutionPhase.LLM)
 
                 # ── Tally successful LLM fills for field-ownership report ─
                 _fill_verbs = ("fill", "type", "select", "click")
