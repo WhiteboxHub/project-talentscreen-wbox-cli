@@ -442,7 +442,8 @@ Remember to return valid JSON matching the schema in the system prompt.
         (``#first_name``).
         """
         required_labels: set[str] = set()
-        for f in getattr(ax_tree, "form_fields", []) or []:
+        fields_to_check = (getattr(ax_tree, "form_fields", []) or []) + (getattr(ax_tree, "dropdown_fields", []) or [])
+        for f in fields_to_check:
             name = str(f.get("name") or "").strip()
             label = str(f.get("label") or "").strip()
             ph = str(f.get("placeholder") or "").strip()
