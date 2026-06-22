@@ -14,11 +14,20 @@ _EMPTY_DROPDOWN_TOKENS = frozenset(
         *PLACEHOLDER_VALUES,
         "select...",
         "select an option",
+        "select one",
+        "select a value",
+        "select option",
+        "pick one",
+        "pick an option",
         "choose...",
         "please choose",
         "please select",
         "choose one",
         "-- select --",
+        "- select -",
+        "---",
+        "none",
+        "n/a",
         "—",
         "--",
     )
@@ -76,7 +85,7 @@ def build_empty_fields_payload(
     *,
     dropdown_options: Optional[list[dict[str, Any]]] = None,
     extra_gap_labels: Optional[list[str]] = None,
-    include_optional: bool = False,
+    include_optional: bool = True,
 ) -> list[dict[str, Any]]:
     """Return gap rows for ``<EMPTY_FIELDS>`` in the auditor user prompt.
 
@@ -98,7 +107,13 @@ def build_empty_fields_payload(
         if norm in seen:
             continue
 
-        is_required = bool(field.get("required")) or "*" in label
+        is_required = (
+            bool(field.get("required"))
+            or bool(field.get("aria-required"))
+            or "*" in label
+            or label.strip().endswith("*")
+            or label.strip().startswith("*")
+        )
         if not is_required and not include_optional:
             continue
         if not _field_is_empty(field):
@@ -137,6 +152,8 @@ def build_empty_fields_payload(
             }
         )
 
+    # Sort: required fields first, then optional; alphabetically within each group
+    gaps.sort(key=lambda g: (0 if g["required"] else 1, g["label"].lower()))
     return gaps
 
 

@@ -702,6 +702,7 @@ Remember to return valid JSON matching the schema in the system prompt.
                 ax_tree,
                 dropdown_options=dropdown_options,
                 extra_gap_labels=extra_gap_labels,
+                include_optional=True,
             )
 
         dropdown_context = ""
