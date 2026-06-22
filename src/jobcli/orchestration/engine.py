@@ -2923,6 +2923,21 @@ class ApplicationEngine:
                             "the AX tree did not extract any form fields from the page.",
                             phase=ExecutionPhase.LLM,
                         )
+                    else:
+                        # Log the actual gaps for debugging
+                        gap_labels = [g.get("label", "") for g in enriched_gaps[:10]]
+                        logger.debug(
+                            f"GAP DETAILS — fields to fill: {gap_labels}" +
+                            (f" ... and {len(enriched_gaps) - 10} more" if len(enriched_gaps) > 10 else ""),
+                            phase=ExecutionPhase.LLM,
+                        )
+                        # Log required fields specifically
+                        req_labels = [g.get("label", "") for g in enriched_gaps if g.get("required")]
+                        if req_labels:
+                            logger.debug(
+                                f"REQUIRED GAPS: {req_labels}",
+                                phase=ExecutionPhase.LLM,
+                            )
                 else:
                     logger.warning("enriched_gaps is None — LLM will use raw AX tree without gap targeting.", phase=ExecutionPhase.LLM)
 

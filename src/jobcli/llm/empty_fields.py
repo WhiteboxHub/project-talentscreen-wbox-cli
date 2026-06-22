@@ -43,14 +43,53 @@ def _field_is_empty(field: dict[str, Any]) -> bool:
     role = (field.get("role") or "").lower()
     val = str(field.get("value", "") or "").strip()
     checked = field.get("checked")
+    placeholder = str(field.get("placeholder", "") or "").strip().lower()
+    autocomplete = str(field.get("autocomplete", "") or "").strip().lower()
 
-    if role in ("checkbox", "radio", "switch"):
+    # Checkboxes, radios, switches
+    if role in ("checkbox", "radio", "switch", "menuitemradio"):
         if checked is True:
             return False
         if isinstance(checked, str) and checked.lower() in ("true", "on", "yes", "1"):
             return False
+        # Also check if value is "on" or similar (some browsers report checked as value)
+        if val.lower() in ("on", "yes", "true", "1"):
+            return False
         return True
 
+    # Comboboxes and listboxes (custom dropdowns)
+    if role in ("combobox", "listbox", "menu"):
+        if not val:
+            return True
+        # Check if it's just a placeholder or default text
+        if val.lower() in _EMPTY_DROPDOWN_TOKENS:
+            return True
+        # Check if placeholder attribute suggests it's empty
+        if placeholder and placeholder in _EMPTY_DROPDOWN_TOKENS:
+            return True
+        return not is_meaningful_value(val)
+
+    # Text inputs, textareas, searchboxes
+    if role in ("textbox", "searchbox", "spinbutton", "textarea"):
+        if not val:
+            return True
+        # Check placeholder attribute
+        if placeholder and placeholder in _EMPTY_DROPDOWN_TOKENS:
+            return True
+        # Check if value is just whitespace or placeholder-like
+        return not is_meaningful_value(val)
+
+    # Buttons that act as dropdowns (common in React/Angular)
+    if role == "button":
+        # Buttons are typically not "filled" but we check if they have a meaningful label
+        # If the button is a dropdown trigger, it might have a placeholder-like text
+        if not val:
+            return True
+        if val.lower() in _EMPTY_DROPDOWN_TOKENS:
+            return True
+        return not is_meaningful_value(val)
+
+    # Default case: any other role
     if not val:
         return True
     if val.lower() in _EMPTY_DROPDOWN_TOKENS:

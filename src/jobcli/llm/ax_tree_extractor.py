@@ -354,16 +354,29 @@ class AccessibilityTreeExtractor:
 
         return nodes
 
-    def _extract_form_fields(self, node: dict[str, Any]) -> list[dict[str, Any]]:
-        """Extract form field nodes."""
+    def _extract_form_fields(self, node: dict[str, Any], parent_name: str = "") -> list[dict[str, Any]]:
+        """Extract form field nodes.
+        
+        Enhanced to handle:
+        - Education sections (often in repeating groups)
+        - Experience sections (dynamic forms)
+        - Custom dropdowns and comboboxes
+        - Nested form structures
+        """
         fields = []
 
         role = node.get("role", "")
+        name = node.get("name", "")
+        
+        # Build full label by combining parent context with current name
+        # This helps with nested fields like "Education[0].School"
+        full_label = f"{parent_name} {name}".strip() if parent_name and name else (name or "")
+
         # Expand roles to include all typical form fields + custom buttons used as dropdowns
         field_roles = [
             "textbox", "searchbox", "combobox", "spinbutton", 
             "checkbox", "radio", "listbox", "switch", "menuitemradio",
-            "button"  # Custom dropdowns often use button role
+            "button", "group", "radiogroup"  # Groups often contain form fields
         ]
 
         if role in field_roles:
@@ -373,29 +386,44 @@ class AccessibilityTreeExtractor:
                 val = "on" if node.get("checked") is True else (node.get("checked") if node.get("checked") != "mixed" else "mixed")
             
             # For comboboxes or buttons with no value, try to find a child that might represent the selected text
-            if role in ["combobox", "button"] and not val:
+            if role in ["combobox", "button", "listbox"] and not val:
                 for child in node.get("children", []):
-                    if child.get("role") in ["text", "StaticText", "plaintext"] and child.get("name"):
+                    child_role = child.get("role", "")
+                    # Look for text content in various forms
+                    if child_role in ["text", "StaticText", "plaintext", "paragraph"]:
+                        child_name = child.get("name", "")
+                        if child_name and child_name.strip():
+                            val = child_name.strip()
+                            break
+                    # Also check for nested elements with text
+                    if child.get("name") and not child.get("children"):
                         val = child.get("name")
                         break
 
-            fields.append(
-                {
-                    "role": role,
-                    "name": node.get("name", ""),
-                    "value": val or "",
-                    "placeholder": node.get("placeholder", ""),
-                    "required": node.get("required", False),
-                    "readonly": node.get("readonly", False),
-                    "invalid": node.get("invalid", ""),
-                    "autocomplete": node.get("autocomplete", ""),
-                    "checked": node.get("checked", False),
-                }
-            )
+            # Extract additional attributes for better field identification
+            field_data = {
+                "role": role,
+                "name": full_label,  # Use full label for better identification
+                "value": val or "",
+                "placeholder": node.get("placeholder", ""),
+                "required": node.get("required", False),
+                "readonly": node.get("readonly", False),
+                "invalid": node.get("invalid", ""),
+                "autocomplete": node.get("autocomplete", ""),
+                "checked": node.get("checked", False),
+                "parent_context": parent_name if parent_name else None,
+            }
+            
+            # Only add if it has a meaningful name (avoid anonymous containers)
+            if full_label or role in ["textbox", "searchbox", "combobox", "checkbox", "radio", "listbox"]:
+                fields.append(field_data)
 
-        # Recursively process children
+        # Process children recursively
+        # For groups/radiogroups, pass the group name as parent context
+        new_parent = full_label if role in ["group", "radiogroup", "listitem", "row"] and full_label else parent_name
+        
         for child in node.get("children", []):
-            fields.extend(self._extract_form_fields(child))
+            fields.extend(self._extract_form_fields(child, new_parent))
 
         return fields
 
