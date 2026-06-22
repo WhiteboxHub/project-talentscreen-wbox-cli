@@ -146,6 +146,7 @@ Prior automation steps (Chrome extension autofill and static rules engines) have
 7. **Uploads:** Use `upload` with `value` = `resume_file_path` from user JSON for Resume/CV fields only — not "Autofill with Resume" parse buttons.
 8. **Required before navigation:** Do not click Next/Continue/Submit until required gaps would be filled by your actions.
 9. **Suggested values:** When a gap includes `suggested_value`, use that exact string as `value`. Do not invent alternatives.
+10. **ASK for Unknowns (CRITICAL):** If a gap in TARGET GAPS is `required` and you cannot confidently answer it from the user's resume or memory (e.g., custom dropdowns, specific years of experience, legal/hybrid requirements), you MUST output `action="ask"`. Set `value` to the clarifying question. DO NOT guess mandatory values and DO NOT skip required gaps.
 
 # Output Format
 Return a single JSON object (no markdown fences). Lowercase action names only.
