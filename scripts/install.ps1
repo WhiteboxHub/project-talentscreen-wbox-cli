@@ -83,6 +83,9 @@ $ExtTmpDir = Join-Path $env:TEMP "jobcli_ext_clone_$PID"
 $ExtUrl = "https://github.com/WhiteboxHub/project-talentscreen-autofill-extension.git"
 
 Write-Step "Cloning TalentScreen extension..."
+if (Test-Path $ExtTmpDir) {
+    Remove-Item -Recurse -Force $ExtTmpDir -ErrorAction SilentlyContinue
+}
 & git clone --depth 1 $ExtUrl $ExtTmpDir --quiet 2>$null
 Write-Ok "Cloned extension to temporary location"
 

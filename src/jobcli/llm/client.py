@@ -443,12 +443,25 @@ Remember to return valid JSON matching the schema in the system prompt.
         """
         required_labels: set[str] = set()
         for f in getattr(ax_tree, "form_fields", []) or []:
-            if not f.get("required"):
+            name = str(f.get("name") or "").strip()
+            label = str(f.get("label") or "").strip()
+            ph = str(f.get("placeholder") or "").strip()
+            
+            is_req = (
+                bool(f.get("required"))
+                or bool(f.get("aria-required"))
+                or "*" in name
+                or "*" in label
+                or name.endswith("*") or name.startswith("*")
+                or label.endswith("*") or label.startswith("*")
+            )
+            
+            if not is_req:
                 continue
-            for key in ("name", "label", "placeholder"):
-                val = f.get(key)
-                if isinstance(val, str) and val.strip():
-                    required_labels.add(val.strip().lower())
+                
+            for val in (name, label, ph):
+                if val:
+                    required_labels.add(val.lower())
         if not required_labels:
             return
 
